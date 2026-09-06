@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 14 modul, di-generate 2026-09-04T00:21:25.144Z
+-- 14 modul, di-generate 2026-08-30T03:26:50.703Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua — inisialisasi akhir: default page, supervisor auto-claim, auto-resume. ]]
@@ -17,7 +17,7 @@ return function(ctx)
 	tabBtns["Sell"].btn.TextColor3 = C.txt
 	tabBtns["Sell"].line.Visible = true
 
-	log("CeszParadise GAG Seller v1.2.5 dimuat.")
+	log("CeszParadiseHub GAG Seller v1.2.5 dimuat.")
 	pcall(function()
 		local Players = ctx.Services.Players or game:GetService("Players")
 		log(("Masuk server: %d/%d pemain."):format(#Players:GetPlayers(), Players.MaxPlayers))
@@ -46,7 +46,7 @@ return function(ctx)
 		local GuiService = game:GetService("GuiService")
 		local TeleportService = game:GetService("TeleportService")
 		local branch = (getgenv and getgenv().GAG_BRANCH) or "main"
-		local RECON = ("getgenv().GAG_BRANCH='%s';loadstring(game:HttpGet('https://raw.githubusercontent.com/caturambis-hash/agakgila/%s/apainicok/init.lua'))()"):format(branch, branch)
+		local RECON = ("getgenv().GAG_BRANCH='%s';loadstring(game:HttpGet('https://raw.githubusercontent.com/Tirta71/ScriptMarketGAG/%s/GAGSeller/init.lua'))()"):format(branch, branch)
 		local reconnecting = false
 		local function reconnect()
 			if reconnecting or CFG.autoReconnect == false then return end -- cek toggle real-time
@@ -138,7 +138,7 @@ return function(ctx)
 	-- di-destroy langsung berhenti -> ga ada dobel sniper.
 	local function running() return ctx.state.snipeRunning == true and ctx.alive() end
 
-	local ROUTER = "loadstring(game:HttpGet('https://raw.githubusercontent.com/caturambis-hash/agakgila/main/apainicok/init.lua'))()"
+	local ROUTER = "loadstring(game:HttpGet('https://raw.githubusercontent.com/Tirta71/ScriptMarketGAG/main/GAGSeller/init.lua'))()"
 
 	------------------------------------------------------------------ helpers
 	local function buildItemData(petType)
@@ -240,7 +240,7 @@ return function(ctx)
 		local summary, total = buildSnipeSummary()
 		local tok = getTokens(); tok = (tok == math.huge) and "?" or tostring(tok)
 		ctx.sendWebhook({
-			username = "CeszParadise GAG Sniper",
+			username = "CeszParadiseHub GAG Sniper",
 			embeds = {{
 				title = "✅ Pet Sniped!",
 				color = 3066993,
@@ -661,32 +661,39 @@ return function(ctx)
 		end
 	end
 
-	-- Semua data hub disimpan di folder CeszParadiseHUB/ (biar rapih, ga berserakan di root).
-	local FOLDER = "CeszParadiseHUB"
-	local STATE_FILE = FOLDER .. "/trade_state.json"
-	-- lokasi lama (buat migrasi otomatis, urut dari yg paling baru)
-	local OLD_FILES = { "AllegiaanHUB/trade_state.json", "GAGSeller_state.json" }
+       local Players = ctx.Services.Players or game:GetService("Players")
+    local localPlayer = Players.LocalPlayer
+    while not localPlayer do
+        Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+        localPlayer = Players.LocalPlayer
+    end
+    local userId = localPlayer.UserId
 
-	local function ensureFolder()
-		if type(makefolder) == "function" and (type(isfolder) ~= "function" or not isfolder(FOLDER)) then
-			pcall(function() makefolder(FOLDER) end)
-		end
-	end
+    -- Setiap clone punya file terpisah (contoh: trade_state_12345.json)
+    local STATE_FILE = "trade_state_" .. tostring(userId) .. ".json"
 
-	local function persistState()
-		ensureFolder()
-		pcall(function() writefile(STATE_FILE, HttpService:JSONEncode(CFG)) end)
-	end
+    -- 1. Simpan langsung ke file akun ini saja
+    local function persistState()
+        pcall(function()
+            if type(writefile) == "function" then
+                writefile(STATE_FILE, HttpService:JSONEncode(CFG))
+            end
+        end)
+    end
 
-	local function loadState()
-		for _, f in ipairs({ STATE_FILE, OLD_FILES[1], OLD_FILES[2] }) do
-			if type(isfile) == "function" and isfile(f) then
-				local ok, t = pcall(function() return HttpService:JSONDecode(readfile(f)) end)
-				if ok and type(t) == "table" then return t end
-			end
-		end
-		return nil
-	end
+    -- 2. Muat langsung dari file akun ini saja
+    local function loadState()
+        if type(isfile) == "function" and isfile(STATE_FILE) then
+            local ok, data = pcall(function()
+                return HttpService:JSONDecode(readfile(STATE_FILE))
+            end)
+            if ok and type(data) == "table" then
+                return data
+            end
+        end
+        return nil
+    end
+
 
 	----------------------------------------------------------------- restore
 	do
@@ -1903,7 +1910,7 @@ return function(ctx)
 	local function log(m) ctx.log(m) end
 	local function setStatus(s) ctx.setStatus(s) end
 
-	local ROUTER = "loadstring(game:HttpGet('https://raw.githubusercontent.com/caturambis-hash/agakgila/main/apainicok/init.lua'))()"
+	local ROUTER = "loadstring(game:HttpGet('https://raw.githubusercontent.com/Tirta71/ScriptMarketGAG/main/GAGSeller/init.lua'))()"
 
 	-- waktu jual terakhir; reset tiap ada yang beli dari kita -> penanda booth aktif.
 	ctx.state.lastSaleAt = os.time()
@@ -2802,7 +2809,7 @@ return function(ctx)
 	corner(titleBar, 10)
 	mk("TextLabel", {
 		Size = UDim2.new(1, -80, 1, 0), Position = UDim2.fromOffset(14, 0), BackgroundTransparency = 1,
-		Text = "CeszParadise | GAG Trade", Font = Enum.Font.GothamBold, TextSize = 13, TextColor3 = C.acc,
+		Text = "CeszParadiseHub | GAG Trade", Font = Enum.Font.GothamBold, TextSize = 13, TextColor3 = C.acc,
 		TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 2,
 	}, titleBar)
 	do
