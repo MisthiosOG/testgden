@@ -1,17 +1,26 @@
 --[[ config.lua — CFG default + persist/load state JSON (garden). ]]
 return function(ctx)
 	local HttpService = ctx.Services.HttpService
+	local Players = ctx.Services.Players or game:GetService("Players")
+
+	-- 1. Pastikan LocalPlayer dan UserId sudah siap (hindari nil)
+	local localPlayer = Players.LocalPlayer
+	while not localPlayer do
+		Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+		localPlayer = Players.LocalPlayer
+	end
+	local userId = localPlayer.UserId
 
 	local CFG = {
 		-- Automation Trade
-		targetPlayer  = "",      -- nama player tujuan
-		petTypes      = {},      -- set: {["Fire Wisp"]=true}; kosong = semua non-favorite
-		weightFilter  = 0,       -- 0=off | +N = minimal Nkg | -N = maksimal Nkg
-		ageFilter     = 0,       -- 0=off | +N = minimal age N | -N = maksimal age N
-		petsPerTrade  = 12,
-		totalTrades   = 14,
+		targetPlayer   = "",      -- nama player tujuan
+		petTypes       = {},      -- set: {["Fire Wisp"]=true}; kosong = semua non-favorite
+		weightFilter   = 0,       -- 0=off | +N = minimal Nkg | -N = maksimal Nkg
+		ageFilter      = 0,       -- 0=off | +N = minimal age N | -N = maksimal age N
+		petsPerTrade   = 12,
+		totalTrades    = 14,
 		autoUnfavorite = false,
-		tradeEnabled  = false,   -- Enable Automation Trade
+		tradeEnabled   = false,   -- Enable Automation Trade
 
 		-- ===== Auto Hatch + Auto Sell =====
 		hatchEnabled    = false,
@@ -103,7 +112,7 @@ return function(ctx)
 
 		-- Growth (pipeline: Elephant -> Mutation -> Leveling, batch per-step, config TERPISAH)
 		growthEnabled      = false,
-		growthPetTypes     = {},                                   -- target default (dipakai step yg per-step-nya kosong)
+		growthPetTypes     = {},                                                    -- target default (dipakai step yg per-step-nya kosong)
 		growthFlow         = { "elephant", "mutation", "leveling" }, -- urutan Step 1/2/3
 		-- target pet PER-METHOD (kalau kosong -> fallback ke growthPetTypes)
 		growthPetTypesElephant = {},
@@ -263,11 +272,9 @@ return function(ctx)
 		webhookEnabled = false,
 	}
 
-	-- Semua data hub disimpan di folder CeszParadiseHUB/ (biar rapih, ga berserakan di root).
-	local FOLDER = "CeszParadiseHUB"
+	-- Folder & file spesifik per akun
+	local FOLDER = "CeszParadiseHUB_" .. tostring(userId)
 	local STATE_FILE = FOLDER .. "/garden_state.json"
-	-- lokasi lama (buat migrasi otomatis, urut dari yg paling baru)
-	local OLD_FILES = { "AllegiaanHUB/garden_state.json", "AllegiaanHub_garden_state.json" }
 
 	local function ensureFolder()
 		if type(makefolder) == "function" and (type(isfolder) ~= "function" or not isfolder(FOLDER)) then
@@ -277,15 +284,18 @@ return function(ctx)
 
 	local function persistState()
 		ensureFolder()
-		pcall(function() writefile(STATE_FILE, HttpService:JSONEncode(CFG)) end)
+		pcall(function()
+			if type(writefile) == "function" then
+				writefile(STATE_FILE, HttpService:JSONEncode(CFG))
+			end
+		end)
 	end
 
+	-- 2. Muat HANYA dari file akun ini (tanpa fallback ke file global)
 	local function loadState()
-		for _, f in ipairs({ STATE_FILE, OLD_FILES[1], OLD_FILES[2] }) do
-			if type(isfile) == "function" and isfile(f) then
-				local ok, t = pcall(function() return HttpService:JSONDecode(readfile(f)) end)
-				if ok and type(t) == "table" then return t end
-			end
+		if type(isfile) == "function" and isfile(STATE_FILE) then
+			local ok, t = pcall(function() return HttpService:JSONDecode(readfile(STATE_FILE)) end)
+			if ok and type(t) == "table" then return t end
 		end
 		return nil
 	end
