@@ -272,18 +272,11 @@ return function(ctx)
 		webhookEnabled = false,
 	}
 
-	-- Folder & file spesifik per akun
-	local FOLDER = "CeszParadiseHUB_" .. tostring(userId)
-	local STATE_FILE = FOLDER .. "/garden_state.json"
+	-- Setiap clone punya file terpisah (contoh: garden_state_12345.json)
+	local STATE_FILE = "garden_state_" .. tostring(userId) .. ".json"
 
-	local function ensureFolder()
-		if type(makefolder) == "function" and (type(isfolder) ~= "function" or not isfolder(FOLDER)) then
-			pcall(function() makefolder(FOLDER) end)
-		end
-	end
-
+	-- 1. Simpan langsung ke file akun ini saja
 	local function persistState()
-		ensureFolder()
 		pcall(function()
 			if type(writefile) == "function" then
 				writefile(STATE_FILE, HttpService:JSONEncode(CFG))
@@ -291,11 +284,15 @@ return function(ctx)
 		end)
 	end
 
-	-- 2. Muat HANYA dari file akun ini (tanpa fallback ke file global)
+	-- 2. Muat langsung dari file akun ini saja
 	local function loadState()
 		if type(isfile) == "function" and isfile(STATE_FILE) then
-			local ok, t = pcall(function() return HttpService:JSONDecode(readfile(STATE_FILE)) end)
-			if ok and type(t) == "table" then return t end
+			local ok, data = pcall(function()
+				return HttpService:JSONDecode(readfile(STATE_FILE))
+			end)
+			if ok and type(data) == "table" then
+				return data
+			end
 		end
 		return nil
 	end
