@@ -188,7 +188,14 @@ local MODULES = {
 }
 
 for _, rel in ipairs(MODULES) do
-	loadModule(rel)(ctx)
+	local ok, err = pcall(function()
+		print("[GAGHub][WINDUI] module " .. rel)
+		loadModule(rel)(ctx)
+	end)
+	if not ok then
+		warn("[GAGHub][WINDUI] module failed " .. rel .. ": " .. tostring(err))
+		if rel == "ui/window.lua" then return nil end
+	end
 end
 
 return ctx
