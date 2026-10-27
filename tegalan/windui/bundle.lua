@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T17:33:59.150Z
+-- 42 modul, di-generate 2026-10-27T17:48:46.924Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -3350,19 +3350,19 @@ return function(ctx)
 		return nil
 	end
 
-		-- Speed 0 vs speed 1 beda tata letak? Ini penyebabnya: ack yang lama
-	-- cuma nunggu "ADA plant baru" — pivot baru bisa datang dari plant LAMA
-	-- yang di-repivot server, jadi ack sering keluar duluan padahal plant
-	-- baru sendiri belum dicatet server -> fire berikutnya nabrak -> server
-	-- geser posisi -> hasil "ngacak" di delay 0. Good Position makanya
-	-- nggak pake ack generik, tapi nunggu plant beneran MUNCUL DI CELL yang
-	-- diminta (pivot deket pos_request). Layar nggak bisa bohong: kalau
-	-- cell-nya belum keisi, kita nggak jalan. Ini bikin barisan lurus di
-	-- SEMUA nilai delay (0 pun, kecepatan = secepat server nyatet).
-	local function waitCellOccupied(pos, timeout)
+	-- Kenapa speed 0 rozak? Fire ke server itu ASYNC dan bisa KEHABISAN
+	-- (di-queue/drop) pas kebanjiran. Fix dulu cuma nunggu plant duduk di
+	-- cell, tapi deadline 2.5s habis -> diam-diam LANJUT, itulah celahnya.
+	-- Sekarang: cursor TIDAK PERNAH maju selama cell belum keisi — nunggu,
+	-- dan tiap ~0.6s yang gagap di-FIRE ULANG ke posisi yang SAMA sampe
+	-- server beneran nyatet plant di situ (cap 8s -> skip + jangan bohong).
+	-- Stragglers nyasar tetap dipungut "Shovel Penghalang" di sweep lain.
+	-- Delay 0 = secepat pencatatan server per plant.
+	local function waitCellOccupied(pos, seedName)
 		if not pos then return end
 		local t0 = os.clock()
-		while os.clock() - t0 < (timeout or 2.5) do
+		local nextRetry = os.clock() + 0.6
+		while os.clock() - t0 < 8 do
 			if not CFG.plantSeedEnabled then return end
 			local pf = plantsFolder()
 			if pf then
@@ -3372,6 +3372,10 @@ return function(ctx)
 						return -- plant baru udah beneran duduk di cell-nya
 					end
 				end
+			end
+			if os.clock() >= nextRetry then -- fire ketelen/nyasar -> tembak lagi ke pos SAMA
+				pcall(function() Plant_RE:FireServer(pos, seedName) end)
+				nextRetry = os.clock() + 0.6
 			end
 			task.wait(0.05)
 		end
@@ -3458,10 +3462,11 @@ return function(ctx)
 									local before = pf and plantSet(pf) or nil
 								pcall(function() Plant_RE:FireServer(pos, name) end)
 								planted = planted + 1
-								-- Good Position: nunggu plant duduk DI CELL-nya
-								-- (bukan cuma "ada plant baru") -> speed 0 tetap urut.
+								-- Good Position: cursor ga maju sampe plant
+								-- beneran duduk DI CELL-nya (fire yang
+								-- ketelen di-retry otomatis).
 								if mode == "Good Position" then
-									waitCellOccupied(pos, 2.5)
+									waitCellOccupied(pos, name)
 								else
 									plantAck(before, 2.5)
 								end
