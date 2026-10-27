@@ -18,7 +18,10 @@ local TRADE_WORLD_PLACE = 129954712878723
 
 -- Pilih sub-app. Override: getgenv().GAG_APP = "hatch" atau "garden" atau "trade".
 local appOverride = (getgenv and getgenv().GAG_APP) or _G.GAG_APP
-local target = appOverride or ((game.PlaceId == TRADE_WORLD_PLACE) and "trade" or "garden")
+local detectedTarget = (game.PlaceId == TRADE_WORLD_PLACE) and "trade" or "garden"
+-- Garden World must never inherit a stale GAG_APP="trade" from the executor.
+local target = (appOverride == "trade" and detectedTarget ~= "trade")
+    and detectedTarget or (appOverride or detectedTarget)
 
 -- Telemetry ke dashboard web (heartbeat + inventory). Logika di modul terpisah biar loader tetap bersih.
 pcall(function()

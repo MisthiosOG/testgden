@@ -1,6 +1,16 @@
 -- WindUI compatibility shell for Trade World.
 -- Seller/sniper modules and CFG callbacks remain unchanged.
 return function(ctx)
+    pcall(function()
+        local host = (gethui and gethui()) or game:GetService("CoreGui")
+        for _, name in ipairs({ "GAGGarden", "CeszParadiseGarden", "AllegiaanGarden", "GAGSeller", "GAGTrade", "CeszParadiseTrade" }) do
+            local old = host:FindFirstChild(name)
+            if old then old:Destroy() end
+            local playerGui = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
+            local oldPlayerGui = playerGui and playerGui:FindFirstChild(name)
+            if oldPlayerGui then oldPlayerGui:Destroy() end
+        end
+    end)
     local WindUI = loadstring(game:HttpGet(
         "https://github.com/Footagesus/WindUI/releases/download/1.6.66/main.lua"
     ))()

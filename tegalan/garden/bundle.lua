@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 43 modul, di-generate 2026-10-27T11:09:43.914Z
+-- 43 modul, di-generate 2026-10-27T11:12:29.696Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua — init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -13884,6 +13884,16 @@ end
 -- Automation modules remain untouched: this file only adapts the existing
 -- ctx UI contract to WindUI controls.
 return function(ctx)
+    pcall(function()
+        local host = (gethui and gethui()) or game:GetService("CoreGui")
+        for _, name in ipairs({ "GAGGarden", "CeszParadiseGarden", "AllegiaanGarden", "GAGSeller", "GAGTrade", "CeszParadiseTrade" }) do
+            local old = host:FindFirstChild(name)
+            if old then old:Destroy() end
+            local playerGui = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
+            local oldPlayerGui = playerGui and playerGui:FindFirstChild(name)
+            if oldPlayerGui then oldPlayerGui:Destroy() end
+        end
+    end)
     local version = "1.6.66"
     local WindUI = loadstring(game:HttpGet(
         "https://github.com/Footagesus/WindUI/releases/download/"

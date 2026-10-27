@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 14 modul, di-generate 2026-10-27T11:09:43.948Z
+-- 14 modul, di-generate 2026-10-27T11:12:29.731Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua — inisialisasi akhir: default page, supervisor auto-claim, auto-resume. ]]
@@ -3335,6 +3335,16 @@ end
 -- WindUI compatibility shell for Trade World.
 -- Seller/sniper modules and CFG callbacks remain unchanged.
 return function(ctx)
+    pcall(function()
+        local host = (gethui and gethui()) or game:GetService("CoreGui")
+        for _, name in ipairs({ "GAGGarden", "CeszParadiseGarden", "AllegiaanGarden", "GAGSeller", "GAGTrade", "CeszParadiseTrade" }) do
+            local old = host:FindFirstChild(name)
+            if old then old:Destroy() end
+            local playerGui = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
+            local oldPlayerGui = playerGui and playerGui:FindFirstChild(name)
+            if oldPlayerGui then oldPlayerGui:Destroy() end
+        end
+    end)
     local WindUI = loadstring(game:HttpGet(
         "https://github.com/Footagesus/WindUI/releases/download/1.6.66/main.lua"
     ))()
