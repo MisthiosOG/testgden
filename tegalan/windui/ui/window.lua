@@ -32,7 +32,7 @@ return function(ctx)
 	----------------------------------------------------------------- window
 	local window = WindUI:CreateWindow({
 		Title = "CeszParadise | WindUI",
-		Icon = "solar:flower-bold-duotone",
+		Icon = "solar:planet-3-bold-duotone",
 		Folder = "CeszParadiseWindUI",
 		Size = UDim2.fromOffset(720, 520),
 		NewElements = true,

@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T19:51:46.687Z
+-- 42 modul, di-generate 2026-10-27T19:58:08.697Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -614,6 +614,7 @@ return function(ctx)
 	do
 		local st = loadState()
 		if st then
+			print("[GAGHub][WINDUI] config loaded: " .. STATE_FILE)
 			local function tbl(v) return (type(v) == "table") and v or {} end
 			local function migratePetSet(t)
 				if type(t) ~= "table" then return {} end
@@ -878,11 +879,43 @@ return function(ctx)
 
 			CFG.webhookUrl     = st.webhookUrl or ""
 			CFG.webhookEnabled = st.webhookEnabled or false
+		else
+			print("[GAGHub][WINDUI] config: no saved state, defaults (" .. STATE_FILE .. ")")
 		end
 	end
 
 	ctx.CFG = CFG
-	ctx.persistState = persistState
+
+	------------------------------------------------------------------ Autosave
+	-- Safety net di atas save-on-change dari UI (toggle/input/dropdown sudah
+	-- persist instan): dirty-check tiap 10s nangkep perubahan CFG dari runtime
+	-- module (mis. bump sellWhenReach saat sell 0-match) + flush terakhir saat
+	-- client mati (BindToClose). Manual persistState = force flush.
+	local lastSaved = nil
+	local function autoSave()
+		if type(writefile) ~= "function" then return end
+		local ok, ser = pcall(function() return HttpService:JSONEncode(CFG) end)
+		if not ok then return end
+		if lastSaved == ser then return end
+		if pcall(function() writefile(STATE_FILE, ser) end) then lastSaved = ser end
+	end
+
+	ctx.persistState = function()
+		lastSaved = nil
+		autoSave()
+	end
+
+	task.spawn(function()
+		while true do
+			task.wait(10)
+			autoSave()
+		end
+	end)
+	pcall(function() game:BindToClose(autoSave) end)
+
+	if type(writefile) ~= "function" then
+		warn("[GAGHub][WINDUI] executor has no writefile, config persistence disabled")
+	end
 end]=],
 	["modules/core/registry.lua"] = [=[
 --[[ registry.lua — opsi dropdown pet type & mutation. ]]
@@ -12218,11 +12251,11 @@ end
 	local TABS = {
 		{ id = "Pet",       title = "Pet",       icon = "solar:cat-bold" },
 		{ id = "Farm",      title = "Farm",      icon = "solar:leaf-bold" },
-		{ id = "Hatch",     title = "Hatch",     icon = "solar:egg-bold" },
-		{ id = "Elephant",  title = "Elephant",  icon = "solar:wild-animal-bold" },
-		{ id = "Flow",      title = "Flow",      icon = "solar:flow-square-bold" },
+		{ id = "Hatch",     title = "Hatch",     icon = "solar:confetti-bold" },
+		{ id = "Elephant",  title = "Elephant",  icon = "solar:dumbbell-bold" },
+		{ id = "Flow",      title = "Flow",      icon = "solar:branching-paths-up-bold" },
 		{ id = "Leveling",  title = "Leveling",  icon = "solar:bolt-bold" },
-		{ id = "Mutation",  title = "Mutation",  icon = "solar:flask-bold" },
+		{ id = "Mutation",  title = "Mutation",  icon = "solar:test-tube-bold" },
 		{ id = "Inventory", title = "Inventory", icon = "solar:backpack-bold" },
 		{ id = "Shop",      title = "Shop",      icon = "solar:cart-bold" },
 		{ id = "Misc",      title = "Misc",      icon = "solar:settings-bold" },
@@ -12394,7 +12427,7 @@ return function(ctx)
 	----------------------------------------------------------------- window
 	local window = WindUI:CreateWindow({
 		Title = "CeszParadise | WindUI",
-		Icon = "solar:flower-bold-duotone",
+		Icon = "solar:planet-3-bold-duotone",
 		Folder = "CeszParadiseWindUI",
 		Size = UDim2.fromOffset(720, 520),
 		NewElements = true,
