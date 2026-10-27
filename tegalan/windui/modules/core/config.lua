@@ -313,11 +313,11 @@ return function(ctx)
 	local baseName = "state_" .. tostring(userId) .. ".json"
 	local legacyName = "garden_state_" .. tostring(userId) .. ".json"
 	local STATE_CANDIDATES = {
+		baseName,              -- root, format baru (REAL & mayoritas executor: root OK)
+		legacyName,            -- root, format lama (kompat garden build)
 		STORAGE_DIR .. "/" .. baseName,
 		STORAGE_DIR .. "\\" .. baseName,
 		STORAGE_DIR .. "\\" .. baseName:gsub("%.", "_") .. ".json", -- netral buat VFS aneh
-		baseName,              -- root, format baru
-		legacyName,            -- root, format lama (kompat garden build)
 	}
 	-- FS helper: semua akses lewat pcall supaya executor yang nge-throw
 	-- di writefile/readfile gak bikin config module mati.
@@ -665,6 +665,13 @@ return function(ctx)
 
 			CFG.webhookUrl     = st.webhookUrl or ""
 			CFG.webhookEnabled = st.webhookEnabled or false
+
+			-- Bukti restore yang kelihatan di UI (Settings > Config Status).
+			local nKeys = 0
+			for _ in pairs(st) do nKeys = nKeys + 1 end
+			ctx.state.cfgLoadInfo = "LOADED " .. tostring(nKeys)
+				.. " settings from " .. tostring(statePathUsed or "file")
+			print("[GAGHub][WINDUI] " .. ctx.state.cfgLoadInfo)
 		else
 			print("[GAGHub][WINDUI] config: no saved state, defaults")
 		end

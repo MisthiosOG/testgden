@@ -1374,14 +1374,31 @@ end
 
 		sec:Paragraph({
 			Title = "CeszParadise WindUI",
-			Desc = ("Build: %s\nToggle UI: click the logo open button or press K.\nConfig file: garden_state_%s.json (auto-saves on every change).")
+			Desc = ("Build: %s\nToggle UI: click the logo open button or press K.\nConfig file: state_%s.json in the executor workspace (auto-saves on every change + every 10s).")
 				:format(
 					tostring((getgenv and getgenv().GAG_REVISION) or ctx.BASE or "-"),
 					tostring(ctx.LP.UserId)),
 		})
 
-		-- Live FS diagnostic: test write+read tiap kandidat path config.
+		-- Live config status: what got loaded at boot + FS probe verdict.
 		local fsDiag = sec:Paragraph({
+			Title = "Config Status",
+			Desc = "Checking...",
+		})
+		task.spawn(function()
+			local last = ""
+			while ctx.alive() do
+				pcall(function()
+					local info = tostring(ctx.state.cfgLoadInfo
+						or "No config loaded this session yet")
+					local fs = tostring(ctx.state.fsStatus or "")
+					local txt = info .. (fs ~= "" and ("\n" .. fs) or "")
+					if txt ~= last then last = txt; fsDiag:SetDesc(txt) end
+				end)
+				task.wait(3)
+			end
+		end)
+		sec:Paragraph({
 			Title = "Config Storage",
 			Desc = "Run Config Storage Test to check every path.",
 		})
