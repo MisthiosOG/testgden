@@ -105,21 +105,28 @@ return function(ctx)
 	end
 
 	-- Multi dropdown dinamis (pet team dll): opsi {value=, display=}, selSet keyed value.
-	-- Refresh = re-snapshot opsi terkini dari inventory lalu :Refresh + :Select.
+	-- Tampilan: display dipecah "Nama | detail" -> opsi WindUI {Title=nama, Desc=detail},
+	-- 2 baris, Desc TextWrapped bawaan dist -> nama pet SELALU kebaca utuh.
+	-- SearchBarEnabled = search bawaan dist (filter Title, case-insensitive substring).
+	-- MenuWidth 300 + patch UISizeConstraint (bawaan dist membatasi 300x400).
+	-- Value/persist tetap keyed uuid (t.v) — bentuk state lama tidak berubah.
 	local function makeMultiDynW(parent, title, desc, getOptions, selSet, onChange, opts)
 		opts = opts or {}
-		local d2v = {}
+		local function splitDisplay(d)
+			d = tostring(d or "")
+			local cut = d:find(" | ", 1, true)
+			if cut then return d:sub(1, cut - 1), d:sub(cut + 3) end
+			return d, nil
+		end
 		local function snapshot()
 			local list, displays, selected = {}, {}, {}
 			pcall(function()
 				list = getOptions() or {}
 			end)
-			table.clear(d2v)
 			for _, o in ipairs(list) do
-				local v, d = o.value, o.display
-				d2v[d] = v
-				displays[#displays + 1] = d
-				if selSet[v] then selected[#selected + 1] = d end
+				local t, rest = splitDisplay(o.display)
+				displays[#displays + 1] = { Title = t, Desc = rest, v = o.value }
+				if selSet[o.value] then selected[#selected + 1] = t end
 			end
 			return displays, selected
 		end
@@ -130,12 +137,14 @@ return function(ctx)
 			Values = displays,
 			Multi = true,
 			AllowNone = true,
+			SearchBarEnabled = true,
+			MenuWidth = 300,
 			Value = selected,
 			Callback = safe(function(sel)
 				if type(sel) == "string" then sel = { sel } end
 				for k in pairs(selSet) do selSet[k] = nil end
-				for _, d in ipairs(sel or {}) do
-					local v = d2v[d]
+				for _, t in ipairs(sel or {}) do
+					local v = (type(t) == "table") and t.v or nil
 					if v then selSet[v] = true end
 				end
 				persist()
@@ -143,6 +152,14 @@ return function(ctx)
 			end),
 		})
 		breathe()
+		-- Constraint menu bawaan dist 300x400 -> dilonggarkan pas dengan rumus
+		-- MenuCanvas Size dist (MenuWidth + 6+6+5+5+18+6+6 = +52) dan refresh tidak
+		-- menimpanya (constraint bukan anak ScrollingFrame).
+		task.spawn(function()
+			local mc = control and control.UIElements and control.UIElements.MenuCanvas
+			local c = mc and mc:FindFirstChildOfClass("UISizeConstraint")
+			if c then c.MaxSize = Vector2.new(352, 520) end
+		end)
 		local function refresh()
 			task.spawn(function()
 				local ds, sel2 = snapshot()
