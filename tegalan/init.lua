@@ -37,20 +37,29 @@ pcall(function()
 	if tchunk then tchunk()(target) end
 end)
 
-local url = ROOT .. "/" .. target .. "/init.lua?t=" .. os.time()
-local src
 if LOCAL_ROOT then
 	local okL, rL = pcall(function() return readfile(ROOT .. "/" .. target .. "/init.lua") end)
 	src = okL and rL or nil
 else
-	-- raw.github CDN kadang nyimpen 404 sebentar abis push path baru — retry 3x.
-	for attempt = 1, 3 do
-		local ok, r = pcall(function() return game:HttpGet(url) end)
-		if ok and type(r) == "string" and #r > 0 and r:sub(1, 3) ~= "404" then
-			src = r
-			break
+	-- raw.github CDN kadang nyimpen 404 lama abis push path baru.
+	-- Beda URL = beda cache key: query unik + path HEAD + mirror jsdelivr.
+	local urls = {
+		ROOT .. "/" .. target .. "/init.lua?a=" .. tostring(os.clock()),
+		ROOT .. "/" .. target .. "/init.lua",
+		("https://raw.githubusercontent.com/MisthiosOG/testgden/HEAD/tegalan/%s/init.lua"):format(target),
+		("https://cdn.jsdelivr.net/gh/MisthiosOG/testgden@" .. branch .. "/tegalan/" .. target .. "/init.lua"),
+	}
+	for _, u in ipairs(urls) do
+		for attempt = 1, 2 do
+			local ok, r = pcall(function() return game:HttpGet(u) end)
+			if ok and type(r) == "string" and #r > 0 and r:sub(1, 3) ~= "404" then
+				src = r
+				break
+			end
+			if attempt < 2 and not src then task.wait(1.5) end
 		end
-		if attempt < 3 then task.wait(2) end
+		if src then break end
+		task.wait(1)
 	end
 end
 if type(src) ~= "string" or src == "" then

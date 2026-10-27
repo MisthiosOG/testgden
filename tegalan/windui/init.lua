@@ -33,26 +33,50 @@ pcall(function()
 end)
 print("[CeszParadiseHub][WINDUI] windui loader selected")
 
+-- Mirror chain: CDN raw.github kadang nge-cache 404 lama abis push path baru.
+-- Kombinasi: query unik (beda cache key) + path HEAD + mirror jsdelivr.
+local MIRRORS = {
+	BASE,
+	"https://raw.githubusercontent.com/MisthiosOG/testgden/HEAD/tegalan/windui",
+	("https://cdn.jsdelivr.net/gh/MisthiosOG/testgden@" .. branch .. "/tegalan/windui"),
+}
+local function httpFetch(url)
+	local ok, src = pcall(function() return game:HttpGet(url) end)
+	if ok and type(src) == "string" and #src > 0 and src:sub(1, 3) ~= "404" then return src end
+	return nil
+end
+local function fetchMirror(relPath, tag)
+	tag = tag or tostring(os.clock())
+	for _, host in ipairs(MIRRORS) do
+		local src = httpFetch(host .. "/" .. relPath .. "?m=" .. tag .. "-" .. tostring(math.random(1, 1e6)))
+		if src then return src end
+	end
+	return nil
+end
+
 -- Selalu load dari bundle.lua (1 HttpGet, kilat). Workflow: edit modul ->
 -- `node tools/bundle.js` -> push. Kalau bundle gagal / ada modul yg belum
 -- ke-bundle, fungsi fetch di bawah fallback ambil per-modul dari GitHub.
 local FILES
 do
-	local ok, src = pcall(function()
-		return LOCAL_ROOT and readfile(BASE .. "/bundle.lua")
-			or game:HttpGet(BASE .. "/bundle.lua?t=" .. os.time())
-	end)
-	if ok and type(src) == "string" and #src > 0 then
-        local chunk = compile(src, "@bundle.lua")
+	local src
+	if LOCAL_ROOT then
+		local ok, r = pcall(function() return readfile(BASE .. "/bundle.lua") end)
+		src = ok and r or nil
+	else
+		src = fetchMirror("bundle.lua", "b")
+	end
+	if type(src) == "string" and #src > 0 then
+		local chunk = compile(src, "@bundle.lua")
 		if chunk then
 			local okr, tbl = pcall(chunk)
 			if okr and type(tbl) == "table" then FILES = tbl end
 		end
 	end
 	if FILES then
-		print("[CeszParadiseHub/windui] âœ“ Bundle loaded sukses (Mode Kilat)")
+		print("[CeszParadiseHub/windui] OK Bundle loaded sukses (Mode Kilat)")
 	else
-		warn("[CeszParadiseHub/windui] âš  Bundle gagal dimuat, beralih ke download per-modul HTTP (lambat)...")
+		warn("[CeszParadiseHub/windui] WARN Bundle gagal dimuat, beralih ke download per-modul HTTP (lambat)...")
 	end
 end
 
@@ -61,18 +85,18 @@ local function fetch(relPath)
 	-- UI shell is fetched independently so a stale embedded bundle can never
 	-- resurrect the legacy window during a UI-only migration.
 	if not LOCAL_ROOT and relPath == "ui/window.lua" then
-		local fresh = BASE .. "/" .. relPath .. "?windui=" .. tostring(os.clock())
-		local ok, src = pcall(function() return game:HttpGet(fresh) end)
-		if ok and type(src) == "string" and #src > 0 then return src end
+		for _, host in ipairs(MIRRORS) do
+			local src = httpFetch(host .. "/" .. relPath .. "?windui=" .. tostring(os.clock()))
+			if src then return src end
+		end
 	end
 	if FILES and FILES[relPath] then return FILES[relPath] end
-	local full = BASE .. "/" .. relPath .. "?t=" .. os.time()
-	local ok, src = pcall(function()
-		return LOCAL_ROOT and readfile(BASE .. "/" .. relPath)
-			or game:HttpGet(full)
-	end)
-	if ok and type(src) == "string" then return src end
-	return nil
+	if LOCAL_ROOT then
+		local ok, src = pcall(function() return readfile(BASE .. "/" .. relPath) end)
+		if ok and type(src) == "string" and #src > 0 then return src end
+		return nil
+	end
+	return fetchMirror(relPath)
 end
 
 local function loadModule(relPath)
