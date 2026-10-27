@@ -38,14 +38,22 @@ pcall(function()
 end)
 
 local url = ROOT .. "/" .. target .. "/init.lua?t=" .. os.time()
-local ok, src = pcall(function()
-    if LOCAL_ROOT then
-        local path = ROOT .. "/" .. target .. "/init.lua"
-        return readfile(path)
-    end
-    return game:HttpGet(url)
-end)
-if not ok or type(src) ~= "string" or src == "" then
+local src
+if LOCAL_ROOT then
+	local okL, rL = pcall(function() return readfile(ROOT .. "/" .. target .. "/init.lua") end)
+	src = okL and rL or nil
+else
+	-- raw.github CDN kadang nyimpen 404 sebentar abis push path baru — retry 3x.
+	for attempt = 1, 3 do
+		local ok, r = pcall(function() return game:HttpGet(url) end)
+		if ok and type(r) == "string" and #r > 0 and r:sub(1, 3) ~= "404" then
+			src = r
+			break
+		end
+		if attempt < 3 then task.wait(2) end
+	end
+end
+if type(src) ~= "string" or src == "" then
 	warn(("[GAGHub] gagal ambil app '%s' (PlaceId=%s): %s"):format(target, tostring(game.PlaceId), tostring(src)))
 	return
 end
