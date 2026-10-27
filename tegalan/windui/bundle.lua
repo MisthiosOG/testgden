@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T16:35:26.913Z
+-- 42 modul, di-generate 2026-10-27T16:44:23.214Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -3200,6 +3200,11 @@ return function(ctx)
 		if pl then for _, p in ipairs(pl:GetChildren()) do if p:IsA("BasePart") then parts[#parts + 1] = p end end end
 		return parts
 	end
+	local function plantsFolder()
+		local f = myFarm()
+		local imp = f and f:FindFirstChild("Important")
+		return imp and imp:FindFirstChild("Plants_Physical")
+	end
 
 	----------------------------------------------------------------- seed inventory
 	-- name -> total quantity (dari semua entry Seed di InventoryData)
@@ -3284,6 +3289,36 @@ return function(ctx)
 		return Vector3.new(x, p.Position.Y, z)
 	end
 
+	----------------------------------------------------------------- ack tanam
+	-- Server nyatet plant baru di Plants_Physical secara ASYNC. Kalau kita
+	-- ngebut (plantDelay 0), fire berikutnya nyamain server sebelum plant
+	-- sebelumnya terdaftar di occupancy -> server nabrak dan naruh plant di
+	-- POSISI ACAK. Makanya tiap fire DITUNGGU sampe plant barunya beneran
+	-- muncul (ack, max 2.5s) baru lanjut. Ini bikin God Position lurus di
+	-- SEMUA nilai delay (0 pun bisa, kecepatan = secepat server nyatet);
+	-- delay user tetap jadi gap tambahan di atas ack.
+	-- ponytail: kalau masih ada yang tampak acak, verifikasi per-tanam (cocokkan
+	-- posisi plant baru dgn posisi request, tanam ulang kalau meleset).
+	local function plantSet(pf)
+		local set = {}
+		for _, m in ipairs(pf:GetChildren()) do
+			local ok, pv = pcall(function() return m:GetPivot().Position end)
+			if ok and pv then set[string.format("%d,%d,%d", pv.X, pv.Y, pv.Z)] = true end
+		end
+		return set
+	end
+	local function plantAck(before, timeout)
+		local pf = plantsFolder()
+		local t0 = os.clock()
+		while before and pf and os.clock() - t0 < (timeout or 2.5) do
+			if not CFG.plantSeedEnabled then return end
+			for k in pairs(plantSet(pf)) do
+				if not before[k] then return end -- plant baru kedetect -> server siap
+			end
+			task.wait(0.05)
+		end
+	end
+
 	----------------------------------------------------------------- equip seed
 	-- Tool seed namanya "<Nama> Seed [Xjumlah]". Server WAJIB kamu megang tool-nya
 	-- pas Plant_RE, jadi equip ulang tiap mau tanam (walau user pindah manual).
@@ -3330,8 +3365,12 @@ return function(ctx)
 									or (mode == "God Position" and godPos())
 									or randomPos()
 								if pos then
+									-- snapshot SEBELUM fire, biar ack ga ketuker dgn plant lama
+									local pf = plantsFolder()
+									local before = pf and plantSet(pf) or nil
 									pcall(function() Plant_RE:FireServer(pos, name) end)
 									planted = planted + 1
+									plantAck(before, 2.5) -- tunggu server nyatet plantnya
 								end
 							end
 							task.wait(tonumber(CFG.plantDelay) or 0)
