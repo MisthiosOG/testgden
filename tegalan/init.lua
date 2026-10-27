@@ -10,6 +10,7 @@
 
 -- Branch: "main" = production. Override buat dev: getgenv().GAG_BRANCH = "dev"
 local branch = (getgenv and getgenv().GAG_BRANCH) or _G.GAG_BRANCH or "main"
+local compile = loadstring or load
 local LOCAL_ROOT = (getgenv and getgenv().GAG_LOCAL_ROOT) or _G.GAG_LOCAL_ROOT
 local ROOT = LOCAL_ROOT or ("https://raw.githubusercontent.com/milmscr/opoki/" .. branch .. "/tegalan")
 
@@ -31,7 +32,7 @@ end
 
 -- Telemetry ke dashboard web (heartbeat + inventory). Logika di modul terpisah biar loader tetap bersih.
 pcall(function()
-	local tchunk = loadstring(game:HttpGet(ROOT .. "/shared/telemetry.lua?t=" .. os.time()), "@shared/telemetry.lua")
+    local tchunk = compile(game:HttpGet(ROOT .. "/shared/telemetry.lua?t=" .. os.time()), "@shared/telemetry.lua")
 	if tchunk then tchunk()(target) end
 end)
 
@@ -48,7 +49,7 @@ if not ok or type(src) ~= "string" or src == "" then
 	return
 end
 
-local chunk, err = loadstring(src, "@" .. target .. "/init.lua")
+local chunk, err = compile(src, "@" .. target .. "/init.lua")
 if not chunk then
 	warn(("[GAGHub] gagal compile app '%s': %s"):format(target, tostring(err)))
 	return

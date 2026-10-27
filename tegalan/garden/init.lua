@@ -5,6 +5,7 @@
 --]]
 
 local branch = (getgenv and getgenv().GAG_BRANCH) or _G.GAG_BRANCH or "main"
+local compile = loadstring or load
 local LOCAL_ROOT = (getgenv and getgenv().GAG_LOCAL_ROOT) or _G.GAG_LOCAL_ROOT
 local BASE = LOCAL_ROOT and (LOCAL_ROOT .. "/garden")
     or ("https://raw.githubusercontent.com/milmscr/opoki/" .. branch .. "/tegalan/garden")
@@ -40,7 +41,7 @@ do
 			or game:HttpGet(BASE .. "/bundle.lua?t=" .. os.time())
 	end)
 	if ok and type(src) == "string" and #src > 0 then
-		local chunk = loadstring(src, "@bundle.lua")
+        local chunk = compile(src, "@bundle.lua")
 		if chunk then
 			local okr, tbl = pcall(chunk)
 			if okr and type(tbl) == "table" then FILES = tbl end
@@ -70,7 +71,7 @@ local function loadModule(relPath)
 	if type(src) ~= "string" or src == "" then
 		error(("[CeszParadiseHub/garden] gagal ambil %s"):format(relPath))
 	end
-	local chunk, err = loadstring(src, "@" .. relPath)
+    local chunk, err = compile(src, "@" .. relPath)
 	if not chunk then
 		error(("[CeszParadiseHub/garden] gagal compile %s: %s"):format(relPath, tostring(err)))
 	end

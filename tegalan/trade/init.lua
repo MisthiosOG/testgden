@@ -18,6 +18,7 @@
 -- Base URL raw GitHub tempat semua modul berada. Branch bisa di-override buat dev:
 --   getgenv().GAG_BRANCH = "dev"  (default "main" = production)
 local branch = (getgenv and getgenv().GAG_BRANCH) or _G.GAG_BRANCH or "main"
+local compile = loadstring or load
 local BASE = "https://raw.githubusercontent.com/milmscr/opoki/" .. branch .. "/tegalan/trade"
 
 pcall(function()
@@ -46,7 +47,7 @@ local FILES
 do
 	local ok, src = pcall(function() return game:HttpGet(BASE .. "/bundle.lua?t=" .. os.time()) end)
 	if ok and type(src) == "string" and #src > 0 then
-		local chunk = loadstring(src, "@bundle.lua")
+        local chunk = compile(src, "@bundle.lua")
 		if chunk then
 			local okr, tbl = pcall(chunk)
 			if okr and type(tbl) == "table" then FILES = tbl end
@@ -71,7 +72,7 @@ local function loadModule(relPath)
 	if type(src) ~= "string" or src == "" then
 		error(("[GAGSeller] gagal ambil %s"):format(relPath))
 	end
-	local chunk, err = loadstring(src, "@" .. relPath)
+    local chunk, err = compile(src, "@" .. relPath)
 	if not chunk then
 		error(("[GAGSeller] gagal compile %s: %s"):format(relPath, tostring(err)))
 	end
