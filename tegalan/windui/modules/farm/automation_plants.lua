@@ -91,18 +91,19 @@ return function(ctx)
 		return Vector3.new(hrp.Position.X, y, hrp.Position.Z)
 	end
 
-	-- Good Position: BARISAN DETERMINISTIK, URUT KIRI -> KANAN per baris
-	-- (row-major; cursor TIDAK PERNAH lompat biar urutannya nyambung).
-	-- Cell berikutnya = kolom skrg + GOOD_STEP (X); mentok kanan -> baris baru
-	-- (Z += GOOD_STEP). Cell yang masih dipegang plant lama DIBERSIHKAN dulu
-	-- (Remove_Item dgn Shovel kepegang, sama kayak tab Shovel; toggle
-	-- "Shovel Penghalang") -> jalur dijamin kosong, server PASTI naruh plant
-	-- di posisi yang diminta, nggak ada geser acak. Kalau toggle off / shovel
-	-- gagal, baru maju 1 cell (skip).
+	-- Good Position: BARISAN DETERMINISTIK BERBASIS PATOKAN (request user):
+	-- plant PERTAMA yang beneran direkam server = patokan koordinat
+	-- (anchor). Cell berikutnya = anchor + GOOD_STEP ke kanan terus, mentok
+	-- batas lahan -> baris baru 1 GOOD_STEP di bawahnya, kaya biasanya.
+	-- Semua offset RELATIF ke pivot server, jadi snap/pergeseran server
+	-- kenanya rata — barisan ga pernah miring walau delay 0. Cell yang
+	-- dipegang plant lama DIBERSIHKAN dulu (Remove_Item dgn Shovel,
+	-- toggle "Shovel Penghalang"); gagal -> skip 1 cell.
 	local GOOD_STEP   = 2.5
 	local GOOD_TAKE_R = GOOD_STEP - 0.1
 	local RemoveItem = RS:WaitForChild("GameEvents"):WaitForChild("Remove_Item")
 	local goodCursor = { part = nil, col = 0, row = 0 }
+	local anchorPos = nil -- pivot server plant pertama = patokan
 	local function heldShovel()
 		local ch = LP.Character
 		if ch then for _, t in ipairs(ch:GetChildren()) do
@@ -149,19 +150,26 @@ return function(ctx)
 		local p = parts[1]
 		local halfX = p.Size.X / 2 - 0.75
 		local halfZ = p.Size.Z / 2 - 1
-		if goodCursor.part ~= p then goodCursor = { part = p, col = 0, row = 0 } end
+		if goodCursor.part ~= p then goodCursor = { part = p, col = 0, row = 0 }; anchorPos = nil end
 		for _ = 1, 800 do -- cap sweep; lahan beneran keblokir -> coba lagi tik depan
-			local x = p.Position.X - halfX + GOOD_STEP + goodCursor.col * GOOD_STEP
-			local z = p.Position.Z - halfZ + goodCursor.row * GOOD_STEP
-			if x > p.Position.X + halfX then -- baris penuh -> turun ke baris baru
-				goodCursor.col, goodCursor.row = 0, goodCursor.row + 1
-				x = p.Position.X - halfX + GOOD_STEP
+			local x, z
+			if anchorPos then -- grid RELATIF pivot plant pertama (patokan)
+				x = anchorPos.X + goodCursor.col * GOOD_STEP
+				z = anchorPos.Z + goodCursor.row * GOOD_STEP
+			else
+				x = p.Position.X - halfX + GOOD_STEP + goodCursor.col * GOOD_STEP
 				z = p.Position.Z - halfZ + goodCursor.row * GOOD_STEP
+			end
+			if x > p.Position.X + halfX then -- mentok kanan -> baris baru di bawah
+				goodCursor.col, goodCursor.row = 0, goodCursor.row + 1
+				x = anchorPos and anchorPos.X or (p.Position.X - halfX + GOOD_STEP)
+				z = anchorPos and (anchorPos.Z + goodCursor.row * GOOD_STEP)
+					or (p.Position.Z - halfZ + goodCursor.row * GOOD_STEP)
 			end
 			if z > p.Position.Z + halfZ then -- lahan penuh -> mulai baris awal lagi
 				goodCursor.col, goodCursor.row = 0, 0
-				x = p.Position.X - halfX + GOOD_STEP
-				z = p.Position.Z - halfZ
+				x = anchorPos and anchorPos.X or (p.Position.X - halfX + GOOD_STEP)
+				z = anchorPos and anchorPos.Z or (p.Position.Z - halfZ)
 			end
 			local bl = blockersAt(plantsFolder(), x, z)
 			local free = (#bl == 0)
@@ -176,26 +184,28 @@ return function(ctx)
 		return nil
 	end
 
-	-- Kenapa speed 0 rozak? Fire ke server itu ASYNC dan bisa KEHABISAN
-	-- (di-queue/drop) pas kebanjiran. Fix dulu cuma nunggu plant duduk di
-	-- cell, tapi deadline 2.5s habis -> diam-diam LANJUT, itulah celahnya.
-	-- Sekarang: cursor TIDAK PERNAH maju selama cell belum keisi — nunggu,
-	-- dan tiap ~0.6s yang gagap di-FIRE ULANG ke posisi yang SAMA sampe
-	-- server beneran nyatet plant di situ (cap 8s -> skip + jangan bohong).
-	-- Stragglers nyasar tetap dipungut "Shovel Penghalang" di sweep lain.
-	-- Delay 0 = secepat pencatatan server per plant.
+	-- Kenapa speed 0 rozak? Fire ke server itu ASYNC: bisa ketelen, dan
+	-- posisi yang kita kirim bisa di-snap/geser server beda dari dugaan
+	-- frame kita — grid absolut frame kita lama-lama selang-seling nabrak,
+	-- server naruh plant ke posisi acak. Fix 2 lapis: (1) cursor TIDAK MAJU
+	-- selama cell belum keisi beneran; fire yang gagap ditembak ULANG tiap
+	-- ~0.6s ke posisi sama (cap 8s -> skip, ga bohong). (2) patokan grid =
+	-- PIVOT SERVER plant pertama (request user), semua cell berikutnya
+	-- offset relatif dari situ. Stragglers nyasar tetap dipungut
+	-- "Shovel Penghalang" di sweep lain. Delay 0 = secepat pencatatan
+	-- server per plant, barisan tetap lurus.
 	local function waitCellOccupied(pos, seedName)
-		if not pos then return end
+		if not pos then return nil end
 		local t0 = os.clock()
 		local nextRetry = os.clock() + 0.6
 		while os.clock() - t0 < 8 do
-			if not CFG.plantSeedEnabled then return end
+			if not CFG.plantSeedEnabled then return nil end
 			local pf = plantsFolder()
 			if pf then
 				for _, m in ipairs(pf:GetChildren()) do
 					local ok, pv = pcall(function() return m:GetPivot().Position end)
 					if ok and pv and math.abs(pv.X - pos.X) < GOOD_TAKE_R and math.abs(pv.Z - pos.Z) < GOOD_TAKE_R then
-						return -- plant baru udah beneran duduk di cell-nya
+						return pv -- pivot server plant baru -> ini jadi patokan
 					end
 				end
 			end
@@ -205,6 +215,7 @@ return function(ctx)
 			end
 			task.wait(0.05)
 		end
+		return nil
 	end
 
 ----------------------------------------------------------------- ack tanam
@@ -286,16 +297,17 @@ return function(ctx)
 									-- snapshot SEBELUM fire, biar ack ga ketuker dgn plant lama
 									local pf = plantsFolder()
 									local before = pf and plantSet(pf) or nil
-								pcall(function() Plant_RE:FireServer(pos, name) end)
-								planted = planted + 1
-								-- Good Position: cursor ga maju sampe plant
-								-- beneran duduk DI CELL-nya (fire yang
-								-- ketelen di-retry otomatis).
-								if mode == "Good Position" then
-									waitCellOccupied(pos, name)
-								else
-									plantAck(before, 2.5)
-								end
+									pcall(function() Plant_RE:FireServer(pos, name) end)
+									planted = planted + 1
+									if mode == "Good Position" then
+										local landed = waitCellOccupied(pos, name)
+										-- Patokan = pivot server plant PERTAMA
+										-- (request user): semua cell berikutnya
+										-- offset relatif dari sini.
+										if landed and anchorPos == nil then anchorPos = landed end
+									else
+										plantAck(before, 2.5)
+									end
 								end
 							end
 							task.wait(tonumber(CFG.plantDelay) or 0)
