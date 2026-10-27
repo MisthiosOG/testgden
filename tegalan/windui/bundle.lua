@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T14:12:31.449Z
+-- 42 modul, di-generate 2026-10-27T14:17:49.623Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -10687,10 +10687,25 @@ return function(ctx)
 		return control
 	end
 
-	-- Section header polos: Box=false -> selalu kebuka, NOL klik.
-	-- (Box=true bikin collapsible harus di-klik dulu — itu yang bikin kepanjangan.)
+	-- Section header polos: Box=false -> tanpa box; Opened=true -> konten langsung kebuka
+	-- (default lib = Opened:false + tiap section dapat anak -> Expandable + chevron klik).
+	-- Chevron dibunuh via polling: begitu muncul (Frame+ImageLabel di header), dipatikan.
 	local function section(tab, title, opened)
-		return tab:Section({ Title = title, TextSize = 19 })
+		local sec = tab:Section({ Title = title, TextSize = 19, Opened = true })
+		task.spawn(function()
+			for _ = 1, 50 do
+				pcall(function()
+					local top = sec.ElementFrame.Outline.Top
+					for _, ch in ipairs(top:GetChildren()) do
+						if ch:IsA("Frame") and ch:FindFirstChildOfClass("ImageLabel") then
+							ch.Visible = false
+						end
+					end
+				end)
+				task.wait(0.5)
+			end
+		end)
+		return sec
 	end
 
 	-- Row nyamping: HStack = anak-anak auto split lebar sama (horizontal).
@@ -10708,9 +10723,9 @@ return function(ctx)
 		--------------------------------------------------- mini-tab bar: [Pickup V1][Pickup V2][Boost]
 		local bar = hrow(tab)
 		local DEFS = {
-			v1    = { name = "Pickup Pet V1" },
-			v2    = { name = "Pickup Pet V2" },
-			boost = { name = "Boost Pet" },
+			v1    = { name = "Pickup V1" },
+			v2    = { name = "Pickup V2" },
+			boost = { name = "Boost" },
 		}
 		local secs, btns = {}, {}
 		local function selectPanel(id)
@@ -10837,6 +10852,24 @@ return function(ctx)
 					if v and ctx.startBoostPet then pcall(function() ctx.startBoostPet() end) end
 				end)
 			addRefresh(sec)
+		end)
+
+		-- kunci lebar bar: HStack ngeset Scale anak sebelum padding halaman kebaca
+		-- (Roblox Scale ngeyel sama UIPadding -> bar nembus & kepotong kanan).
+		-- Timpa manual: frame = lebar-32, anak-anak split rata minus gap.
+		pcall(function()
+			local fr = bar.ElementFrame
+			fr.Size = UDim2.new(1, -32, 0, 0)
+			local kids = {}
+			for _, c in ipairs(fr:GetChildren()) do
+				if c:IsA("GuiObject") then kids[#kids + 1] = c end
+			end
+			local n = #kids
+			if n > 0 then
+				for _, c in ipairs(kids) do
+					c.Size = UDim2.new(1 / n, -6, 1, 0)
+				end
+			end
 		end)
 
 		selectPanel("v1")
