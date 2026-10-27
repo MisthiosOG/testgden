@@ -3,8 +3,9 @@
      Remote: Plant_RE:FireServer(Vector3 pos, "SeedName")
      Seed & jumlah dari DataService InventoryData (ItemType="Seed", ItemData.ItemName/Quantity).
      WAJIB megang tool seed-nya pas Plant_RE -> equip ulang tiap mau tanam (kayak reclaimer).
-     Posisi: Random / Player Position / God Position (barisan lurus, skip
-     posisi terisi biar server nggak geser tanaman ke kolom sebelah).
+     Posisi: Random / Player Position / Good Position (barisan lurus urut
+     kiri->kanan; cell yang dipegang plant lama di-shovel biar server
+     nggak geser tanaman baru — toggle "Shovel Penghalang").
      Fungsi: ctx.getPlantSeedOptions / ctx.startPlant. ]]
 return function(ctx)
 	local LP  = ctx.LP
@@ -90,63 +91,89 @@ return function(ctx)
 		return Vector3.new(hrp.Position.X, y, hrp.Position.Z)
 	end
 
-	-- God Position: TANAM SEBARIS LURUS (model "..........."). Baris pertama
-	-- lisih tengah part Can_Plant (Z tetap), X maju GOD_STEP tiap tanam;
-	-- mentok ujung -> pindah baris baru (Z += GOD_STEP) -> barisan lurus
-	-- beraturan, bukan acak. Cursor dipertahankan antar siklus.
-	-- PENTING: minta posisi yang udah keisi = server GESESER plant ke cell
-	-- sebelah sendiri (dgn sendirinya jadi kolom kedua paralel). Makanya tiap
-	-- kandidat dicek dulu ke plant yang ada; kena -> cursor maju sendiri.
-	local GOD_STEP = 2.5
-	local GOD_TAKE_R = GOD_STEP - 0.1 -- < step, biar tetangga sebaris g lolos
-	local godCursor = { part = nil, x = 0, row = 0 }
-	local function godSpots(pf) -- posisi (X,Z) semua plant, sekali per tanam
+	-- Good Position: BARISAN DETERMINISTIK, URUT KIRI -> KANAN per baris
+	-- (row-major; cursor TIDAK PERNAH lompat biar urutannya nyambung).
+	-- Cell berikutnya = kolom skrg + GOOD_STEP (X); mentok kanan -> baris baru
+	-- (Z += GOOD_STEP). Cell yang masih dipegang plant lama DIBERSIHKAN dulu
+	-- (Remove_Item dgn Shovel kepegang, sama kayak tab Shovel; toggle
+	-- "Shovel Penghalang") -> jalur dijamin kosong, server PASTI naruh plant
+	-- di posisi yang diminta, nggak ada geser acak. Kalau toggle off / shovel
+	-- gagal, baru maju 1 cell (skip).
+	local GOOD_STEP   = 2.5
+	local GOOD_TAKE_R = GOOD_STEP - 0.1
+	local RemoveItem = RS:WaitForChild("GameEvents"):WaitForChild("Remove_Item")
+	local goodCursor = { part = nil, col = 0, row = 0 }
+	local function heldShovel()
+		local ch = LP.Character
+		if ch then for _, t in ipairs(ch:GetChildren()) do
+			if t:IsA("Tool") and tostring(t.Name):find("Shovel") then return t end
+		end end
+		return nil
+	end
+	local function equipShovel() -- server nolak Remove_Item kalau ga pegang Shovel
+		if heldShovel() then return true end
+		local sh
+		for _, w in ipairs({ LP.Character, LP:FindFirstChild("Backpack") }) do
+			if w then for _, t in ipairs(w:GetChildren()) do
+				if t:IsA("Tool") and tostring(t.Name):find("Shovel") then sh = t; break end
+			end end
+			if sh then break end
+		end
+		local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+		if sh and hum then pcall(function() hum:EquipTool(sh) end); task.wait(0.15) end
+		return heldShovel() ~= nil
+	end
+	local function blockersAt(pf, x, z) -- plant yang pivot-nya makan cell (x,z)
 		local out = {}
-		if not pf then return out end
-		for _, m in ipairs(pf:GetChildren()) do
-			local ok, pv = pcall(function() return m:GetPivot().Position end)
-			if ok and pv then out[#out + 1] = { pv.X, pv.Z } end
+		if pf then
+			for _, m in ipairs(pf:GetChildren()) do
+				local ok, pv = pcall(function() return m:GetPivot().Position end)
+				if ok and pv and math.abs(pv.X - x) < GOOD_TAKE_R and math.abs(pv.Z - z) < GOOD_TAKE_R then
+					out[#out + 1] = m
+				end
+			end
 		end
 		return out
 	end
-	local function godTaken(spots, x, z)
-		for _, s in ipairs(spots) do
-			if math.abs(s[1] - x) < GOD_TAKE_R and math.abs(s[2] - z) < GOD_TAKE_R then
-				return true
-			end
-		end
-		return false
+	local function clearBlocker(m) -- Remove_Item(PrimaryPart) & tunggu ilang beneran
+		local part = m.PrimaryPart or m:FindFirstChildWhichIsA("BasePart")
+		if not (part and equipShovel()) then return false end
+		pcall(function() RemoveItem:FireServer(part) end)
+		local t0 = os.clock()
+		while m.Parent and os.clock() - t0 < 2 do task.wait(0.05) end
+		return not m.Parent
 	end
-	local function godPos()
+	local function goodPos()
 		local parts = canPlantParts()
-		if #parts == 0 then godCursor = { part = nil, x = 0, row = 0 }; return nil end
+		if #parts == 0 then goodCursor = { part = nil, col = 0, row = 0 }; return nil end
 		local p = parts[1]
 		local halfX = p.Size.X / 2 - 0.75
 		local halfZ = p.Size.Z / 2 - 1
-		local spots = godSpots(plantsFolder())
-		local startX = p.Position.X - halfX + GOD_STEP
-		for _ = 1, 800 do -- sweep capped; habis semua = lahan beneran keblokir
-			if godCursor.part ~= p then godCursor = { part = p, x = 0, row = 0 } end
-			local x = startX + godCursor.x * GOD_STEP
+		if goodCursor.part ~= p then goodCursor = { part = p, col = 0, row = 0 } end
+		for _ = 1, 800 do -- cap sweep; lahan beneran keblokir -> coba lagi tik depan
+			local x = p.Position.X - halfX + GOOD_STEP + goodCursor.col * GOOD_STEP
+			local z = p.Position.Z - halfZ + goodCursor.row * GOOD_STEP
 			if x > p.Position.X + halfX then -- baris penuh -> turun ke baris baru
-				godCursor.x = 0
-				godCursor.row = godCursor.row + 1
-				x = startX
+				goodCursor.col, goodCursor.row = 0, goodCursor.row + 1
+				x = p.Position.X - halfX + GOOD_STEP
+				z = p.Position.Z - halfZ + goodCursor.row * GOOD_STEP
 			end
-			local z = p.Position.Z - halfZ + godCursor.row * GOD_STEP
-			if z > p.Position.Z + halfZ then -- lahan penuh -> mulai lagi dari baris 1
-				godCursor.row = 0
-				godCursor.x = 0
+			if z > p.Position.Z + halfZ then -- lahan penuh -> mulai baris awal lagi
+				goodCursor.col, goodCursor.row = 0, 0
+				x = p.Position.X - halfX + GOOD_STEP
 				z = p.Position.Z - halfZ
 			end
-			godCursor.x = godCursor.x + 1
-			godCursor.part = p
-			if not godTaken(spots, x, z) then
-				return Vector3.new(x, p.Position.Y, z)
+			local bl = blockersAt(plantsFolder(), x, z)
+			local free = (#bl == 0)
+			if not free and CFG.goodClear ~= false then
+				local cleared = 0
+				for _, m in ipairs(bl) do if clearBlocker(m) then cleared = cleared + 1 end end
+				free = (cleared == #bl)
 			end
-			-- spot keisi -> cursor udah maju, coba kandidat berikutnya
+			goodCursor.col = goodCursor.col + 1 -- cell selesai diproses (tanam/shovel/skip)
+			if free then return Vector3.new(x, p.Position.Y, z) end
 		end
-		return nil -- semua spot keblokir (tanaman raksasa/dll); coba tik depan
+		return nil
 	end
 
 	----------------------------------------------------------------- ack tanam
@@ -154,14 +181,11 @@ return function(ctx)
 	-- ngebut (plantDelay 0), fire berikutnya nyamain server sebelum plant
 	-- sebelumnya terdaftar di occupancy -> server nabrak dan naruh plant di
 	-- POSISI ACAK. Makanya tiap fire DITUNGGU sampe plant barunya beneran
-	-- muncul (ack, max 2.5s) baru lanjut. Ini bikin God Position lurus di
-	-- SEMUA nilai delay (0 pun bisa, kecepatan = secepat server nyatet);
-	-- delay user tetap jadi gap tambahan di atas ack.
-	-- ponytail: God Position udah skip spot terisi (radius GOD_TAKE_R, cek
-	-- pivot semua plant). Celah yang tersisa: tanaman RAKSASA badannya nutup
-	-- cell sebelah tapi pivotnya jauh -> lolos cek. Upgrade kalau kejadian:
-	-- verifikasi per-tanam (cocokkan pivot plant baru dgn request, shovel +
-	-- tanam ulang kalau meleset).
+	-- muncul (ack, max 2.5s) baru lanjut. Ini bikin Good Position lurus di
+	-- SEMUA nilai delay (0 pun bisa, kecepatan = secepat server nyatet).
+	-- ponytail: Good Position udah bersihin penghalang jalurnya (pivot,
+	-- radius GOOD_TAKE_R + Remove_Item). Celah: tanaman yang server anggap
+	-- nutup cell tapi pivot-nya jauh (jarang). Upgrade: verifikasi per-tanam.
 	local function plantSet(pf)
 		local set = {}
 		for _, m in ipairs(pf:GetChildren()) do
@@ -213,7 +237,7 @@ return function(ctx)
 			if next(sel) then
 				local inv = seedInventory()
 				local mode = (CFG.plantPosition == "Player Position" and "Player Position")
-					or (CFG.plantPosition == "God Position" and "God Position")
+					or (CFG.plantPosition == "Good Position" and "Good Position")
 					or "Random"
 				-- Kecepatan sepenuhnya ikut Delay input (0 = secepat mungkin).
 				local planted, anySeed = 0, false
@@ -225,7 +249,7 @@ return function(ctx)
 							if not CFG.plantSeedEnabled or ctx.state.plantId ~= myId then break end
 							if equipSeed(name) then -- equip seed tiap mau tanam
 								local pos = (mode == "Player Position" and playerPos())
-									or (mode == "God Position" and godPos())
+									or (mode == "Good Position" and goodPos())
 									or randomPos()
 								if pos then
 									-- snapshot SEBELUM fire, biar ack ga ketuker dgn plant lama

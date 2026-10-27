@@ -791,10 +791,13 @@ end
 				function() return ctx.getPlantSeedOptions() end,
 				CFG.plantSeedNames, function() persist() end,
 				{ register = true, cacheKey = "inv_seeds", fillDelay = 0.3 })
-			makeSingleW(sec, "Select Position", "Lokasi tanam. God Position = baris rapih otomatis.",
-				function() return { "Random", "Player Position", "God Position" } end,
+			makeSingleW(sec, "Select Position", "Lokasi tanam. Good Position = barisan lurus urut kiri -> kanan.",
+				function() return { "Random", "Player Position", "Good Position" } end,
 				function() return CFG.plantPosition end,
 				function(v) CFG.plantPosition = v end, { fillDelay = 0.5 })
+			makeToggleW(sec, "Shovel Penghalang", "Good Position: plant lama yang nutup cell barisan di-shovel, biar tanamannya beneran urut tanpa digeser server.",
+				function() return CFG.goodClear ~= false end,
+				function(v) CFG.goodClear = v; persist() end)
 			makeInputW(sec, "Delay To Plants", "Extra delay (detik) tiap tanam seed.",
 				function() return tostring(CFG.plantDelay) end,
 				function(t) CFG.plantDelay = tonumber(t) or 0 end)
