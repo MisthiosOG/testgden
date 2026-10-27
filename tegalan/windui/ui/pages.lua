@@ -201,105 +201,141 @@ return function(ctx)
 	local v2Ctrl -- sync mutual exclusion
 
 	local function buildPetTab(tab)
-		--------------------------------------------------- PnP V1
-		local secV1 = section(tab, "Automation Pickup Pet V1", true)
-		makeMultiDynW(secV1, "Select Pets for Pickup [V1]",
-			"Pilih pet dari backpack (kosong = semua yg di garden)",
-			function() return ctx.inventoryPetOptions(CFG.pnpUuids) end,
-			CFG.pnpUuids, function() persist() end, { register = true })
-		local r1 = hrow(secV1)
-		makeInputW(r1, "Pickup Delay", "Jeda tiap siklus (idealnya = saat skill ready)",
-			function() return CFG.pickupDelay end,
-			function(t) CFG.pickupDelay = tonumber(t) or 0.3 end)
-		makeInputW(r1, "Equip Delay", "Jeda unequip -> equip (1E-20 = near-instant)",
-			function()
-				if CFG.equipDelay == 1e-20 or CFG.equipDelay == 0 or not CFG.equipDelay then return "1E-20" end
-				return tostring(CFG.equipDelay)
-			end,
-			function(t)
-				if tostring(t):upper():find("1E%-20") then
-					CFG.equipDelay = 1e-20
-				else
-					CFG.equipDelay = tonumber(t) or 1e-20
-				end
-			end)
-		makeInputW(r1, "Scan Interval", "Frekuensi cek cooldown (min 0.01)",
-			function() return CFG.pnpScanInterval end,
-			function(t) CFG.pnpScanInterval = math.max(0.01, tonumber(t) or 0.05) end)
-		makeToggleW(secV1, "Enable Automation Pickup V1",
-			"Polling GetPetCooldown (lama). Nyalain ini matiin V2.",
-			function() return CFG.pnpEnabled end,
-			function(v)
-				CFG.pnpEnabled = v; persist()
-				if v then
-					CFG.pnpV2Enabled = false; persist()
-					if ctx.stopPnpV2 then pcall(function() ctx.stopPnpV2() end) end
-					if v2Ctrl then pcall(function() v2Ctrl:Set(false) end) end
-					if ctx.startPnpV1 then pcall(function() ctx.startPnpV1() end) end
-				else
-					if ctx.stopPnpV1 then pcall(function() ctx.stopPnpV1() end) end
-				end
-			end)
+		--------------------------------------------------- mini-tab bar: [Pickup V1][Pickup V2][Boost]
+		local bar = hrow(tab)
+		local DEFS = {
+			{ id = "v1",    name = "Pickup Pet V1" },
+			{ id = "v2",    name = "Pickup Pet V2" },
+			{ id = "boost", name = "Boost Pet" },
+		}
+		local secs, btns = {}, {}
+		local function selectPanel(id)
+			for pid, sec in pairs(secs) do
+				if sec.ElementFrame then pcall(function() sec.ElementFrame.Visible = (pid == id) end) end
+			end
+			for pid, btn in pairs(btns) do
+				pcall(function()
+					btn:SetTitle((pid == id and "▸ " or "") .. DEFS[pid].name)
+				end)
+			end
+		end
 
-		--------------------------------------------------- PnP V2
-		local secV2 = section(tab, "Automation Pickup Pet V2", true)
-		makeMultiDynW(secV2, "Select Pets for Pickup [V2]",
-			"Pilih pet dari backpack (kosong = semua yg di garden)",
-			function() return ctx.inventoryPetOptions(CFG.pnpV2Uuids) end,
-			CFG.pnpV2Uuids, function() persist() end, { register = true })
-		local r2 = hrow(secV2)
-		makeInputW(r2, "Pickup Delay", "Jeda sebelum tiap pickup",
-			function() return CFG.pnpV2PickupDelay end,
-			function(t) CFG.pnpV2PickupDelay = tonumber(t) or 0.05 end)
-		makeInputW(r2, "Equip Delay", "Jeda antara unequip -> equip",
-			function() return CFG.pnpV2EquipDelay end,
-			function(t) CFG.pnpV2EquipDelay = tonumber(t) or 0.03 end)
-		makeInputW(r2, "Scan Interval", "Frekuensi cek cd dari cache event (min 0.02)",
-			function() return CFG.pnpV2ScanInterval end,
-			function(t) CFG.pnpV2ScanInterval = math.max(0.02, tonumber(t) or 0.05) end)
-		v2Ctrl = makeToggleW(secV2, "Enable Automation Pickup V2",
-			"Event-driven (PetCooldownsUpdated), stabil. Nyalain ini matiin V1.",
-			function() return CFG.pnpV2Enabled end,
-			function(v)
-				CFG.pnpV2Enabled = v; persist()
-				if v then
-					CFG.pnpEnabled = false; persist()
-					if ctx.stopPnpV1 then pcall(function() ctx.stopPnpV1() end) end
-					if ctx.startPnpV2 then pcall(function() ctx.startPnpV2() end) end
-				else
-					if ctx.stopPnpV2 then pcall(function() ctx.stopPnpV2() end) end
-				end
-			end)
+		local function miniTab(id, buildFn)
+			btns[id] = bar:Button({
+				Title = DEFS[id].name,
+				Callback = safe(function() selectPanel(id) end),
+			})
+			breathe()
+			local sec = section(tab, DEFS[id].name)
+			buildFn(sec)
+			secs[id] = sec
+			breathe()
+		end
 
-		--------------------------------------------------- Boost Pet
-		local secBoost = section(tab, "Automation Boost Pet", true)
-		local rb = hrow(secBoost)
-		makeMultiDynW(rb, "Select Pets to Boost", "Pet yang mau di-boost (aktif di garden)",
-			function() return ctx.inventoryPetOptions(CFG.boostPetUuids) end,
-			CFG.boostPetUuids, function() persist() end, { register = true })
-		makeMultiDynW(rb, "Select Boost Items", "Item boost (Pet Toy) yang dipakai",
-			function() return ctx.getBoostItemOptions(CFG.boostItemNames) end,
-			CFG.boostItemNames, function() persist() end, { register = true })
-		local rbToggle = hrow(secBoost)
-		makeToggleW(rbToggle, "Enable Automation Boost",
-			"Auto apply boost item ke pet, re-apply pas boost habis",
-			function() return CFG.boostEnabled end,
-			function(v)
-				CFG.boostEnabled = v; persist()
-				if v and ctx.startBoostPet then pcall(function() ctx.startBoostPet() end) end
-			end)
+		local function addRefresh(sec)
+			sec:Button({
+				Title = "Update Pet List",
+				Desc = "Baca ulang inventory — refresh dropdown dinamis",
+				Callback = safe(function()
+					for _, fn in ipairs(W.refreshers) do
+						pcall(fn)
+					end
+					ctx.log("Pet list di-refresh.")
+				end),
+			})
+		end
 
-		--------------------------------------------------- tombol refresh list dinamis
-		secV1:Button({
-			Title = "Update Pet List (V1/V2/Boost)",
-			Desc = "Baca ulang inventory pet — refresh semua dropdown dinamis",
-			Callback = safe(function()
-				for _, fn in ipairs(W.refreshers) do
-					pcall(fn)
-				end
-				ctx.log("Pet list di-refresh.")
-			end),
-		})
+		--------------------------------------------------- panel 1: Pickup Pet V1
+		miniTab("v1", function(sec)
+			makeMultiDynW(sec, "Select Pets for Pickup [V1]",
+				"Pilih pet dari backpack (kosong = semua yg di garden)",
+				function() return ctx.inventoryPetOptions(CFG.pnpUuids) end,
+				CFG.pnpUuids, function() persist() end, { register = true })
+			makeInputW(sec, "Pickup Delay (sec)", "Jeda tiap siklus (idealnya = saat skill ready)",
+				function() return CFG.pickupDelay end,
+				function(t) CFG.pickupDelay = tonumber(t) or 0.3 end)
+			makeInputW(sec, "Equip Delay (sec)", "Jeda unequip -> equip (1E-20 = near-instant)",
+				function()
+					if CFG.equipDelay == 1e-20 or CFG.equipDelay == 0 or not CFG.equipDelay then return "1E-20" end
+					return tostring(CFG.equipDelay)
+				end,
+				function(t)
+					if tostring(t):upper():find("1E%-20") then
+						CFG.equipDelay = 1e-20
+					else
+						CFG.equipDelay = tonumber(t) or 1e-20
+					end
+				end)
+			makeInputW(sec, "Scan Interval (sec)", "Frekuensi cek cooldown (min 0.01)",
+				function() return CFG.pnpScanInterval end,
+				function(t) CFG.pnpScanInterval = math.max(0.01, tonumber(t) or 0.05) end)
+			makeToggleW(sec, "Enable Automation Pickup V1",
+				"Polling GetPetCooldown (lama). Nyalain ini matiin V2.",
+				function() return CFG.pnpEnabled end,
+				function(v)
+					CFG.pnpEnabled = v; persist()
+					if v then
+						CFG.pnpV2Enabled = false; persist()
+						if ctx.stopPnpV2 then pcall(function() ctx.stopPnpV2() end) end
+						if v2Ctrl then pcall(function() v2Ctrl:Set(false) end) end
+						if ctx.startPnpV1 then pcall(function() ctx.startPnpV1() end) end
+					else
+						if ctx.stopPnpV1 then pcall(function() ctx.stopPnpV1() end) end
+					end
+				end)
+			addRefresh(sec)
+		end)
+
+		--------------------------------------------------- panel 2: Pickup Pet V2
+		miniTab("v2", function(sec)
+			makeMultiDynW(sec, "Select Pets for Pickup [V2]",
+				"Pilih pet dari backpack (kosong = semua yg di garden)",
+				function() return ctx.inventoryPetOptions(CFG.pnpV2Uuids) end,
+				CFG.pnpV2Uuids, function() persist() end, { register = true })
+			makeInputW(sec, "Pickup Delay (sec)", "Jeda sebelum tiap pickup",
+				function() return CFG.pnpV2PickupDelay end,
+				function(t) CFG.pnpV2PickupDelay = tonumber(t) or 0.05 end)
+			makeInputW(sec, "Equip Delay (sec)", "Jeda antara unequip -> equip",
+				function() return CFG.pnpV2EquipDelay end,
+				function(t) CFG.pnpV2EquipDelay = tonumber(t) or 0.03 end)
+			makeInputW(sec, "Scan Interval (sec)", "Frekuensi cek cd dari cache event (min 0.02)",
+				function() return CFG.pnpV2ScanInterval end,
+				function(t) CFG.pnpV2ScanInterval = math.max(0.02, tonumber(t) or 0.05) end)
+			v2Ctrl = makeToggleW(sec, "Enable Automation Pickup V2",
+				"Event-driven (PetCooldownsUpdated), stabil. Nyalain ini matiin V1.",
+				function() return CFG.pnpV2Enabled end,
+				function(v)
+					CFG.pnpV2Enabled = v; persist()
+					if v then
+						CFG.pnpEnabled = false; persist()
+						if ctx.stopPnpV1 then pcall(function() ctx.stopPnpV1() end) end
+						if ctx.startPnpV2 then pcall(function() ctx.startPnpV2() end) end
+					else
+						if ctx.stopPnpV2 then pcall(function() ctx.stopPnpV2() end) end
+					end
+				end)
+			addRefresh(sec)
+		end)
+
+		--------------------------------------------------- panel 3: Boost Pet
+		miniTab("boost", function(sec)
+			makeMultiDynW(sec, "Select Pets to Boost", "Pet yang mau di-boost (aktif di garden)",
+				function() return ctx.inventoryPetOptions(CFG.boostPetUuids) end,
+				CFG.boostPetUuids, function() persist() end, { register = true })
+			makeMultiDynW(sec, "Select Boost Items", "Item boost (Pet Toy) yang dipakai",
+				function() return ctx.getBoostItemOptions(CFG.boostItemNames) end,
+				CFG.boostItemNames, function() persist() end, { register = true })
+			makeToggleW(sec, "Enable Automation Boost",
+				"Auto apply boost item ke pet, re-apply pas boost habis",
+				function() return CFG.boostEnabled end,
+				function(v)
+					CFG.boostEnabled = v; persist()
+					if v and ctx.startBoostPet then pcall(function() ctx.startBoostPet() end) end
+				end)
+			addRefresh(sec)
+		end)
+
+		selectPanel("v1")
 	end
 
 	----------------------------------------------------------------- REGISTRY TAB
