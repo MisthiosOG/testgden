@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T16:32:00.555Z
+-- 42 modul, di-generate 2026-10-27T16:35:26.913Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -3254,27 +3254,33 @@ return function(ctx)
 		return Vector3.new(hrp.Position.X, y, hrp.Position.Z)
 	end
 
-	-- God Position: grid baris rapih. Cursor maju sel demi sel (kiri->kanan,
-	-- lalu turun baris) di part Can_Plant pertama dan DIPERTAHANKAN antar siklus
-	-- -> tanaman berbaris rapih berurutan, bukan acak. SPACING 3 stud.
-	local GOD_SPACING = 3
-	local godCursor = { part = nil, ix = 0, iz = 0 }
+	-- God Position: TANAM SEBARIS LURUS (model "..........."). Baris pertama
+	-- lisih tengah part Can_Plant (Z tetap), X maju GOD_STEP tiap tanam;
+	-- mentok ujung -> pindah baris baru (Z += GOD_STEP) -> barisan lurus
+	-- beraturan, bukan acak. Cursor dipertahankan antar siklus.
+	local GOD_STEP = 2.5
+	local godCursor = { part = nil, x = 0, row = 0 }
 	local function godPos()
 		local parts = canPlantParts()
-		if #parts == 0 then godCursor = { part = nil, ix = 0, iz = 0 }; return nil end
+		if #parts == 0 then godCursor = { part = nil, x = 0, row = 0 }; return nil end
 		local p = parts[1]
-		if godCursor.part ~= p then godCursor = { part = p, ix = 0, iz = 0 } end
-		local hx, hz = p.Size.X / 2 - 1, p.Size.Z / 2 - 1
-		local cols = math.max(1, math.floor((hx * 2) / GOD_SPACING) + 1)
-		local rows = math.max(1, math.floor((hz * 2) / GOD_SPACING) + 1)
-		local x = p.Position.X - hx + math.min(godCursor.ix, cols - 1) * GOD_SPACING
-		local z = p.Position.Z - hz + math.min(godCursor.iz, rows - 1) * GOD_SPACING
-		godCursor.ix = godCursor.ix + 1
-		if godCursor.ix >= cols then
-			godCursor.ix = 0
-			godCursor.iz = godCursor.iz + 1
-			if godCursor.iz >= rows then godCursor.iz = 0 end -- penuh -> mulai lagi dari atas
+		if godCursor.part ~= p then godCursor = { part = p, x = 0, row = 0 } end
+		local halfX = p.Size.X / 2 - 0.75
+		local halfZ = p.Size.Z / 2 - 1
+		local startX = p.Position.X - halfX + GOD_STEP
+		local x = startX + godCursor.x * GOD_STEP
+		if x > p.Position.X + halfX then -- baris penuh -> turun ke baris baru
+			godCursor.x = 0
+			godCursor.row = godCursor.row + 1
+			x = startX
 		end
+		local z = p.Position.Z - halfZ + godCursor.row * GOD_STEP
+		if z > p.Position.Z + halfZ then -- lahan penuh -> mulai lagi dari baris 1
+			godCursor.row = 0
+			godCursor.x = 0
+			z = p.Position.Z - halfZ
+		end
+		godCursor.x = godCursor.x + 1
 		return Vector3.new(x, p.Position.Y, z)
 	end
 
