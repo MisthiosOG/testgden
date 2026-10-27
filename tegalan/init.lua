@@ -5,7 +5,8 @@
 
 	Router mendeteksi PlaceId lalu memuat app yang sesuai:
 	  - Trade World  -> GAGSeller/trade/init.lua   (fitur seller sekarang)
-	  - selain itu   -> GAGSeller/garden/init.lua  (fitur garden)
+	  - selain itu   -> GAGSeller/windui/init.lua (UI baru WindUI; garden lama
+					   tetap bisa lewat getgenv().GAG_APP = "garden")
 --]]
 
 -- Branch: "main" = production. Override buat dev: getgenv().GAG_BRANCH = "dev"
@@ -18,9 +19,9 @@ local ROOT = LOCAL_ROOT or ("https://raw.githubusercontent.com/MisthiosOG/testgd
 -- PlaceId server Trade World.
 local TRADE_WORLD_PLACE = 129954712878723
 
--- Pilih sub-app. Override: getgenv().GAG_APP = "hatch" atau "garden" atau "trade".
+-- Pilih sub-app. Override: getgenv().GAG_APP = "windui" / "garden" / "trade".
 local appOverride = (getgenv and getgenv().GAG_APP) or _G.GAG_APP
-local detectedTarget = (game.PlaceId == TRADE_WORLD_PLACE) and "trade" or "garden"
+local detectedTarget = (game.PlaceId == TRADE_WORLD_PLACE) and "trade" or "windui"
 -- Garden World must never inherit a stale GAG_APP="trade" from the executor.
 local target = (appOverride == "trade" and detectedTarget ~= "trade")
     and detectedTarget or (appOverride or detectedTarget)
