@@ -176,6 +176,7 @@ return function(ctx)
 			Values = {},
 			Value = "",
 			AllowNone = true,
+			SearchBarEnabled = true,
 			Callback = safe(function(d)
 				setv(d2v[d] or d)
 				persist()
@@ -1003,9 +1004,10 @@ end
 			bronto = { name = "Bronto Team" },
 			hatch  = { name = "Hatch Team" },
 			sell   = { name = "Sell Team" },
+			eggs   = { name = "Egg Config" },
 			cfg    = { name = "Config" },
 		}
-		local horder = { "core", "bronto", "hatch", "sell", "cfg" }
+		local horder = { "core", "bronto", "hatch", "sell", "eggs", "cfg" }
 		local hsecs = {}
 		local function miniTab(id, buildFn)
 			local sec = section(tab, hdefs[id].name)
@@ -1042,6 +1044,9 @@ end
 				"Otomatis place egg, hatch (Main/Hatch/Bronto team), sell sesuai config.",
 				function() return CFG.hatchEnabled end,
 				function(v)
+					-- WAJIB set flag dulu: loop hatch while CFG.hatchEnabled —
+					-- tanpa ini loop mati instan & toggle snap balik ke OFF.
+					CFG.hatchEnabled = v
 					if v then
 						if ctx.startHatch then pcall(function() ctx.startHatch() end) end
 					else
@@ -1129,7 +1134,53 @@ end
 			addRefresh(sec)
 		end)
 
-		--------------------------------------------------- panel 5: Config
+		--------------------------------------------------- panel 5: Egg Config
+		miniTab("eggs", function(sec)
+			sec:Paragraph({ Title = "Egg Configuration", Desc = "Egg yg di-place & di-hatch." })
+			makeSingleW(sec, "Egg to Hatch", "Egg dari backpack (angka = jumlah).",
+				function() return ctx.getEggBackpackOptions() end,
+				function() return tostring(CFG.hatchEggName or "") end,
+				function(v) if v ~= "" then CFG.hatchEggName = v end end,
+				{ register = true, fillDelay = 1.8 })
+			makeSingleW(sec, "Placement Pattern", "Grid = rapih, Random = sebar acak.",
+				function() return { "Grid", "Random" } end,
+				function() return CFG.hatchPlacePattern or "Grid" end,
+				function(v) CFG.hatchPlacePattern = (v == "Random") and "Random" or "Grid" end, { fillDelay = 2.0 })
+			makeInputW(sec, "Max Placed", "Maksimal egg ke-place di garden.",
+				function() return tostring(CFG.hatchMaxPlaced or 8) end,
+				function(t) CFG.hatchMaxPlaced = math.max(1, tonumber(t) or 8) end)
+
+			makeToggleW(sec, "Auto Rejoin on Egg Minus", "Rejoin server kalau jumlah egg minus mencapai batas.",
+				function() return CFG.hatchRejoinMinusEnabled end,
+				function(v)
+					CFG.hatchRejoinMinusEnabled = v
+					if v and ctx.startEggMinusWatcher then pcall(function() ctx.startEggMinusWatcher() end) end
+					if not v and not CFG.hatchRejoinPlusEnabled and ctx.stopEggMinusWatcher then
+						pcall(function() ctx.stopEggMinusWatcher() end)
+					end
+				end)
+			makeInputW(sec, "Egg Minus Threshold", "Batas minus trigger rejoin (misal 20).",
+				function() return tostring(CFG.hatchRejoinMinusThreshold or 20) end,
+				function(t) CFG.hatchRejoinMinusThreshold = tonumber(t) or 20 end)
+			makeToggleW(sec, "Auto Rejoin on Egg Plus", "Rejoin server kalau egg bertambah mencapai batas.",
+				function() return CFG.hatchRejoinPlusEnabled end,
+				function(v)
+					CFG.hatchRejoinPlusEnabled = v
+					if v and ctx.startEggMinusWatcher then pcall(function() ctx.startEggMinusWatcher() end) end
+					if not v and not CFG.hatchRejoinMinusEnabled and ctx.stopEggMinusWatcher then
+						pcall(function() ctx.stopEggMinusWatcher() end)
+					end
+				end)
+			makeInputW(sec, "Egg Plus Threshold", "Batas plus trigger rejoin (misal 20).",
+				function() return tostring(CFG.hatchRejoinPlusThreshold or 20) end,
+				function(t) CFG.hatchRejoinPlusThreshold = tonumber(t) or 20 end)
+			makeInputW(sec, "Hatch Webhook URL", "Webhook alert bronto/special egg (kosong = ga kirim).",
+				function() return tostring(CFG.hatchWebhookUrl or "") end,
+				function(t) CFG.hatchWebhookUrl = tostring(t or "") end)
+			addRefresh(sec)
+		end)
+
+		--------------------------------------------------- panel 6: Config
 		miniTab("cfg", function(sec)
 			makeToggleW(sec, "Auto Sell Pets", "Jual otomatis pet di backpack sesuai pengaturan.",
 				function() return CFG.autoSellEnabled end,
@@ -1235,48 +1286,6 @@ end
 					if ctx.hatchDoSell then task.spawn(function() pcall(ctx.hatchDoSell) end) end
 				end),
 			})
-
-			sec:Paragraph({ Title = "Egg Configuration", Desc = "Egg yg di-place & di-hatch." })
-			makeSingleW(sec, "Egg to Hatch", "Egg dari backpack (angka = jumlah).",
-				function() return ctx.getEggBackpackOptions() end,
-				function() return tostring(CFG.hatchEggName or "") end,
-				function(v) if v ~= "" then CFG.hatchEggName = v end end,
-				{ register = true, fillDelay = 1.8 })
-			makeSingleW(sec, "Placement Pattern", "Grid = rapih, Random = sebar acak.",
-				function() return { "Grid", "Random" } end,
-				function() return CFG.hatchPlacePattern or "Grid" end,
-				function(v) CFG.hatchPlacePattern = (v == "Random") and "Random" or "Grid" end, { fillDelay = 2.0 })
-			makeInputW(sec, "Max Placed", "Maksimal egg ke-place di garden.",
-				function() return tostring(CFG.hatchMaxPlaced or 8) end,
-				function(t) CFG.hatchMaxPlaced = math.max(1, tonumber(t) or 8) end)
-
-			makeToggleW(sec, "Auto Rejoin on Egg Minus", "Rejoin server kalau jumlah egg minus mencapai batas.",
-				function() return CFG.hatchRejoinMinusEnabled end,
-				function(v)
-					CFG.hatchRejoinMinusEnabled = v
-					if v and ctx.startEggMinusWatcher then pcall(function() ctx.startEggMinusWatcher() end) end
-					if not v and not CFG.hatchRejoinPlusEnabled and ctx.stopEggMinusWatcher then
-						pcall(function() ctx.stopEggMinusWatcher() end)
-					end
-				end)
-			makeInputW(sec, "Egg Minus Threshold", "Batas minus trigger rejoin (misal 20).",
-				function() return tostring(CFG.hatchRejoinMinusThreshold or 20) end,
-				function(t) CFG.hatchRejoinMinusThreshold = tonumber(t) or 20 end)
-			makeToggleW(sec, "Auto Rejoin on Egg Plus", "Rejoin server kalau egg bertambah mencapai batas.",
-				function() return CFG.hatchRejoinPlusEnabled end,
-				function(v)
-					CFG.hatchRejoinPlusEnabled = v
-					if v and ctx.startEggMinusWatcher then pcall(function() ctx.startEggMinusWatcher() end) end
-					if not v and not CFG.hatchRejoinMinusEnabled and ctx.stopEggMinusWatcher then
-						pcall(function() ctx.stopEggMinusWatcher() end)
-					end
-				end)
-			makeInputW(sec, "Egg Plus Threshold", "Batas plus trigger rejoin (misal 20).",
-				function() return tostring(CFG.hatchRejoinPlusThreshold or 20) end,
-				function(t) CFG.hatchRejoinPlusThreshold = tonumber(t) or 20 end)
-			makeInputW(sec, "Hatch Webhook URL", "Webhook alert bronto/special egg (kosong = ga kirim).",
-				function() return tostring(CFG.hatchWebhookUrl or "") end,
-				function(t) CFG.hatchWebhookUrl = tostring(t or "") end)
 			addRefresh(sec)
 		end)
 
