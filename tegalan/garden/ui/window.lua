@@ -20,7 +20,7 @@ return function(ctx)
     assert(WindUI and WindUI.CreateWindow, "WindUI failed to load")
 
     local window = WindUI:CreateWindow({
-        Title = "CeszParadiseHub",
+        Title = "iStealth WindUI Garden",
         Icon = "sprout",
         ToggleKey = Enum.KeyCode.K,
         Size = UDim2.fromOffset(760, 520),
@@ -28,7 +28,7 @@ return function(ctx)
         OpenButton = {
             Enabled = true,
             OnlyMobile = false,
-            Title = "CeszParadiseHub",
+            Title = "iStealth WindUI Garden",
             Icon = "sprout",
         },
     })
@@ -238,5 +238,5 @@ return function(ctx)
     ctx.F = ctx.F or {}
     ctx.ui.windTabs = tabs
 
-    WindUI:Notify({ Title = "CeszParadiseHub", Content = "WindUI shell loaded", Duration = 3 })
+    WindUI:Notify({ Title = "iStealth WindUI Garden", Content = "BUILD windui-2026-10-27", Duration = 5 })
 end

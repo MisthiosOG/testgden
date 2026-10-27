@@ -23,6 +23,11 @@ local detectedTarget = (game.PlaceId == TRADE_WORLD_PLACE) and "trade" or "garde
 local target = (appOverride == "trade" and detectedTarget ~= "trade")
     and detectedTarget or (appOverride or detectedTarget)
 print(("[GAGHub][WINDUI] router target=%s place=%s"):format(target, tostring(game.PlaceId)))
+if getgenv then
+    getgenv().__OPOKI_BUILD = "windui-2026-10-27"
+else
+    _G.__OPOKI_BUILD = "windui-2026-10-27"
+end
 
 -- Telemetry ke dashboard web (heartbeat + inventory). Logika di modul terpisah biar loader tetap bersih.
 pcall(function()

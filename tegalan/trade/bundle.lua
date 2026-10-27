@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 14 modul, di-generate 2026-10-27T11:17:46.604Z
+-- 14 modul, di-generate 2026-10-27T11:21:02.605Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua — inisialisasi akhir: default page, supervisor auto-claim, auto-resume. ]]
@@ -3351,12 +3351,12 @@ return function(ctx)
     assert(WindUI and WindUI.CreateWindow, "WindUI failed to load")
 
     local window = WindUI:CreateWindow({
-        Title = "CeszParadiseHub Trade",
+        Title = "iStealth WindUI Trade",
         Icon = "shopping-cart",
         ToggleKey = Enum.KeyCode.K,
         Size = UDim2.fromOffset(760, 520),
         Theme = "Dark",
-        OpenButton = { Enabled = true, OnlyMobile = false, Title = "CeszParadise Trade", Icon = "shopping-cart" },
+        OpenButton = { Enabled = true, OnlyMobile = false, Title = "iStealth WindUI Trade", Icon = "shopping-cart" },
     })
 
     ctx.ui = ctx.ui or {}
@@ -3470,7 +3470,7 @@ return function(ctx)
     ctx.C = ctx.C or {}
     ctx.F = ctx.F or {}
     ctx.ui.windTabs = tabs
-    pcall(function() WindUI:Notify({ Title = "CeszParadiseHub", Content = "Trade WindUI shell loaded", Duration = 3 }) end)
+    pcall(function() WindUI:Notify({ Title = "iStealth WindUI Trade", Content = "BUILD windui-2026-10-27", Duration = 5 }) end)
 end
 ]=],
 }
