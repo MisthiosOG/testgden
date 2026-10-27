@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 43 modul, di-generate 2026-10-27T22:01:09.513Z
+-- 43 modul, di-generate 2026-10-27T22:06:00.579Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -367,7 +367,9 @@ return function(ctx)
 		pnpV2ScanInterval = 0.05,
 		pnpV2Enabled     = false,
 		espEnabled  = false, -- ESP Label pet (label melayang di dunia)
+		espMode     = "target", -- tampilan ESP pet: "target" (billboard di objek) / "screen" (panel di layar)
 		espEggEnabled = false, -- ESP Egg (style NEBULA) — terpisah dari ESP pet
+		espEggMode    = "target", -- tampilan ESP egg: "target" / "screen"
 		espInvEnabled = false, -- ESP base weight di tiap slot pet inventory
 		espInvMode  = "age",   -- tampilan ESP inv: "age" (base+age) / "max" (base+max@500)
 		noclipEnabled    = false, -- Player: tembus tembok
@@ -755,7 +757,9 @@ return function(ctx)
 			CFG.pnpV2ScanInterval = tonumber(st.pnpV2ScanInterval) or 0.05
 			CFG.pnpV2Enabled     = st.pnpV2Enabled or false
 			CFG.espEnabled = st.espEnabled or false
+			CFG.espMode = st.espMode or "target"
 			CFG.espEggEnabled = st.espEggEnabled or false
+			CFG.espEggMode = st.espEggMode or "target"
 			CFG.espInvEnabled = st.espInvEnabled or false
 			CFG.espInvMode = st.espInvMode or "age"
 			CFG.noclipEnabled = st.noclipEnabled or false
@@ -8112,16 +8116,17 @@ return function(ctx)
 end
 ]=],
 	["modules/misc/esp_egg.lua"] = [=[
---[[ esp_egg.lua — NEBULA-style Egg ESP (milik Sam, dipotret 1:1).
-     Label melayang di tiap egg MILIK SENDIRI (CollectionService tag
-     "PetEggServer" + OWNER attr):
+--[[ esp_egg.lua — NEBULA-style Egg ESP (milik Sam, dipotret 1:1) + mode screen.
+     MODE "target": BillboardGui polos nempel di egg (NEBULA asli):
        - belum siap : <kuning>nama egg</> \n <oranye>m:ss</> \n <abu kecil>BW: xkg</>
        - siap       : <kuning>nama egg</> \n <putih>pet (est kg)</> \n <warna>[Size class]</>
+     MODE "screen": panel list di sisi kanan layar, satu baris per egg —
+       info muncul di layar, bukan di objek. Ready eggs paling atas.
      Size class: >=7 Titanic (merah) / >=6 Semi Titanic (oranye) / >=3 Huge (kuning)
-     / sisanya Small (hijau). Isi egg (pet yg bakal menetas + BW) dari upvalue
-     handler PetEggService.OnClientEvent + scan BaseWeight di DataService:GetData.
-     Style: BillboardGui polos (tanpa kartu/emoji), GothamBold 17, RichText.
-     Toggle: CFG.espEggEnabled — TERPISAH dari ESP pet (espEnabled). ]]
+     / sisanya Small (hijau). Isi egg dari upvalue handler PetEggService +
+     scan BaseWeight di DataService:GetData. GothamBold 17, RichText.
+     Toggle: CFG.espEggEnabled — TERPISAH dari ESP pet.
+     Mode: CFG.espEggMode ("target"/"screen"). ]]
 return function(ctx)
 	local RS = game:GetService("ReplicatedStorage")
 	local CS = game:GetService("CollectionService")
@@ -8135,6 +8140,8 @@ return function(ctx)
 	local eggPets = {}
 	-- Cache BaseWeight per uuid (scan data game — NEBULA buildBW).
 	local bwCache = {}
+	local panel -- { sg, scroll, rows[], layout } untuk mode screen
+	local lastMode
 
 	local function updateEggPets()
 		pcall(function()
@@ -8223,7 +8230,7 @@ return function(ctx)
 		end
 	end
 
-	local function clearAll()
+	local function clearBillboards()
 		for _, egg in ipairs(CS:GetTagged("PetEggServer")) do
 			pcall(function()
 				local g = egg:FindFirstChild("EggESP_UI")
@@ -8232,8 +8239,97 @@ return function(ctx)
 		end
 	end
 
+	-- ===== Screen mode: panel list di sisi kanan layar =====
+	-- ponytail: panel builder didup dari esp_label.lua (~45 baris) — abstraksi
+	-- modul bersama gak worth wiring-nya saat ini; naikin kalau ESP ketiga muncul.
+	local ACCENT = Color3.fromRGB(255, 212, 0)
+
+	local function ensurePanel(title)
+		if panel and panel.Parent then return panel end
+		local sg = Instance.new("ScreenGui")
+		sg.Name = "CespEggPanel"
+		sg.ResetOnSpawn = false
+		sg.DisplayOrder = 50
+		sg.Parent = (gethui and gethui()) or game:GetService("CoreGui")
+
+		local f = Instance.new("Frame")
+		f.AnchorPoint = Vector2.new(1, 0.5)
+		f.Position = UDim2.new(1, -10, 0.5, 0)
+		f.Size = UDim2.fromOffset(280, 300)
+		f.BackgroundColor3 = Color3.fromRGB(16, 12, 20)
+		f.BackgroundTransparency = 0.25
+		f.BorderSizePixel = 0
+		f.Parent = sg
+		Instance.new("UICorner", f).CornerRadius = UDim.new(0, 10)
+		local st = Instance.new("UIStroke", f)
+		st.Color = ACCENT
+		st.Thickness = 1.2
+		st.Transparency = 0.35
+
+		local hdr = Instance.new("TextLabel")
+		hdr.Size = UDim2.new(1, -12, 0, 26)
+		hdr.Position = UDim2.fromOffset(6, 0)
+		hdr.BackgroundTransparency = 1
+		hdr.Font = Enum.Font.GothamBold
+		hdr.TextSize = 13
+		hdr.RichText = true
+		hdr.TextXAlignment = Enum.TextXAlignment.Left
+		hdr.TextColor3 = ACCENT
+		hdr.Text = title
+		hdr.Parent = f
+
+		local scroll = Instance.new("ScrollingFrame")
+		scroll.Position = UDim2.fromOffset(6, 28)
+		scroll.Size = UDim2.new(1, -12, 1, -34)
+		scroll.BackgroundTransparency = 1
+		scroll.BorderSizePixel = 0
+		scroll.ScrollBarThickness = 3
+		scroll.ScrollingDirection = Enum.ScrollingDirection.Y
+		scroll.CanvasSize = UDim2.new()
+		scroll.Parent = f
+		local layout = Instance.new("UIListLayout", scroll)
+		layout.Padding = UDim.new(0, 2)
+		layout.SortOrder = Enum.SortOrder.LayoutOrder
+
+		panel = { sg = sg, scroll = scroll, rows = {}, layout = layout }
+		return panel
+	end
+
+	local function renderRows(rows)
+		local p = ensurePanel("<b>EGG ESP</b>  (screen)")
+		for i, txt in ipairs(rows) do
+			local r = p.rows[i]
+			if not r then
+				r = Instance.new("TextLabel")
+				r.BackgroundTransparency = 1
+				r.Size = UDim2.new(1, -4, 0, 18)
+				r.Font = Enum.Font.Gotham
+				r.TextSize = 13
+				r.RichText = true
+				r.TextXAlignment = Enum.TextXAlignment.Left
+				r.TextTruncate = Enum.TextTruncate.AtEnd
+				r.TextColor3 = Color3.new(1, 1, 1)
+				r.LayoutOrder = i
+				r.Parent = p.scroll
+				p.rows[i] = r
+			end
+			if r.Text ~= txt then r.Text = txt end
+		end
+		for i = #rows + 1, #p.rows do p.rows[i]:Destroy(); p.rows[i] = nil end
+		p.scroll.CanvasSize = UDim2.fromOffset(0, p.layout.AbsoluteContentSize.Y + 6)
+	end
+
+	local function clearPanel()
+		if panel then pcall(function() panel.sg:Destroy() end); panel = nil end
+	end
+
+	local function clearAll()
+		clearBillboards()
+		clearPanel()
+	end
+
 	local lastMeta = 0
-	local function update()
+	local function update(mode)
 		local now = os.clock()
 		-- Refresh metadata egg/BW tiap 3s (murah, yang tiap-tick cuma teks).
 		if now - lastMeta >= 3 then
@@ -8241,41 +8337,77 @@ return function(ctx)
 			updateEggPets()
 			buildBW()
 		end
+
+		-- Kumpulin data dulu; render sesuai mode.
+		local entries = {}
 		for _, egg in ipairs(CS:GetTagged("PetEggServer")) do
-			if egg:GetAttribute("OWNER") ~= LP.Name then continue end
-			if not (egg:GetAttribute("READY") or tonumber(egg:GetAttribute("TimeToHatch"))) then continue end
-
-			local uuid = tostring(egg:GetAttribute("OBJECT_UUID"))
-			local bw = getBW(uuid)
-			if not bw then continue end
-
-			local eggName = egg:GetAttribute("EggName") or egg.Name
-			local petName = eggPets[uuid] or "Pet"
-			local ready = egg:GetAttribute("READY")
-			local timeLeft = egg:GetAttribute("TimeToHatch")
-
-			local text
-			if not ready then
-				text = string.format(
-					'<font color="#FFD400">%s</font>\n<font color="#FF5E00">%s</font>\n<font size="12" color="#BBBBBB">BW: %skg</font>',
-					eggName,
-					formatTime(timeLeft),
-					tostring(bw)
-				)
-			else
-				local est = round(bw * WEIGHT_MULT, 2)
-				local size, color = getSizeInfo(est)
-				text = string.format(
-					'<font color="#FFD400">%s</font>\n<font color="#FFFFFF">%s (%skg)</font>\n<font color="%s">[%s]</font>',
-					eggName,
-					petName,
-					tostring(est),
-					color,
-					size
-				)
+			if egg:GetAttribute("OWNER") == LP.Name then
+				if egg:GetAttribute("READY") or tonumber(egg:GetAttribute("TimeToHatch")) then
+					local uuid = tostring(egg:GetAttribute("OBJECT_UUID"))
+					local bw = getBW(uuid)
+					if bw then
+						entries[#entries + 1] = {
+							egg = egg,
+							eggName = egg:GetAttribute("EggName") or egg.Name,
+							uuid = uuid,
+							bw = bw,
+							ready = egg:GetAttribute("READY"),
+							timeLeft = tonumber(egg:GetAttribute("TimeToHatch")) or 0,
+						}
+					end
+				end
 			end
+		end
+		-- Ready dulu, sisanya sisa-waktu ascending.
+		table.sort(entries, function(a, b)
+			if a.ready ~= b.ready then return a.ready == true end
+			return a.timeLeft < b.timeLeft
+		end)
 
-			makeESP(egg, text)
+		if mode == "screen" then
+			local rows = {}
+			for i, e in ipairs(entries) do
+				if i > 40 then break end
+				local petName = eggPets[e.uuid] or "Pet"
+				local t
+				if not e.ready then
+					t = ("<font color='#FFD400'>%s</font> <font color='#FF5E00'>%s</font> <font size='11' color='#BBBBBB'>BW: %skg</font>")
+						:format(e.eggName, formatTime(e.timeLeft), tostring(e.bw))
+				else
+					local est = round(e.bw * WEIGHT_MULT, 2)
+					local size, color = getSizeInfo(est)
+					t = ("<font color='#FFD400'>%s</font> <font color='#FFFFFF'>%s (%skg)</font> <font color='%s'>[%s]</font>")
+						:format(e.eggName, petName, tostring(est), color, size)
+				end
+				rows[#rows + 1] = t
+			end
+			renderRows(rows)
+		else
+			clearPanel()
+			for _, e in ipairs(entries) do
+				local petName = eggPets[e.uuid] or "Pet"
+				local text
+				if not e.ready then
+					text = string.format(
+						'<font color="#FFD400">%s</font>\n<font color="#FF5E00">%s</font>\n<font size="12" color="#BBBBBB">BW: %skg</font>',
+						e.eggName,
+						formatTime(e.timeLeft),
+						tostring(e.bw)
+					)
+				else
+					local est = round(e.bw * WEIGHT_MULT, 2)
+					local size, color = getSizeInfo(est)
+					text = string.format(
+						'<font color="#FFD400">%s</font>\n<font color="#FFFFFF">%s (%skg)</font>\n<font color="%s">[%s]</font>',
+						e.eggName,
+						petName,
+						tostring(est),
+						color,
+						size
+					)
+				end
+				makeESP(e.egg, text)
+			end
 		end
 	end
 
@@ -8287,7 +8419,12 @@ return function(ctx)
 			updateEggPets()
 			buildBW()
 			while ctx.alive() and ctx.CFG.espEggEnabled and loopId == my do
-				pcall(update)
+				local mode = (ctx.CFG.espEggMode == "screen") and "screen" or "target"
+				if mode ~= lastMode then
+					lastMode = mode
+					clearAll()
+				end
+				pcall(update, mode)
 				task.wait(0.5)
 			end
 			clearAll()
@@ -8463,11 +8600,13 @@ return function(ctx)
 end
 ]=],
 	["modules/misc/esp_label.lua"] = [=[
---[[ esp_label.lua — ESP PET: label melayang (BillboardGui) di dunia 3D di atas
-     tiap pet fisik (nama + berat + level + mutasi).
-     ESP EGG SUDAH TERPISAH: modules/misc/esp_egg.lua (style NEBULA, toggle
-     CFG.espEggEnabled sendiri — biar gak nyampur).
-     Toggle: CFG.espEnabled. ]]
+--[[ esp_label.lua — ESP PET dengan 2 mode:
+     target : label BillboardGui nempel di atas tiap pet di dunia (klasik).
+     screen : panel list di sisi kanan layar, satu baris per pet — info muncul
+              di layar, BUKAN nempel di objek.
+     Data pet: nama tipe + berat (BaseWeight*1.1) + level + mutasi.
+     ESP EGG TERPISAH di modules/misc/esp_egg.lua (mode masing-masing).
+     Toggle: CFG.espEnabled, mode: CFG.espMode ("target"/"screen"). ]]
 return function(ctx)
 	local LP = ctx.LP
 	local DataService = ctx.deps.DataService
@@ -8477,6 +8616,8 @@ return function(ctx)
 
 	local bbFolder
 	local billboards = {} -- key -> { gui, lbl }
+	local panel -- { sg, scroll, rows[] } untuk mode screen
+	local lastMode
 
 	local function ensureFolder()
 		if bbFolder and bbFolder.Parent then return bbFolder end
@@ -8519,17 +8660,6 @@ return function(ctx)
 		bgStroke.Transparency = 0.3
 		bgStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 
-		-- Top accent glow strip
-		local topBar = Instance.new("Frame")
-		topBar.Size = UDim2.new(0.7, 0, 0, 2)
-		topBar.Position = UDim2.new(0.15, 0, 0, 0)
-		topBar.BackgroundColor3 = Color3.fromRGB(255, 135, 205)
-		topBar.BackgroundTransparency = 0.1
-		topBar.BorderSizePixel = 0
-		topBar.ZIndex = 3
-		topBar.Parent = bg
-		Instance.new("UICorner", topBar).CornerRadius = UDim.new(0, 2)
-
 		local lbl = Instance.new("TextLabel")
 		lbl.BackgroundTransparency = 1
 		lbl.Size = UDim2.new(1, -8, 1, 0)
@@ -8558,12 +8688,103 @@ return function(ctx)
 		return rec
 	end
 
-	local function update()
-		local seen = {}
+	local function clearBillboards()
+		for _, rec in pairs(billboards) do pcall(function() rec.gui:Destroy() end) end
+		billboards = {}
+		if bbFolder then pcall(function() bbFolder:Destroy() end); bbFolder = nil end
+	end
 
-		-- ===== PET (nama + berat + lv) — ESP egg di modul terpisah =====
+	-- ===== Screen mode: panel list di sisi kanan layar =====
+	-- ponytail: panel builder didup di esp_egg.lua (~45 baris) — abstraksi
+	-- modul bersama gak worth wiring-nya saat ini; naikin kalau ESP ketiga muncul.
+	local ACCENT = Color3.fromRGB(255, 95, 160)
+
+	local function ensurePanel(title)
+		if panel and panel.Parent then return panel end
+		clearBillboards()
+		local sg = Instance.new("ScreenGui")
+		sg.Name = "CespPetPanel"
+		sg.ResetOnSpawn = false
+		sg.DisplayOrder = 50
+		sg.Parent = (gethui and gethui()) or game:GetService("CoreGui")
+
+		local f = Instance.new("Frame")
+		f.AnchorPoint = Vector2.new(1, 0.5)
+		f.Position = UDim2.new(1, -10, 0.5, 0)
+		f.Size = UDim2.fromOffset(260, 300)
+		f.BackgroundColor3 = Color3.fromRGB(16, 12, 20)
+		f.BackgroundTransparency = 0.25
+		f.BorderSizePixel = 0
+		f.Parent = sg
+		Instance.new("UICorner", f).CornerRadius = UDim.new(0, 10)
+		local st = Instance.new("UIStroke", f)
+		st.Color = ACCENT
+		st.Thickness = 1.2
+		st.Transparency = 0.35
+
+		local hdr = Instance.new("TextLabel")
+		hdr.Size = UDim2.new(1, -12, 0, 26)
+		hdr.Position = UDim2.fromOffset(6, 0)
+		hdr.BackgroundTransparency = 1
+		hdr.Font = Enum.Font.GothamBold
+		hdr.TextSize = 13
+		hdr.RichText = true
+		hdr.TextXAlignment = Enum.TextXAlignment.Left
+		hdr.TextColor3 = ACCENT
+		hdr.Text = title
+		hdr.Parent = f
+
+		local scroll = Instance.new("ScrollingFrame")
+		scroll.Position = UDim2.fromOffset(6, 28)
+		scroll.Size = UDim2.new(1, -12, 1, -34)
+		scroll.BackgroundTransparency = 1
+		scroll.BorderSizePixel = 0
+		scroll.ScrollBarThickness = 3
+		scroll.ScrollingDirection = Enum.ScrollingDirection.Y
+		scroll.CanvasSize = UDim2.new()
+		scroll.Parent = f
+		local layout = Instance.new("UIListLayout", scroll)
+		layout.Padding = UDim.new(0, 2)
+		layout.SortOrder = Enum.SortOrder.LayoutOrder
+
+		panel = { sg = sg, scroll = scroll, rows = {}, layout = layout }
+		return panel
+	end
+
+	local function renderRows(rows)
+		local p = ensurePanel("<b>PET ESP</b>  (screen)")
+		for i, txt in ipairs(rows) do
+			local r = p.rows[i]
+			if not r then
+				r = Instance.new("TextLabel")
+				r.BackgroundTransparency = 1
+				r.Size = UDim2.new(1, -4, 0, 18)
+				r.Font = Enum.Font.Gotham
+				r.TextSize = 13
+				r.RichText = true
+				r.TextXAlignment = Enum.TextXAlignment.Left
+				r.TextTruncate = Enum.TextTruncate.AtEnd
+				r.TextColor3 = Color3.new(1, 1, 1)
+				r.LayoutOrder = i
+				r.Parent = p.scroll
+				p.rows[i] = r
+			end
+			if r.Text ~= txt then r.Text = txt end
+		end
+		for i = #rows + 1, #p.rows do p.rows[i]:Destroy(); p.rows[i] = nil end
+		p.scroll.CanvasSize = UDim2.fromOffset(0, p.layout.AbsoluteContentSize.Y + 6)
+	end
+
+	local function clearPanel()
+		if panel then pcall(function() panel.sg:Destroy() end); panel = nil end
+	end
+
+	-- ===== Data pet =====
+	local function update(mode)
 		local okData, d = pcall(function() return DataService:GetData() end)
 		local inv = okData and d and d.PetsData and d.PetsData.PetInventory and d.PetsData.PetInventory.Data or {}
+		local seen = {}
+		local rows = {}
 		local pp = workspace:FindFirstChild("PetsPhysical")
 		if pp then
 			for _, mover in ipairs(pp:GetChildren()) do
@@ -8572,41 +8793,56 @@ return function(ctx)
 						local uuid = petModel.Name
 						local pData = inv[uuid]
 						if pData then
-							local adornee = partOf(petModel)
-							if adornee then
-								local key = "pet_" .. tostring(uuid)
-								seen[key] = true
-								local rec = acquire(key, adornee, 2.5)
-								local pt = pData.PetType or "Pet"
-								local pd = pData.PetData or {}
-								local bw = tonumber(pd.BaseWeight)
-								local lv = tonumber(pd.Level) or 0
-								local mut = pd.MutationType
+							local pt = pData.PetType or "Pet"
+							local pd = pData.PetData or {}
+							local bw = tonumber(pd.BaseWeight)
+							local lv = tonumber(pd.Level) or 0
+							local mut = pd.MutationType
+							local mutTxt = (mut and mut ~= "" and mut ~= "Normal" and mut ~= "m") and tostring(mut) or nil
 
-								local lines = { ("<font color='#FF5FA0'><b>🐾 %s</b></font>"):format(tostring(pt)) }
-								if bw then
-									lines[#lines + 1] = ("<font color='#FFD7F0'>%.2f KG</font> <font color='#FF87CD'>[Lv.%d]</font>"):format(bw * WEIGHT_MULT, lv)
+							if mode == "screen" then
+								local w = bw and string.format("%.2fkg", bw * WEIGHT_MULT) or "-"
+								local t = ("<font color='#FF5FA0'>%s</font> <font color='#FFD7F0'>%s</font> <font color='#FF87CD'>Lv.%d</font>")
+									:format(tostring(pt), w, lv)
+								if mutTxt then t = t .. (" <font color='#6EF5B9'>%s</font>"):format(mutTxt) end
+								rows[#rows + 1] = t
+								if #rows >= 40 then break end
+							else
+								local adornee = partOf(petModel)
+								if adornee then
+									local key = "pet_" .. tostring(uuid)
+									seen[key] = true
+									local rec = acquire(key, adornee, 2.5)
+									local lines = { ("<font color='#FF5FA0'><b>🐾 %s</b></font>"):format(tostring(pt)) }
+									if bw then
+										lines[#lines + 1] = ("<font color='#FFD7F0'>%.2f KG</font> <font color='#FF87CD'>[Lv.%d]</font>"):format(bw * WEIGHT_MULT, lv)
+									end
+									if mutTxt then
+										lines[#lines + 1] = ("<font color='#6EF5B9'>✨ %s</font>"):format(mutTxt)
+									end
+									rec.lbl.Text = table.concat(lines, "\n")
 								end
-								if mut and mut ~= "" and mut ~= "Normal" and mut ~= "m" then
-									lines[#lines + 1] = ("<font color='#6EF5B9'>✨ %s</font>"):format(tostring(mut))
-								end
-								rec.lbl.Text = table.concat(lines, "\n")
 							end
 						end
 					end
 				end
+				if #rows >= 40 then break end
 			end
 		end
 
-		for key, rec in pairs(billboards) do
-			if not seen[key] then rec.gui:Destroy(); billboards[key] = nil end
+		if mode == "screen" then
+			renderRows(rows)
+		else
+			clearPanel()
+			for key, rec in pairs(billboards) do
+				if not seen[key] then rec.gui:Destroy(); billboards[key] = nil end
+			end
 		end
 	end
 
 	local function clearAll()
-		for _, rec in pairs(billboards) do pcall(function() rec.gui:Destroy() end) end
-		billboards = {}
-		if bbFolder then pcall(function() bbFolder:Destroy() end); bbFolder = nil end
+		clearBillboards()
+		clearPanel()
 	end
 
 	local loopId = 0
@@ -8615,7 +8851,12 @@ return function(ctx)
 		local my = loopId
 		task.spawn(function()
 			while ctx.alive() and ctx.CFG.espEnabled and loopId == my do
-				pcall(update)
+				local mode = (ctx.CFG.espMode == "screen") and "screen" or "target"
+				if mode ~= lastMode then
+					lastMode = mode
+					clearAll()
+				end
+				pcall(update, mode)
 				task.wait(0.5)
 			end
 			clearAll()
@@ -13327,6 +13568,19 @@ end
 						pcall(function() ctx.stopEsp() end)
 					end
 				end)
+			makeSingleW(sec, "ESP Label Mode", "Where the pet ESP renders",
+				function() return {
+					{ name = "target", display = "Target (floating on pet)" },
+					{ name = "screen", display = "Screen (side panel list)" },
+				} end,
+				function() return CFG.espMode end,
+				function(code)
+					CFG.espMode = code; persist()
+					if CFG.espEnabled then
+						if ctx.stopEsp then pcall(function() ctx.stopEsp() end) end
+						if ctx.startEsp then pcall(function() ctx.startEsp() end) end
+					end
+				end)
 			makeToggleW(sec, "Enable ESP Egg", "NEBULA-style floating egg info (egg name, hatch timer/Base Weight or hatched pet + size class). Separate from pet ESP.",
 				function() return CFG.espEggEnabled end,
 				function(v)
@@ -13335,6 +13589,19 @@ end
 						if ctx.startEspEgg then pcall(function() ctx.startEspEgg() end) end
 					elseif ctx.stopEspEgg then
 						pcall(function() ctx.stopEspEgg() end)
+					end
+				end)
+			makeSingleW(sec, "ESP Egg Mode", "Where the egg ESP renders",
+				function() return {
+					{ name = "target", display = "Target (floating on egg)" },
+					{ name = "screen", display = "Screen (side panel list)" },
+				} end,
+				function() return CFG.espEggMode end,
+				function(code)
+					CFG.espEggMode = code; persist()
+					if CFG.espEggEnabled then
+						if ctx.stopEspEgg then pcall(function() ctx.stopEspEgg() end) end
+						if ctx.startEspEgg then pcall(function() ctx.startEspEgg() end) end
 					end
 				end)
 			makeToggleW(sec, "Enable ESP Base Weight", "Shows the Base Weight on every pet slot when opening the inventory",

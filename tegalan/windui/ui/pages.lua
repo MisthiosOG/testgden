@@ -2219,6 +2219,19 @@ end
 						pcall(function() ctx.stopEsp() end)
 					end
 				end)
+			makeSingleW(sec, "ESP Label Mode", "Where the pet ESP renders",
+				function() return {
+					{ name = "target", display = "Target (floating on pet)" },
+					{ name = "screen", display = "Screen (side panel list)" },
+				} end,
+				function() return CFG.espMode end,
+				function(code)
+					CFG.espMode = code; persist()
+					if CFG.espEnabled then
+						if ctx.stopEsp then pcall(function() ctx.stopEsp() end) end
+						if ctx.startEsp then pcall(function() ctx.startEsp() end) end
+					end
+				end)
 			makeToggleW(sec, "Enable ESP Egg", "NEBULA-style floating egg info (egg name, hatch timer/Base Weight or hatched pet + size class). Separate from pet ESP.",
 				function() return CFG.espEggEnabled end,
 				function(v)
@@ -2227,6 +2240,19 @@ end
 						if ctx.startEspEgg then pcall(function() ctx.startEspEgg() end) end
 					elseif ctx.stopEspEgg then
 						pcall(function() ctx.stopEspEgg() end)
+					end
+				end)
+			makeSingleW(sec, "ESP Egg Mode", "Where the egg ESP renders",
+				function() return {
+					{ name = "target", display = "Target (floating on egg)" },
+					{ name = "screen", display = "Screen (side panel list)" },
+				} end,
+				function() return CFG.espEggMode end,
+				function(code)
+					CFG.espEggMode = code; persist()
+					if CFG.espEggEnabled then
+						if ctx.stopEspEgg then pcall(function() ctx.stopEspEgg() end) end
+						if ctx.startEspEgg then pcall(function() ctx.startEspEgg() end) end
 					end
 				end)
 			makeToggleW(sec, "Enable ESP Base Weight", "Shows the Base Weight on every pet slot when opening the inventory",
