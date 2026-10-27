@@ -204,48 +204,30 @@ return function(ctx)
 		return sec
 	end
 
-	-- Row nyamping: HStack = anak-anak auto split lebar sama (horizontal).
-	-- Fallback: kalau build WindUI ga punya HStack -> parent vertical biasa.
-	local function hrow(parent)
-		local ok, g = pcall(function() return parent:HStack({}) end)
-		if ok and g then return g end
-		return parent
-	end
+	-- (hrow/HStack dibuang: element WindUI ngelewat padding halaman -> bar kepotong kanan)
 
 	----------------------------------------------------------------- TAB: PET (pilot — PnP V1/V2 + Boost)
 	local v2Ctrl -- sync mutual exclusion
 
 	local function buildPetTab(tab)
-		--------------------------------------------------- mini-tab bar: [Pickup V1][Pickup V2][Boost]
-		local bar = hrow(tab)
-		local DEFS = {
-			v1    = { name = "Pickup V1" },
-			v2    = { name = "Pickup V2" },
-			boost = { name = "Boost" },
-		}
-		local secs, btns = {}, {}
-		local function selectPanel(id)
-			for pid, sec in pairs(secs) do
-				if sec.ElementFrame then pcall(function() sec.ElementFrame.Visible = (pid == id) end) end
-			end
-			for pid, btn in pairs(btns) do
-				pcall(function()
-					btn:SetTitle((pid == id and "▸ " or "") .. DEFS[pid].name)
-				end)
-			end
-		end
+	-- Mini-tab [Pickup V1][Pickup V2][Boost]: native, ukuran beku.
+	-- WindUI Button + SetTitle nambah "▸ " -> panjang teks beda -> label wrap -> bar melar
+	-- (tab "ga solid"). Bar Roblox polos: parent SAMA dgn card sections -> padding halaman
+	-- kebaca identik, lebar fix 1/3 per tombol, status aktif via warna (teks ga pernah diubah).
+	local DEFS = {
+		v1    = { name = "Pickup V1" },
+		v2    = { name = "Pickup V2" },
+		boost = { name = "Boost" },
+	}
+	local ORDER = { "v1", "v2", "boost" }
+	local secs = {}
 
-		local function miniTab(id, buildFn)
-			btns[id] = bar:Button({
-				Title = DEFS[id].name,
-				Callback = safe(function() selectPanel(id) end),
-			})
-			breathe()
-			local sec = section(tab, DEFS[id].name)
-			buildFn(sec)
-			secs[id] = sec
-			breathe()
-		end
+	local function miniTab(id, buildFn)
+		local sec = section(tab, DEFS[id].name)
+		buildFn(sec)
+		secs[id] = sec
+		breathe()
+	end
 
 		local function addRefresh(sec)
 			sec:Button({
@@ -350,23 +332,66 @@ return function(ctx)
 			addRefresh(sec)
 		end)
 
-		-- kunci lebar bar: HStack ngeset Scale anak sebelum padding halaman kebaca
-		-- (Roblox Scale ngeyel sama UIPadding -> bar nembus & kepotong kanan).
-		-- Timpa manual: frame = lebar-32, anak-anak split rata minus gap.
-		pcall(function()
-			local fr = bar.ElementFrame
-			fr.Size = UDim2.new(1, -32, 0, 0)
-			local kids = {}
-			for _, c in ipairs(fr:GetChildren()) do
-				if c:IsA("GuiObject") then kids[#kids + 1] = c end
+		--------------------------------------------------- mini-tab bar (native, ukuran beku)
+		-- Parent = parent card sections (ContainerFrame, padding halaman sama) ->
+		-- lebar bar PERSIS selebar cards. SortOrder kontainer = LayoutOrder + semua
+		-- element WindUI LayoutOrder 0 -> -1000 dipastikan row pertama.
+		local container = secs.v1.ElementFrame.Parent
+		local card = (function()
+			local ok, c = pcall(function() return secs.v1.ElementFrame.Outline.BackgroundColor3 end)
+			if ok and c then return c end
+			return Color3.fromRGB(26, 26, 26)
+		end)()
+		local activeBg = card:Lerp(Color3.new(1, 1, 1), 0.12)
+		local restBg = card:Lerp(Color3.new(1, 1, 1), 0.04)
+
+		local bar = Instance.new("Frame")
+		bar.Name = "PetMiniTabs"
+		bar.LayoutOrder = -1000
+		bar.Size = UDim2.new(1, 0, 0, 40)
+		bar.BackgroundTransparency = 1
+		bar.Parent = container
+
+		local row = Instance.new("UIListLayout")
+		row.FillDirection = Enum.FillDirection.Horizontal
+		row.Padding = UDim.new(0, 6)
+		row.SortOrder = Enum.SortOrder.LayoutOrder
+		row.VerticalAlignment = Enum.VerticalAlignment.Center
+		row.Parent = bar
+
+		local btns = {}
+		local function paint(id, on)
+			local b = btns[id]
+			b.BackgroundColor3 = on and activeBg or restBg
+			b.BackgroundTransparency = on and 0 or 0.25
+			b.TextColor3 = on and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(165, 165, 165)
+		end
+
+		for i, id in ipairs(ORDER) do
+			local b = Instance.new("TextButton")
+			b.Name = "Tab_" .. id
+			b.LayoutOrder = i
+			b.Size = UDim2.new(1 / 3, -4, 1, -8)
+			b.AutoButtonColor = false
+			b.BackgroundTransparency = 1
+			b.Text = DEFS[id].name
+			b.TextTruncate = Enum.TextTruncate.AtEnd
+			b.TextSize = 14
+			b.Font = Enum.Font.GothamMedium
+			Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
+			b.Parent = bar
+			btns[id] = b
+		end
+
+		local function selectPanel(id)
+			for pid, sec in pairs(secs) do
+				pcall(function() sec.ElementFrame.Visible = (pid == id) end)
 			end
-			local n = #kids
-			if n > 0 then
-				for _, c in ipairs(kids) do
-					c.Size = UDim2.new(1 / n, -6, 1, 0)
-				end
-			end
-		end)
+			for _, pid in ipairs(ORDER) do paint(pid, pid == id) end
+		end
+		for _, id in ipairs(ORDER) do
+			btns[id].Activated:Connect(function() selectPanel(id) end)
+		end
 
 		selectPanel("v1")
 	end
