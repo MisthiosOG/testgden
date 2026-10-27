@@ -210,6 +210,7 @@ local MODULES = {
 	"modules/mutation/automation_mutation_machine.lua",
 	"modules/mutation/automation_mutation.lua",
 	"modules/misc/esp_label.lua",
+	"modules/misc/esp_egg.lua",
 	"modules/misc/esp_inventory.lua",
 	"modules/misc/player_mods.lua",
 	"modules/misc/perf_mods.lua",
