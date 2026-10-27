@@ -14,7 +14,7 @@ const path = require("path");
 
 const ROOT = process.cwd();
 const APPS = fs.existsSync(path.join(ROOT, "tegalan"))
-  ? ["tegalan/garden", "tegalan/trade"]
+  ? ["tegalan/garden", "tegalan/trade", "tegalan/windui"]
   : ["kebongedang/garden", "kebongedang/trade"];
 // file yg di-skip (bukan modul): loader & bundle itu sendiri
 const SKIP = new Set(["init.lua", "bundle.lua", "bundle.obfuscated.lua"]);
