@@ -20,6 +20,19 @@
 local branch = (getgenv and getgenv().GAG_BRANCH) or _G.GAG_BRANCH or "main"
 local BASE = "https://raw.githubusercontent.com/milmscr/opoki/" .. branch .. "/tegalan/trade"
 
+pcall(function()
+    local Players = game:GetService("Players")
+    local player = Players.LocalPlayer
+    local host = (gethui and gethui()) or game:GetService("CoreGui")
+    for _, name in ipairs({ "GAGGarden", "CeszParadiseGarden", "AllegiaanGarden", "GAGSeller", "GAGTrade", "CeszParadiseTrade" }) do
+        local old = host:FindFirstChild(name)
+        if old then old:Destroy() end
+        local oldPlayerGui = player and player:FindFirstChild("PlayerGui")
+            and player.PlayerGui:FindFirstChild(name)
+        if oldPlayerGui then oldPlayerGui:Destroy() end
+    end
+end)
+
 --------------------------------------------------------------------- loader
 -- Selalu load dari bundle.lua (1 HttpGet, kilat). Workflow: edit modul ->
 -- `node tools/bundle.js` -> push. Fallback per-modul di fungsi fetch kalau
