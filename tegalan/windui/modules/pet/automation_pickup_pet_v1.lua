@@ -71,6 +71,7 @@ return function(ctx)
 			local tag = eqSet[uuid] and " [aktif]" or ""
 			out[#out + 1] = {
 				value = uuid,
+				kg = weight, -- buat sort terberat dulu
 				display = ("%s%s | %.2f KG | Age %s | #%s%s"):format(mutPrefix, pt, weight, tostring(age), uuid:sub(2, 5), tag),
 			}
 		end
@@ -87,6 +88,8 @@ return function(ctx)
 			local selA = selectedSet and selectedSet[a.value] and 1 or 0
 			local selB = selectedSet and selectedSet[b.value] and 1 or 0
 			if selA ~= selB then return selA > selB end
+			local ka, kb = a.kg or 0, b.kg or 0
+			if ka ~= kb then return ka > kb end -- terberat dulu
 			return a.display < b.display
 		end)
 		return out

@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T18:56:08.261Z
+-- 42 modul, di-generate 2026-10-27T19:03:04.954Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -6051,6 +6051,12 @@ return function(ctx)
 			task.wait(CFG.sellTeamDelay or 5.5)
 			local sold = doSell()
 			ctx.state.periodSold = (ctx.state.periodSold or 0) + (tonumber(sold) or 0)
+			-- Backpack mode & 0 matched -> naikin threshold biar trigger sell gak
+			-- nembak tiap tick (loop sell selamanya, hatch gak pernah jalan).
+			if (tonumber(sold) or 0) == 0 and CFG.sellMode == "Backpack" then
+				CFG.sellWhenReach = bpc + 1
+				ctx.log(("Hatch: sell 0 match — Sell Trigger (BP) dinaikin ke %d biar hatch jalan lagi"):format(CFG.sellWhenReach))
+			end
 			ctx.state.sellDoneThisReport = true
 			-- simpan progress sell-cycle SEBELUM reset (biar webhook nampilin 2/2 bukan 0/2)
 			ctx.state.hatchReportSellProg = cycle - (ctx.state.hatchLastSellCycle or 0)
@@ -6090,6 +6096,11 @@ return function(ctx)
 					task.wait(CFG.sellTeamDelay or 5.5)
 					local sold = doSell()
 					ctx.state.periodSold = (ctx.state.periodSold or 0) + (tonumber(sold) or 0)
+					-- Sama: 0 match di mode Backpack -> naikin threshold (anti-stuck).
+					if (tonumber(sold) or 0) == 0 and CFG.sellMode == "Backpack" then
+						CFG.sellWhenReach = curPets + 1
+						ctx.log(("Hatch: sell 0 match (inv full) — Sell Trigger (BP) dinaikin ke %d"):format(CFG.sellWhenReach))
+					end
 					ctx.state.sellDoneThisReport = true
 					curPets, maxPets = getInventoryCapacity()
 					task.wait(2.0)
@@ -9719,6 +9730,7 @@ return function(ctx)
 			local tag = eqSet[uuid] and " [aktif]" or ""
 			out[#out + 1] = {
 				value = uuid,
+				kg = weight, -- buat sort terberat dulu
 				display = ("%s%s | %.2f KG | Age %s | #%s%s"):format(mutPrefix, pt, weight, tostring(age), uuid:sub(2, 5), tag),
 			}
 		end
@@ -9735,6 +9747,8 @@ return function(ctx)
 			local selA = selectedSet and selectedSet[a.value] and 1 or 0
 			local selB = selectedSet and selectedSet[b.value] and 1 or 0
 			if selA ~= selB then return selA > selB end
+			local ka, kb = a.kg or 0, b.kg or 0
+			if ka ~= kb then return ka > kb end -- terberat dulu
 			return a.display < b.display
 		end)
 		return out

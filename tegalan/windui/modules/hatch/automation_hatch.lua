@@ -1236,6 +1236,12 @@ return function(ctx)
 			task.wait(CFG.sellTeamDelay or 5.5)
 			local sold = doSell()
 			ctx.state.periodSold = (ctx.state.periodSold or 0) + (tonumber(sold) or 0)
+			-- Backpack mode & 0 matched -> naikin threshold biar trigger sell gak
+			-- nembak tiap tick (loop sell selamanya, hatch gak pernah jalan).
+			if (tonumber(sold) or 0) == 0 and CFG.sellMode == "Backpack" then
+				CFG.sellWhenReach = bpc + 1
+				ctx.log(("Hatch: sell 0 match — Sell Trigger (BP) dinaikin ke %d biar hatch jalan lagi"):format(CFG.sellWhenReach))
+			end
 			ctx.state.sellDoneThisReport = true
 			-- simpan progress sell-cycle SEBELUM reset (biar webhook nampilin 2/2 bukan 0/2)
 			ctx.state.hatchReportSellProg = cycle - (ctx.state.hatchLastSellCycle or 0)
@@ -1275,6 +1281,11 @@ return function(ctx)
 					task.wait(CFG.sellTeamDelay or 5.5)
 					local sold = doSell()
 					ctx.state.periodSold = (ctx.state.periodSold or 0) + (tonumber(sold) or 0)
+					-- Sama: 0 match di mode Backpack -> naikin threshold (anti-stuck).
+					if (tonumber(sold) or 0) == 0 and CFG.sellMode == "Backpack" then
+						CFG.sellWhenReach = curPets + 1
+						ctx.log(("Hatch: sell 0 match (inv full) — Sell Trigger (BP) dinaikin ke %d"):format(CFG.sellWhenReach))
+					end
 					ctx.state.sellDoneThisReport = true
 					curPets, maxPets = getInventoryCapacity()
 					task.wait(2.0)
