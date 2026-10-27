@@ -33,12 +33,37 @@ return function(ctx)
         })
     end
 
+    local function dynamicMulti(t, title, getter, selected, callback)
+        local values = type(getter) == "function" and getter() or {}
+        local display, reverse = {}, {}
+        for _, item in ipairs(values) do
+            if type(item) == "table" then
+                local label = item.display or item.name or item.value
+                display[#display + 1] = label
+                reverse[label] = item.value or item.name or label
+            else
+                display[#display + 1] = item
+            end
+        end
+        return t:Dropdown({
+            Title = title, Values = display, Multi = true, AllowNone = true,
+            SearchBarEnabled = true,
+            Callback = function(items)
+                for key in pairs(selected) do selected[key] = nil end
+                for _, item in ipairs(items or {}) do selected[reverse[item] or item] = true end
+                if callback then callback() end
+            end,
+        })
+    end
+
     local pet = tab("Pet", "paw-print")
     toggle(pet, "Auto Pick & Place V1", "Existing polling PNP logic", "pnpEnabled", ctx.startPnpV1)
     toggle(pet, "Auto Pick & Place V2", "Existing event-driven PNP logic", "pnpV2Enabled", ctx.startPnpV2)
     input(pet, "PNP V1 Pickup Delay", "pickupDelay", 0.3)
     input(pet, "PNP V2 Pickup Delay", "pnpV2PickupDelay", 0.05)
     toggle(pet, "Auto Boost Pet", "Existing pet boost automation", "boostEnabled", ctx.startBoostPet)
+    dynamicMulti(pet, "PNP V1 Pets", function() return ctx.inventoryPetOptions and ctx.inventoryPetOptions(CFG.pnpUuids) or {} end, CFG.pnpUuids, function() if ctx.persistState then ctx.persistState() end end)
+    dynamicMulti(pet, "PNP V2 Pets", function() return ctx.inventoryPetOptions and ctx.inventoryPetOptions(CFG.pnpV2Uuids) or {} end, CFG.pnpV2Uuids, function() if ctx.persistState then ctx.persistState() end end)
 
     local farm = tab("Farm", "wheat")
     toggle(farm, "Auto Plants", "Plant selected seeds", "plantSeedEnabled", ctx.startPlant)
@@ -48,12 +73,28 @@ return function(ctx)
     toggle(farm, "Auto Favorite", "Favorite selected fruits", "favEnabled", ctx.startFavorite)
     toggle(farm, "Auto Unfavorite", "Unfavorite selected fruits", "unfavEnabled", ctx.startFavorite)
     toggle(farm, "Auto Reclaimer", "Reclaim selected plants", "reclaimEnabled", ctx.startReclaim)
+    dynamicMulti(farm, "Seeds", function() return ctx.getPlantSeedOptions and ctx.getPlantSeedOptions() or {} end, CFG.plantSeedNames, function() if ctx.persistState then ctx.persistState() end end)
+    dynamicMulti(farm, "Sprinklers", function() return ctx.getSprinklerOptions and ctx.getSprinklerOptions() or {} end, CFG.sprinklerNames, function() if ctx.persistState then ctx.persistState() end end)
 
     local hatch = tab("Hatch", "egg")
     toggle(hatch, "Auto Hatch", "Existing hatch automation", "hatchEnabled", ctx.startHatch)
     toggle(hatch, "Auto Sell", "Existing hatch sell automation", "autoSellEnabled")
     input(hatch, "Hatch Team Delay", "hatchTeamDelay", 5.5)
     input(hatch, "Max Eggs Placed", "hatchMaxPlaced", 8)
+
+    local elephant = tab("Elephant", "rabbit")
+    toggle(elephant, "Auto Elephant", "Existing elephant automation", "elephantEnabled", ctx.startElephant)
+    toggle(elephant, "Auto Elephant V2", "Existing elephant V2 automation", "elephantV2Enabled", ctx.startElephantV2)
+
+    local flow = tab("Flow", "git-branch")
+    toggle(flow, "Growth Pipeline", "Existing elephant/mutation/leveling pipeline", "growthEnabled", ctx.startGrowth)
+    toggle(flow, "Beanstalk Event", "Existing Beanstalk automation", "beanstalkPlantEnabled", ctx.startBeanstalk)
+
+    local inventory = tab("Inventory", "backpack")
+    toggle(inventory, "Accept Gifts", "Existing gift accept automation", "acceptGifts")
+    toggle(inventory, "Accept Trades", "Existing trade accept automation", "acceptTrades")
+    toggle(inventory, "Trade Ticket", "Existing trade ticket automation", "tradeTicketEnabled", function() if ctx.startTrade then ctx.startTrade("ticket") end end)
+    toggle(inventory, "Trade Gift", "Existing gift automation", "tradeGiftEnabled", function() if ctx.startTrade then ctx.startTrade("gift") end end)
 
     local leveling = tab("Leveling", "zap")
     toggle(leveling, "Leveling", "Existing leveling automation", "levelingEnabled", ctx.startLeveling)
@@ -78,5 +119,5 @@ return function(ctx)
     toggle(misc, "Auto Reconnect", "Existing reconnect module", "reconnectEnabled", ctx.startReconnect)
     toggle(misc, "Performance Mode", "Existing performance module", "perfMode", ctx.startPerf)
 
-    WindUI:Notify({ Title = "iStealth WindUI Garden", Content = "Native pages loaded", Duration = 3 })
+    if ctx.notify then ctx.notify("Native WindUI pages loaded") end
 end
