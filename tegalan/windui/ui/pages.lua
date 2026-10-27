@@ -180,6 +180,10 @@ return function(ctx)
 	local function makeSingleW(parent, title, desc, getOptions, getv, setv, opts)
 		opts = opts or {}
 		local d2v, v2d = {}, {}
+		-- WindUI menembak Callback() dengan Value konstruktur (echo kosong) tiap
+		-- kali rows dibangun/refresh -> selalu-guard: echo PERTAMA (kosong) bukan
+		-- pilihan user, jangan ditulis ke CFG (bisa nimpa saved value).
+		local echoGuard = true
 		local function snapshot()
 			local opts, displays, selected = {}, {}, nil
 			pcall(function()
@@ -211,6 +215,7 @@ return function(ctx)
 			AllowNone = true,
 			SearchBarEnabled = true,
 			Callback = safe(function(d)
+				if echoGuard then echoGuard = false; return end
 				setv(d2v[d] or d)
 				persist()
 			end),
@@ -236,6 +241,13 @@ return function(ctx)
 	-- Value/persist tetap keyed uuid (t.v) — bentuk state lama tidak berubah.
 	local function makeMultiDynW(parent, title, desc, getOptions, selSet, onChange, opts)
 		opts = opts or {}
+		-- Reverse map display-title -> value uuid (isi tiap snapshot), buat
+		-- normalisasi callback yang datang sebagai title string.
+		local title2v = {}
+		-- WindUI menembak Callback() (echo pilihan kosong) saat konstruksi & tiap
+		-- Refresh rows. Echo pertama BUKAN input user -> di-skip, kalau tidak
+		-- selSet ketimpa kosong lalu ke-persist (teams hilang pas reExec).
+		local echoGuard = true
 		local function splitDisplay(d)
 			d = tostring(d or "")
 			local cut = d:find(" | ", 1, true)
@@ -248,10 +260,12 @@ return function(ctx)
 			local list = fetchOptions(opts.cacheKey, getOptions)
 			local max = opts.max or 250
 			local displays, selected = {}, {}
+			table.clear(title2v)
 			for i, o in ipairs(list) do
 				if i > max then break end
 				local t, rest = splitDisplay(o.display)
 				displays[#displays + 1] = { Title = t, Desc = rest, v = o.value }
+				title2v[t] = o.value
 				if selSet[o.value] then selected[#selected + 1] = t end
 			end
 			return displays, selected, math.max(0, #list - max)
@@ -268,12 +282,23 @@ return function(ctx)
 			MenuWidth = 240,
 			Value = {},
 			Callback = safe(function(sel)
+				if echoGuard then echoGuard = false; return end
 				if type(sel) == "string" then sel = { sel } end
-				for k in pairs(selSet) do selSet[k] = nil end
+				-- Normalisasi dulu, baru wipe+isi: echo Refresh mengirim table
+				-- opsi (ada .v), kadang title string. Tanpa ini, echo berisi
+				-- title polos menghapus semua uuid dari selSet.
+				local newSet = {}
 				for _, t in ipairs(sel or {}) do
-					local v = (type(t) == "table") and t.v or nil
-					if v then selSet[v] = true end
+					local v
+					if type(t) == "table" then
+						v = t.v or t.value or (t.Title and title2v[t.Title]) or nil
+					else
+						v = title2v[t] or t
+					end
+					if v then newSet[v] = true end
 				end
+				for k in pairs(selSet) do selSet[k] = nil end
+				for k in pairs(newSet) do selSet[k] = true end
 				persist()
 				if onChange then onChange() end
 			end),
@@ -320,6 +345,8 @@ return function(ctx)
 	-- Rows di-defer: 4x dropdown dgn PET_OPTIONS penuh dibangun sinkron = freeze 53s.
 	local function makeMultiW(parent, title, desc, options, selSet, onChange, opts)
 		opts = opts or {}
+		-- Echo-guard: Callback() pertama dari konstruktor bukan input user.
+		local echoGuard = true
 		local function savedTitles()
 			local out = {}
 			for _, o in ipairs(options) do
@@ -337,6 +364,7 @@ return function(ctx)
 			MenuWidth = 240,
 			Value = {},
 			Callback = safe(function(sel)
+				if echoGuard then echoGuard = false; return end
 				if type(sel) == "string" then sel = { sel } end
 				for k in pairs(selSet) do selSet[k] = nil end
 				for _, d in ipairs(sel or {}) do selSet[d] = true end
