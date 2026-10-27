@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T20:34:50.446Z
+-- 42 modul, di-generate 2026-10-27T20:39:35.492Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -11140,7 +11140,7 @@ return function(ctx)
 			local n = dropdownFill(control, displays, selected)
 			if ctx.log then ctx.log(("dropdown '%s' filled (%d options)"):format(title, n)) end
 		end
-		snapshot() -- isi mapping d2v/v2d buat Callback; rows-nya ditahan kosong
+		local dis0, sel0 = snapshot()
 		control = parent:Dropdown({
 			Title = title,
 			Desc = desc,
@@ -11154,6 +11154,16 @@ return function(ctx)
 				persist()
 			end),
 		})
+		-- Sinkron label tombol dgn saved value TANPA menunggu menu dibuka
+		-- (WindUI cuma update label pas Display() dipanggil -> tanpa ini
+		-- dropdown yang udah ke-restore tetap keliatan "--" = keliatan kosong).
+		pcall(function()
+			local menu0 = control.DropdownMenu or control
+			menu0.Values = dis0
+			control.Values = dis0
+			menu0.Value = sel0 or ""
+			if menu0.Display then menu0:Display() end
+		end)
 		-- LAZY: baris dibangun SAAT MENU PERTAMA DIBUKA (menu kebuka instan,
 		-- baris menyusul di thread sendiri). ponytail: open pertama list besar
 		-- masih ngehitch — upgrade path = list virtualisasi.
@@ -11265,6 +11275,15 @@ return function(ctx)
 			pcall(function()
 				local ds, sel2, extra = snapshot()
 				pendingDone, pending = true, { ds = ds, sel2 = sel2, extra = extra }
+				-- Label instan: restore keliatan tanpa harus buka dropdown
+				-- (build rows tetap lazy sampai menu dibuka pertama kali).
+				pcall(function()
+					local menu0 = control.DropdownMenu or control
+					menu0.Values = ds
+					control.Values = ds
+					menu0.Value = sel2
+					if menu0.Display then menu0:Display() end
+				end)
 			end)
 		end)
 		local function fill()
@@ -11318,6 +11337,14 @@ return function(ctx)
 				if onChange then onChange() end
 			end),
 		})
+		-- Label instan biar saved selection kebaca tanpa buka menu.
+		pcall(function()
+			local menu0 = control.DropdownMenu or control
+			menu0.Values = options
+			control.Values = options
+			menu0.Value = savedTitles()
+			if menu0.Display then menu0:Display() end
+		end)
 		-- LAZY: baris dibangun pas menu pertama dibuka — 4x PET_OPTIONS penuh
 		-- dibangun sinkron (ctor/fill) = freeze berdetik; menu kebuka instan,
 		-- baris menyusul. ponytail: open pertama list besar ngehitch sekali —
