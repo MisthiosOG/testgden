@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 43 modul, di-generate 2026-10-27T11:31:14.727Z
+-- 43 modul, di-generate 2026-10-27T11:40:12.597Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua — init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -13884,6 +13884,7 @@ end
 -- Automation modules remain untouched: this file only adapts the existing
 -- ctx UI contract to WindUI controls.
 return function(ctx)
+    print("[GAGHub][WINDUI] garden shell begin")
     pcall(function()
         local host = (gethui and gethui()) or game:GetService("CoreGui")
         for _, name in ipairs({ "GAGGarden", "CeszParadiseGarden", "AllegiaanGarden", "GAGSeller", "GAGTrade", "CeszParadiseTrade" }) do
@@ -13895,7 +13896,8 @@ return function(ctx)
         end
     end)
     local version = "1.6.66"
-    local WindUI = loadstring(game:HttpGet(
+    local compile = loadstring or load
+    local WindUI = compile(game:HttpGet(
         "https://github.com/Footagesus/WindUI/releases/download/"
             .. version .. "/main.lua"
     ))()
@@ -13914,6 +13916,7 @@ return function(ctx)
             Icon = "sprout",
         },
     })
+    print("[GAGHub][WINDUI] garden window created")
 
     ctx.ui = ctx.ui or {}
     ctx.ui.pages = {}

@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 14 modul, di-generate 2026-10-27T11:31:14.776Z
+-- 14 modul, di-generate 2026-10-27T11:40:12.644Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua — inisialisasi akhir: default page, supervisor auto-claim, auto-resume. ]]
@@ -3345,7 +3345,8 @@ return function(ctx)
             if oldPlayerGui then oldPlayerGui:Destroy() end
         end
     end)
-    local WindUI = loadstring(game:HttpGet(
+    local compile = loadstring or load
+    local WindUI = compile(game:HttpGet(
         "https://github.com/Footagesus/WindUI/releases/download/1.6.66/main.lua"
     ))()
     assert(WindUI and WindUI.CreateWindow, "WindUI failed to load")

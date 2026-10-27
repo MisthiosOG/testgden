@@ -11,7 +11,8 @@ return function(ctx)
             if oldPlayerGui then oldPlayerGui:Destroy() end
         end
     end)
-    local WindUI = loadstring(game:HttpGet(
+    local compile = loadstring or load
+    local WindUI = compile(game:HttpGet(
         "https://github.com/Footagesus/WindUI/releases/download/1.6.66/main.lua"
     ))()
     assert(WindUI and WindUI.CreateWindow, "WindUI failed to load")
