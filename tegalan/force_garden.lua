@@ -3,7 +3,7 @@
 local compile = loadstring or load
 assert(compile, "No Luau compiler available")
 local BUILD = "windui-direct-2026-10-27"
-local REVISION = "8d676f1b8cf4284fc16abfc693e96bbf2a7105d3"
+local REVISION = "ed167dcb3610481793592912f3da26e5a47d11f0"
 local BASE = "https://raw.githubusercontent.com/MisthiosOG/testgden/" .. REVISION .. "/tegalan/garden"
 print("[iStealth][DIRECT] build=" .. BUILD)
 
