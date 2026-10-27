@@ -184,14 +184,13 @@ local MODULES = {
 	"modules/farm/automation_favorite.lua",
 	"modules/mutation/automation_mutation_machine.lua",
 	"modules/mutation/automation_mutation.lua",
-	"ui/components.lua",
 	"modules/misc/esp_label.lua",
 	"modules/misc/esp_inventory.lua",
 	"modules/misc/player_mods.lua",
 	"modules/misc/perf_mods.lua",
 	"modules/misc/automation_reconnect.lua",
 	"ui/window.lua",
-	"ui/pages.lua",
+	"ui/pages_wind.lua",
 	"app.lua",
 }
 
