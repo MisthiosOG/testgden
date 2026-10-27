@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 43 modul, di-generate 2026-10-27T22:34:02.850Z
+-- 43 modul, di-generate 2026-10-27T22:44:13.195Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -8120,8 +8120,8 @@ end
      MODE "target": BillboardGui polos nempel di egg (NEBULA asli):
        - belum siap : <kuning>nama egg</> \n <oranye>m:ss</> \n <abu kecil>BW: xkg</>
        - siap       : <kuning>nama egg</> \n <putih>pet (est kg)</> \n <warna>[Size class]</>
-     MODE "screen": list plain text tanpa background di sisi KANAN TENGAH —
-        font 16 bold + outline hitam, nama pet berwarna. Ready eggs paling atas.
+     MODE "screen": list TABEL KOLOM tanpa background di sisi KANAN TENGAH —
+         font 16 bold + outline hitam, nama pet berwarna. Ready eggs paling atas.
      Size class: >=7 Titanic (merah) / >=6 Semi Titanic (oranye) / >=3 Huge (kuning)
      / sisanya Small (hijau). Isi egg dari upvalue handler PetEggService +
      scan BaseWeight di DataService:GetData. GothamBold 17, RichText.
@@ -8253,7 +8253,31 @@ return function(ctx)
 	-- renderer di esp_label (ctx.espScreenData / ctx.espScreenPaint).
 	-- Fallback: kalau renderer shared belum ada (label module gak ke-load),
 	-- bikin gui list sendiri yang gayanya sama.
-	local listSg, listLbl
+	local listSg, listFrame
+	local rowPool = {}
+
+	-- Kolom tanda tangan yang sama dengan layanan yang dibagikan di esp_label agar daftar cadangan (fallback) tampil dengan tampilan yang sama.
+	local function fbNewCol(parent, x, w, size)
+		local l = Instance.new("TextLabel")
+		l.BackgroundTransparency = 1
+		l.Position = UDim2.fromOffset(x or 0, 0)
+		l.Size = UDim2.fromOffset(w, 22)
+		l.Font = Enum.Font.GothamBold
+		l.RichText = true
+		l.TextSize = size or 13
+		l.TextTruncate = Enum.TextTruncate.AtEnd
+		l.TextXAlignment = Enum.TextXAlignment.Left
+		l.TextYAlignment = Enum.TextYAlignment.Center
+		l.TextColor3 = Color3.new(1, 1, 1)
+		local st = Instance.new("UIStroke")
+		st.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+		st.Color = Color3.new(0, 0, 0)
+		st.Thickness = 1.5
+		st.Transparency = 0.1
+		st.Parent = l
+		l.Parent = parent
+		return l
+	end
 
 	local function screenClaim(rows)
 		if ctx.espScreenPaint then
@@ -8261,10 +8285,11 @@ return function(ctx)
 			ctx.espScreenPaint()
 			return
 		end
+		-- Fallback (label module gak ke-load): renderer tabel kolom sendiri.
 		local has = rows and #rows > 0
 		if not has then
 			if listSg then pcall(function() listSg:Destroy() end) end
-			listSg, listLbl = nil, nil
+			listSg, listFrame, rowPool = nil, nil, {}
 			return
 		end
 		if not (listSg and listSg.Parent) then
@@ -8275,30 +8300,52 @@ return function(ctx)
 			listSg.IgnoreGuiInset = true
 			listSg.Parent = (gethui and gethui()) or game:GetService("CoreGui")
 
-			listLbl = Instance.new("TextLabel")
+			listFrame = Instance.new("Frame")
 			-- Sisi KANAN TENGAH (sama dengan renderer shared di esp_label).
-			listLbl.AnchorPoint = Vector2.new(1, 0.5)
-			listLbl.Position = UDim2.new(1, -14, 0.5, 0)
-			listLbl.Size = UDim2.new(0, 480, 0, 0)
-			listLbl.AutomaticSize = Enum.AutomaticSize.Y
-			listLbl.BackgroundTransparency = 1
-			listLbl.Font = Enum.Font.GothamBold
-			listLbl.RichText = true
-			listLbl.TextXAlignment = Enum.TextXAlignment.Right
-			listLbl.TextYAlignment = Enum.TextYAlignment.Top
-			listLbl.TextSize = 16
-			listLbl.TextColor3 = Color3.new(1, 1, 1)
-			-- Outline tebal biar teks tetap kebaca di background terang (sky).
-			local listStroke = Instance.new("UIStroke")
-			listStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
-			listStroke.Color = Color3.new(0, 0, 0)
-			listStroke.Thickness = 1.6
-			listStroke.Transparency = 0.1
-			listStroke.Parent = listLbl
-			listLbl.Text = ""
-			listLbl.Parent = listSg
+			listFrame.AnchorPoint = Vector2.new(1, 0.5)
+			listFrame.Position = UDim2.new(1, -14, 0.5, 0)
+			listFrame.Size = UDim2.new(0, 480, 0, 0)
+			listFrame.AutomaticSize = Enum.AutomaticSize.Y
+			listFrame.BackgroundTransparency = 1
+			local layout = Instance.new("UIListLayout")
+			layout.FillDirection = Enum.FillDirection.Vertical
+			layout.SortOrder = Enum.SortOrder.LayoutOrder
+			layout.Parent = listFrame
+			listFrame.Parent = listSg
+			rowPool = {}
 		end
-		listLbl.Text = table.concat(rows, "\n")
+		local W_N, W_K, W_L, GP = 232, 82, 58, 6
+		for i, s in ipairs(rows) do
+			local r = rowPool[i]
+			if r and not r.frame.Parent then
+				pcall(function() r.frame:Destroy() end)
+				r = nil
+			end
+			if not r then
+				local frame = Instance.new("Frame")
+				frame.BackgroundTransparency = 1
+				frame.Size = UDim2.new(1, 0, 0, 22)
+				frame.LayoutOrder = i
+				r = {
+					frame = frame,
+					name = fbNewCol(frame, 0, W_N, 16),
+					kg = fbNewCol(frame, W_N + GP, W_K, 13),
+					lv = fbNewCol(frame, W_N + GP + W_K + GP, W_L, 13),
+					tail = fbNewCol(frame, W_N + GP + W_K + GP + W_L + GP, 480 - (W_N + GP + W_K + GP + W_L + GP), 13),
+				}
+				r.kg.TextXAlignment = Enum.TextXAlignment.Right
+				r.lv.TextXAlignment = Enum.TextXAlignment.Right
+				frame.Parent = listFrame
+				rowPool[i] = r
+			end
+			r.frame.LayoutOrder = i
+			r.name.Text, r.kg.Text, r.lv.Text, r.tail.Text = s.name or "", s.kg or "", s.lv or "", s.tail or ""
+			r.name.Visible, r.kg.Visible, r.lv.Visible, r.tail.Visible = s.name ~= nil, s.kg ~= nil, s.lv ~= nil, s.tail ~= nil
+		end
+		for i = #rows + 1, #rowPool do
+			if rowPool[i] then pcall(function() rowPool[i].frame:Destroy() end) end
+			rowPool[i] = nil
+		end
 	end
 
 	local function clearAll()
@@ -8347,20 +8394,27 @@ return function(ctx)
 			return a.timeLeft < b.timeLeft
 		end)
 
-		-- Baris screen (plain text, warna data NEBULA) — dibangun di sini
-		-- biar cabang screen & target make data yang sama.
+		-- Slot spec screen (sama bentuknya dengan pet di esp_label):
+		-- [nama][kg][lv kosong][tail] → kolom tetap lurus antar baris.
 		local rows = {}
 		for i, e in ipairs(entries) do
 			if i > 40 then break end
 			local petName = eggPets[e.uuid] or "Pet"
 			if not e.ready then
-				rows[#rows + 1] = ("<font size='16' color='#FFD400'>%s</font> <font size='16' color='#FF5E00'>%s</font> <font size='13' color='#33C1FF'>BW: %skg</font>")
-					:format(e.eggName, formatTime(e.timeLeft), tostring(e.bw))
+				rows[#rows + 1] = {
+					name = ('<font color="#FFD400">%s</font>'):format(e.eggName),
+					kg = ('<font color="#33C1FF">BW: %skg</font>'):format(tostring(e.bw)),
+					tail = ('<font color="#FF5E00">%s</font>'):format(formatTime(e.timeLeft)),
+				}
 			else
 				local est = round(e.bw * WEIGHT_MULT, 2)
 				local size, color = getSizeInfo(est)
-				rows[#rows + 1] = ("<font size='16' color='#FFD400'>%s</font> <font size='16' color='%s'><b>%s</b></font> <font size='13' color='#FFAA00'>(%skg)</font> <font size='13' color='%s'>[%s]</font>")
-					:format(e.eggName, eggNameColor(petName), petName, tostring(est), color, size)
+				rows[#rows + 1] = {
+					name = ('<font color="#FFD400">%s</font> <b><font color="%s">%s</font></b>')
+						:format(e.eggName, eggNameColor(petName), petName),
+					kg = ('<font color="#FFAA00">(%skg)</font>'):format(tostring(est)),
+					tail = ('<font color="%s">[%s]</font>'):format(color, size),
+				}
 			end
 		end
 
@@ -8685,20 +8739,80 @@ return function(ctx)
 		if bbFolder then pcall(function() bbFolder:Destroy() end); bbFolder = nil end
 	end
 
-	-- ===== Shared screen list (plain text, tanpa background) =====
-	-- ctx.espScreenData.pet / .egg masing-masing modul isi sendiri;
-	-- paint() gabungin: [egg baris] \n [pembatas] \n [pet baris].
-	-- Dua-duanya ON → font 16; satu → font 16, tanpa pembatas.
+	-- ===== Shared screen list (TABEL KOLOM, tanpa background) =====
+	-- ctx.espScreenData.pet / .egg masing-masing modul isi sendiri — bentuknya
+	-- SLOT SPEC per baris: { name=richtext, kg=richtext, lv=richtext?, tail=richtext? }
+	-- paint() render jadi tabel 4 kolom rata kanan-tengah layar:
+	--   [nama (kiri)] [kg (kanan)] [lv (kanan)] [tail (kiri)]
+	-- Kolom bikin semua baris SIMETRIS walau panjang nama beda-beda. Frame
+	-- per baris di-pool biar gak buang2 instance tiap 0.5s.
 	ctx.espScreenData = ctx.espScreenData or { pet = nil, egg = nil }
 	local screenData = ctx.espScreenData
-	local listSg, listLbl
+	local listSg, listFrame
+	local rowPool = {} -- i -> { frame, name, kg, lv, tail, sep }
+
+	-- Lebar kolom (total blok 480px): 232 nama, 82 kg, 58 lv, 90 tail + gap 6px.
+	local C_NAME_W, C_KG_W, C_LV_W, C_GAP = 232, 82, 58, 6
+	local C_KG_X = C_NAME_W + C_GAP
+	local C_LV_X = C_KG_X + C_KG_W + C_GAP
+	local C_TAIL_X = C_LV_X + C_LV_W + C_GAP
+
+	local function newCol(parent, x, w, size)
+		local l = Instance.new("TextLabel")
+		l.BackgroundTransparency = 1
+		l.Position = UDim2.fromOffset(x or 0, 0)
+		l.Size = UDim2.fromOffset(w, 22)
+		l.Font = Enum.Font.GothamBold
+		l.RichText = true
+		l.TextSize = size or 13
+		l.TextTruncate = Enum.TextTruncate.AtEnd
+		l.TextXAlignment = Enum.TextXAlignment.Left
+		l.TextYAlignment = Enum.TextYAlignment.Center
+		l.TextColor3 = Color3.new(1, 1, 1)
+		local st = Instance.new("UIStroke")
+		st.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+		st.Color = Color3.new(0, 0, 0)
+		st.Thickness = 1.5
+		st.Transparency = 0.1
+		st.Parent = l
+		l.Parent = parent
+		return l
+	end
+
+	local function getSlot(i)
+		local r = rowPool[i]
+		if r and not r.frame.Parent then
+			pcall(function() r.frame:Destroy() end)
+			r = nil
+		end
+		if not r then
+			local frame = Instance.new("Frame")
+			frame.BackgroundTransparency = 1
+			frame.Size = UDim2.new(1, 0, 0, 22)
+			frame.LayoutOrder = i
+			r = {
+				frame = frame,
+				name = newCol(frame, 0, C_NAME_W, 16),
+				kg = newCol(frame, C_KG_X, C_KG_W, 13),
+				lv = newCol(frame, C_LV_X, C_LV_W, 13),
+				tail = newCol(frame, C_TAIL_X, 480 - C_TAIL_X, 13),
+				sep = newCol(frame, 0, 480, 12),
+			}
+			r.kg.TextXAlignment = Enum.TextXAlignment.Right
+			r.lv.TextXAlignment = Enum.TextXAlignment.Right
+			frame.Parent = listFrame
+			rowPool[i] = r
+		end
+		return r
+	end
 
 	local function paint()
 		local hasE = screenData.egg and #screenData.egg > 0
 		local hasP = screenData.pet and #screenData.pet > 0
 		if not (hasE or hasP) then
 			if listSg then pcall(function() listSg:Destroy() end) end
-			listSg, listLbl = nil, nil
+			listSg, listFrame = nil, nil
+			rowPool = {}
 			return
 		end
 		if not (listSg and listSg.Parent) then
@@ -8709,41 +8823,51 @@ return function(ctx)
 			listSg.IgnoreGuiInset = true
 			listSg.Parent = (gethui and gethui()) or game:GetService("CoreGui")
 
-			listLbl = Instance.new("TextLabel")
-			-- Sisi KANAN TENGAH: nempel pinggir kanan layar, teks rata kanan.
-			listLbl.AnchorPoint = Vector2.new(1, 0.5)
-			listLbl.Position = UDim2.new(1, -14, 0.5, 0)
-			listLbl.Size = UDim2.new(0, 480, 0, 0)
-			listLbl.AutomaticSize = Enum.AutomaticSize.Y
-			listLbl.BackgroundTransparency = 1
-			listLbl.Font = Enum.Font.GothamBold
-			listLbl.RichText = true
-			listLbl.TextXAlignment = Enum.TextXAlignment.Right
-			listLbl.TextYAlignment = Enum.TextYAlignment.Top
-			listLbl.TextColor3 = Color3.new(1, 1, 1)
-			-- Outline tebal biar teks tetap kebaca di background terang (sky).
-			local listStroke = Instance.new("UIStroke")
-			listStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
-			listStroke.Color = Color3.new(0, 0, 0)
-			listStroke.Thickness = 1.6
-			listStroke.Transparency = 0.1
-			listStroke.Parent = listLbl
-			listLbl.Text = ""
-			listLbl.Parent = listSg
+			listFrame = Instance.new("Frame")
+			-- Sisi KANAN TENGAH: blok nempel pinggir kanan layar.
+			listFrame.AnchorPoint = Vector2.new(1, 0.5)
+			listFrame.Position = UDim2.new(1, -14, 0.5, 0)
+			listFrame.Size = UDim2.new(0, 480, 0, 0)
+			listFrame.AutomaticSize = Enum.AutomaticSize.Y
+			listFrame.BackgroundTransparency = 1
+			local layout = Instance.new("UIListLayout")
+			layout.FillDirection = Enum.FillDirection.Vertical
+			layout.SortOrder = Enum.SortOrder.LayoutOrder
+			layout.Parent = listFrame
+			listFrame.Parent = listSg
 		end
 
-		local lines = {}
-		if hasE then
-			for _, t in ipairs(screenData.egg) do lines[#lines + 1] = t end
+		-- Slot urut: [egg…, pembatas, pet…]
+		local slots = {}
+		for _, s in ipairs(screenData.egg or {}) do slots[#slots + 1] = s end
+		if hasE and hasP then slots[#slots + 1] = { sep = true } end
+		for _, s in ipairs(screenData.pet or {}) do slots[#slots + 1] = s end
+
+		for i, s in ipairs(slots) do
+			local r = getSlot(i)
+			r.frame.LayoutOrder = i
+			if s.sep then
+				r.name.Visible, r.kg.Visible, r.lv.Visible, r.tail.Visible = false, false, false, false
+				r.sep.Visible = true
+				r.sep.Text = '<font color="#9A9A9A">' .. string.rep("─", 22) .. "</font>"
+			else
+				r.name.Visible = s.name ~= nil
+				r.kg.Visible = s.kg ~= nil
+				r.lv.Visible = s.lv ~= nil
+				r.tail.Visible = s.tail ~= nil
+				r.sep.Visible = false
+				r.name.Text = s.name or ""
+				r.kg.Text = s.kg or ""
+				r.lv.Text = s.lv or ""
+				r.tail.Text = s.tail or ""
+			end
 		end
-		if hasE and hasP then
-			lines[#lines + 1] = '<font color="#9A9A9A" size="12">' .. string.rep("─", 20) .. "</font>"
+		-- Buang row lebih dari slot sekarang.
+		for i = #slots + 1, #rowPool do
+			local r = rowPool[i]
+			if r then pcall(function() r.frame:Destroy() end) end
+			rowPool[i] = nil
 		end
-		if hasP then
-			for _, t in ipairs(screenData.pet) do lines[#lines + 1] = t end
-		end
-		listLbl.TextSize = 16
-		listLbl.Text = table.concat(lines, "\n")
 	end
 	ctx.espScreenPaint = paint
 
@@ -8862,15 +8986,15 @@ return function(ctx)
 
 							if mode == "screen" then
 								local w = bw and string.format("%.2fkg", bw * WEIGHT_MULT) or "-"
-								local t = ('<font size="17" color="%s"><b>%s</b></font> <font size="13" color="%s">%s</font> <font size="13" color="%s">Lv.%d</font>')
-									:format(nameColor(tostring(pt)), tostring(pt), C_S_WEIGHT, w, C_S_LV, lv)
-								-- Sisi kanan: cd skill ("15s | 10m"), READY kalau semua siap.
+								-- Slot spec: [nama][kg][Lv][cd]. Cd skill ("15s | 10m"),
+								-- READY kalau semua skill siap — pengganti teks mutasi.
 								local cd = cdSegment(uuid)
-								if cd then
-									local cc = (cd == "READY") and C_S_LV or C_S_CD
-									t = t .. (' <font size="13" color="%s">%s</font>'):format(cc, cd)
-								end
-								rows[#rows + 1] = t
+								rows[#rows + 1] = {
+									name = ('<b><font color="%s">%s</font></b>'):format(nameColor(tostring(pt)), tostring(pt)),
+									kg = ('<font color="%s">%s</font>'):format(C_S_WEIGHT, w),
+									lv = ('<font color="%s">Lv.%d</font>'):format(C_S_LV, lv),
+									tail = cd and ('<font color="%s">%s</font>'):format((cd == "READY") and C_S_LV or C_S_CD, cd) or nil,
+								}
 								if #rows >= 40 then break end
 							else
 								local adornee = partOf(petModel)
