@@ -124,13 +124,22 @@ return function(ctx)
 	-- dan nandain seleksi dari ap.Value milik menu (bukan element). Jangan
 	-- andelin :Select — itu Refresh(ap.Values) dgn Values menu yang bisa beda
 	-- table dari assignment ke element.
+	-- (Fix "dropdown kosong pas reExec"): Semua fungsi menu library (Display/
+	-- Refresh/Select) baca state dari table CONTROL (closure ap di library),
+	-- BUKAN table menu -> restore harus nulis control.Value+control.Values.
+	-- Serta: ekor Refresh() nembak Callback(ap.Value) & nimpa control.Values —
+	-- refreshGate biar echo itu tidak dianggap klik user (gak nge-wipe set).
+	local refreshGate = false
 	local function dropdownFill(control, values, selected)
+		control.Values = values
+		control.Value = selected
 		local menu = control.DropdownMenu or control
 		menu.Values = values
-		control.Values = values
 		menu.Value = selected
+		refreshGate = true
 		pcall(function() menu:Refresh(values) end)
-		pcall(patchDropdown, menu)
+		refreshGate = false
+		pcall(patchDropdown, control)
 		return (values and #values) or 0
 	end
 
@@ -216,6 +225,7 @@ return function(ctx)
 			SearchBarEnabled = true,
 			Callback = safe(function(d)
 				if echoGuard then echoGuard = false; return end
+				if refreshGate then return end -- ekor Refresh = echo, bukan klik
 				setv(d2v[d] or d)
 				persist()
 			end),
@@ -223,12 +233,14 @@ return function(ctx)
 		-- Sinkron label tombol dgn saved value TANPA menunggu menu dibuka
 		-- (WindUI cuma update label pas Display() dipanggil -> tanpa ini
 		-- dropdown yang udah ke-restore tetap keliatan "--" = keliatan kosong).
+		-- Sinkron label tombol dgn saved value TANPA menunggu menu dibuka.
+		-- Tulis ke CONTROL.Value (sumber kebenaran library — Display/Refresh/
+		-- Select baca dari control), bukan menu.Value (dulu: restore tetap
+		-- tampak "--" walau data ke-load).
 		pcall(function()
-			local menu0 = control.DropdownMenu or control
-			menu0.Values = dis0
 			control.Values = dis0
-			menu0.Value = sel0 or ""
-			if menu0.Display then menu0:Display() end
+			control.Value = sel0 or ""
+			control:Display()
 		end)
 		-- LAZY: baris dibangun SAAT MENU PERTAMA DIBUKA (menu kebuka instan,
 		-- baris menyusul di thread sendiri). ponytail: open pertama list besar
@@ -297,6 +309,12 @@ return function(ctx)
 					if ctx.log then ctx.log("[ddx] " .. title .. ": ctor echo IGNORED") end
 					return
 				end
+				-- Ekor Refresh() meng-echo Callback dgn Value saat itu — bukan
+				-- klik user; tanpa gate ini set ketimpa & ke-persist kosong.
+				if refreshGate then
+					if ctx.log then ctx.log("[ddx] " .. title .. ": refresh echo IGNORED") end
+					return
+				end
 				if type(sel) == "string" then sel = { sel } end
 				-- Normalisasi dulu, baru wipe+isi: echo Refresh mengirim table
 				-- opsi (ada .v), kadang title string. Tanpa ini, echo berisi
@@ -340,21 +358,29 @@ return function(ctx)
 		task.delay(0.5, function()
 			pcall(function()
 				local ds, sel2, extra = snapshot()
+				-- Pas reExec, inventory game kadang belum siap (snapshot balik
+				-- kosong & hasil kosong ke-cached 5s) -> jangan finalkan kosong;
+				-- retry pelan SAMPAI isi muncul (cap 20s), kalau tidak label dan
+				-- daftar mati kosong permanen sampai buka manual.
+				local t0 = os.clock()
+				while #ds == 0 and os.clock() - t0 < 20 do
+					task.wait(1.5)
+					ds, sel2, extra = snapshot()
+				end
 				pendingDone, pending = true, { ds = ds, sel2 = sel2, extra = extra }
 				-- Label instan: restore keliatan tanpa harus buka dropdown
 				-- (build rows tetap lazy sampai menu dibuka pertama kali).
+				-- Tulis CONTROL.Value (baca komentar dropdownFill).
 				pcall(function()
-					local menu0 = control.DropdownMenu or control
-					menu0.Values = ds
 					control.Values = ds
-					menu0.Value = sel2
-					if menu0.Display then menu0:Display() end
+					control.Value = sel2
+					control:Display()
 				end)
 			end)
 		end)
 		local function fill()
 			local t0 = os.clock()
-			while not pendingDone and os.clock() - t0 < 15 do task.wait(0.1) end
+			while not pendingDone and os.clock() - t0 < 25 do task.wait(0.1) end
 			if pending then buildRows(pending) end
 		end
 		lazyOpen(control, fill)
@@ -396,6 +422,7 @@ return function(ctx)
 			Value = {},
 			Callback = safe(function(sel)
 				if echoGuard then echoGuard = false; return end
+				if refreshGate then return end -- ekor Refresh = echo, bukan klik
 				if type(sel) == "string" then sel = { sel } end
 				for k in pairs(selSet) do selSet[k] = nil end
 				for _, d in ipairs(sel or {}) do selSet[d] = true end
@@ -404,12 +431,12 @@ return function(ctx)
 			end),
 		})
 		-- Label instan biar saved selection kebaca tanpa buka menu.
+		-- Label instan biar saved selection kebaca tanpa buka menu.
+		-- Tulis ke CONTROL.Value (lihat komentar dropdownFill).
 		pcall(function()
-			local menu0 = control.DropdownMenu or control
-			menu0.Values = options
 			control.Values = options
-			menu0.Value = savedTitles()
-			if menu0.Display then menu0:Display() end
+			control.Value = savedTitles()
+			control:Display()
 		end)
 		-- LAZY: baris dibangun pas menu pertama dibuka — 4x PET_OPTIONS penuh
 		-- dibangun sinkron (ctor/fill) = freeze berdetik; menu kebuka instan,
