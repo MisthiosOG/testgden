@@ -1551,9 +1551,9 @@ end
 					"Target Pets Ready: <font color=\"#8c929e\">%s</font>\n" ..
 					"Pets at Max KG: <font color=\"#8c929e\">%s</font>\n" ..
 					"Max Target Pets: <font color=\"#8c929e\">%s</font>  |  Target Weight: <font color=\"#f5c82d\"><b>%s</b></font>\n\n" ..
-					"Gajah: <font color=\"#8c929e\">%s</font>\n" ..
+					"Elephant: <font color=\"#8c929e\">%s</font>\n" ..
 					"Switch: <font color=\"#8c929e\">%s</font>\n" ..
-					"Gajah masuk saat target Age >= <font color=\"#f5c82d\"><b>%s</b></font>")
+					"Elephant enters at target Age >= <font color=\"#f5c82d\"><b>%s</b></font>")
 					:format(col, s.status, tostring(s.info), s.team, s.types, s.ready, s.maxKg,
 						s.maxTarget, s.targetWeight, s.gajah, s.switch, s.level)
 			end, 1.5)
@@ -1564,12 +1564,12 @@ end
 			makeMultiW(sec, "V2 Target Pet Types", "Select pet types to auto-level + elephant (all pets in game)",
 				reg.PET_OPTIONS, CFG.elephantV2Types, function() persist() end,
 				{ fillDelay = 1.0 })
-			makeSingleW(sec, "Gajah Pet (Slot 1)", "The elephant sent in when a target reaches the trigger level",
+			makeSingleW(sec, "Elephant Pet (Slot 1)", "The elephant sent in when a target reaches the trigger level",
 				function() return ctx.elephantV2GajahOptions() end,
 				function() return CFG.elephantV2Gajah end,
 				function(uuid) CFG.elephantV2Gajah = uuid end,
 				{ fillDelay = 1.2 })
-			makeSingleW(sec, "Pet Switch (Slot 2)", "Pet from the Team that the Gajah replaces (usually Capy)",
+			makeSingleW(sec, "Pet Switch (Slot 2)", "Pet from the Team that the Elephant replaces (usually Capy)",
 				function() return ctx.elephantV2SwitchOptions() end,
 				function() return CFG.elephantV2Switch end,
 				function(uuid) CFG.elephantV2Switch = uuid end,
@@ -1580,7 +1580,7 @@ end
 			makeInputW(sec, "Max Target Pets", "How many target pets are active at once in the garden",
 				function() return CFG.elephantV2MaxPets end,
 				function(t) CFG.elephantV2MaxPets = math.max(1, math.floor(tonumber(t) or 3)) end)
-			makeInputW(sec, "Trigger Level", "Target level to send the Gajah in (default 40)",
+			makeInputW(sec, "Trigger Level", "Target level to send the Elephant in (default 40)",
 				function() return CFG.elephantV2Level end,
 				function(t) CFG.elephantV2Level = math.floor(tonumber(t) or 40) end)
 			makeToggleW(sec, "Enable Elephant V2",

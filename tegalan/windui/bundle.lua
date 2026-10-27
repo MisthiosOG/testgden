@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T21:23:42.226Z
+-- 42 modul, di-generate 2026-10-27T21:30:45.778Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -1607,7 +1607,7 @@ return function(ctx)
 			end
 		end
 
-		ctx.state.elephantStatus = string.format("Elephant: %d/%d aktif", #currentGrowing, maxPets)
+		ctx.state.elephantStatus = string.format("Elephant: %d/%d active", #currentGrowing, maxPets)
 	end
 
 	local function elephantLoop()
@@ -1653,7 +1653,7 @@ return function(ctx)
 				end
 				task.wait(0.4)
 			end
-			ctx.state.elephantStatus = "Idle (garden kosong)"
+			ctx.state.elephantStatus = "Idle (garden empty)"
 		end)
 	end
 end
@@ -1768,7 +1768,7 @@ return function(ctx)
 		if ctx.state.elephantV2FirstRun then
 			ctx.state.elephantV2FirstRun = false
 			if not reserved and #eq > 0 then
-				ctx.state.elephantV2Status = "Reset garden (cabut semua pet)..."
+				ctx.state.elephantV2Status = "Reset garden (removing all pets)..."
 				for _, uuid in ipairs(eq) do
 					pcall(function() PetsService:FireServer("UnequipPet", uuid) end)
 					task.wait(0.2)
@@ -1945,7 +1945,7 @@ return function(ctx)
 			local gajah, switch = CFG.elephantV2Gajah, CFG.elephantV2Switch
 			local reserved = (switch == nil or switch == "")
 			if gajah == "" or gajah == nil then
-				ctx.state.elephantV2Status = "Pilih Gajah dulu"
+				ctx.state.elephantV2Status = "Select the Elephant first"
 				task.wait(1)
 			else
 				local eq, inv = snapshot()
@@ -1958,9 +1958,9 @@ return function(ctx)
 							if gajahIn then
 								swapOutGajah(gajah, switch)
 								ctx.state.elephantV2TargetUuid = nil
-								ctx.state.elephantV2Status = "Standby (ga ada target lvl " .. tostring(CFG.elephantV2Level or 40) .. ")"
+								ctx.state.elephantV2Status = "Standby (no lvl " .. tostring(CFG.elephantV2Level or 40) .. " target)"
 							else
-								ctx.state.elephantV2Status = "Standby (nunggu target lvl " .. tostring(CFG.elephantV2Level or 40) .. ")"
+								ctx.state.elephantV2Status = "Standby (waiting for a lvl " .. tostring(CFG.elephantV2Level or 40) .. " target)"
 							end
 						else
 							if not gajahIn then
@@ -1968,7 +1968,7 @@ return function(ctx)
 								if swapInGajah(gajah, switch) then
 									ctx.state.elephantV2TargetUuid = tUuid
 									ctx.state.elephantV2TargetW0 = baseWOf(inv, tUuid)
-									ctx.state.elephantV2Status = "Gajah MASUK (boost target)"
+									ctx.state.elephantV2Status = "Elephant IN (boosting target)"
 								end
 							else
 								-- gajah in: cek target yg ditrack udah naik 0.1kg? kalau ya -> keluar
@@ -1978,7 +1978,7 @@ return function(ctx)
 								if (not trackU) or (not wc) or (w0 and wc >= w0 + 0.1) then
 									swapOutGajah(gajah, switch)
 									ctx.state.elephantV2TargetUuid = nil
-									ctx.state.elephantV2Status = "Gajah keluar (target +0.1kg)"
+									ctx.state.elephantV2Status = "Elephant out (target +0.1kg)"
 								else
 									ctx.state.elephantV2Status = ("Boost... (+%.2f/0.10 kg)"):format(math.max(0, wc - (w0 or wc)))
 								end
@@ -1989,12 +1989,12 @@ return function(ctx)
 						local ready = anyTargetReady(eq, inv)
 						if ready and not gajahIn then
 							swapInGajah(gajah, switch)
-							ctx.state.elephantV2Status = "Gajah MASUK (target lvl " .. tostring(CFG.elephantV2Level or 40) .. ")"
+							ctx.state.elephantV2Status = "Elephant IN (target lvl " .. tostring(CFG.elephantV2Level or 40) .. ")"
 						elseif not ready and gajahIn then
 							swapOutGajah(gajah, switch)
-							ctx.state.elephantV2Status = "Standby (gajah keluar)"
+							ctx.state.elephantV2Status = "Standby (elephant out)"
 						else
-							ctx.state.elephantV2Status = gajahIn and "Gajah aktif" or "Standby"
+							ctx.state.elephantV2Status = gajahIn and "Elephant active" or "Standby"
 						end
 					end
 				end
@@ -2019,7 +2019,7 @@ return function(ctx)
 		local reserved = (switch == nil or switch == "")
 		if reserved then
 			-- MODE RESERVED: CUMA cabut gajah, JANGAN sentuh pet lain (PnP tetep aman jalan)
-			ctx.state.elephantV2Status = "Cabut gajah..."
+			ctx.state.elephantV2Status = "Removing elephant..."
 			task.spawn(function()
 				local gajah = CFG.elephantV2Gajah
 				for _ = 1, 5 do
@@ -2028,11 +2028,11 @@ return function(ctx)
 					pcall(function() PetsService:FireServer("UnequipPet", gajah) end)
 					task.wait(0.12)
 				end
-				ctx.state.elephantV2Status = "Idle (gajah keluar, PnP jalan terus)"
+				ctx.state.elephantV2Status = "Idle (elephant out, PnP keeps running)"
 			end)
 			return
 		end
-		ctx.state.elephantV2Status = "Cabut semua pet (bersihin garden)..."
+		ctx.state.elephantV2Status = "Removing all pets (clearing garden)..."
 		-- Cabut SEMUA pet aktif di garden sampai bener2 bersih (multi-pass, kebal delay replikasi)
 		task.spawn(function()
 			for _ = 1, 5 do
@@ -2044,7 +2044,7 @@ return function(ctx)
 				end
 				task.wait(0.2)
 			end
-			ctx.state.elephantV2Status = "Idle (garden bersih)"
+			ctx.state.elephantV2Status = "Idle (garden clear)"
 		end)
 	end
 
@@ -2063,7 +2063,7 @@ return function(ctx)
 	ctx.elephantV2Label = petLabel
 
 	function ctx.elephantV2GajahOptions()
-		local out = { { name = "", display = "\u{274C} Kosongkan" } }
+		local out = { { name = "", display = "Clear" } }
 		for _, o in ipairs(ctx.inventoryPetOptions and ctx.inventoryPetOptions() or {}) do
 			out[#out + 1] = { name = o.value, display = o.display }
 		end
@@ -2072,7 +2072,7 @@ return function(ctx)
 	function ctx.elephantV2SwitchOptions()
 		-- Opsi Kosongkan di paling atas (buat mode reserved: slot dibiarin kosong).
 		-- Tampilin SEMUA pet inventory (bukan cuma team) biar pilihan selalu keliatan.
-		local out = { { name = "", display = "\u{274C} Kosongkan (reserved slot)" } }
+		local out = { { name = "", display = "Clear (reserved slot)" } }
 		for _, o in ipairs(ctx.inventoryPetOptions and ctx.inventoryPetOptions() or {}) do
 			out[#out + 1] = { name = o.value, display = o.display }
 		end
@@ -12531,9 +12531,9 @@ end
 					"Target Pets Ready: <font color=\"#8c929e\">%s</font>\n" ..
 					"Pets at Max KG: <font color=\"#8c929e\">%s</font>\n" ..
 					"Max Target Pets: <font color=\"#8c929e\">%s</font>  |  Target Weight: <font color=\"#f5c82d\"><b>%s</b></font>\n\n" ..
-					"Gajah: <font color=\"#8c929e\">%s</font>\n" ..
+					"Elephant: <font color=\"#8c929e\">%s</font>\n" ..
 					"Switch: <font color=\"#8c929e\">%s</font>\n" ..
-					"Gajah masuk saat target Age >= <font color=\"#f5c82d\"><b>%s</b></font>")
+					"Elephant enters at target Age >= <font color=\"#f5c82d\"><b>%s</b></font>")
 					:format(col, s.status, tostring(s.info), s.team, s.types, s.ready, s.maxKg,
 						s.maxTarget, s.targetWeight, s.gajah, s.switch, s.level)
 			end, 1.5)
@@ -12544,12 +12544,12 @@ end
 			makeMultiW(sec, "V2 Target Pet Types", "Select pet types to auto-level + elephant (all pets in game)",
 				reg.PET_OPTIONS, CFG.elephantV2Types, function() persist() end,
 				{ fillDelay = 1.0 })
-			makeSingleW(sec, "Gajah Pet (Slot 1)", "The elephant sent in when a target reaches the trigger level",
+			makeSingleW(sec, "Elephant Pet (Slot 1)", "The elephant sent in when a target reaches the trigger level",
 				function() return ctx.elephantV2GajahOptions() end,
 				function() return CFG.elephantV2Gajah end,
 				function(uuid) CFG.elephantV2Gajah = uuid end,
 				{ fillDelay = 1.2 })
-			makeSingleW(sec, "Pet Switch (Slot 2)", "Pet from the Team that the Gajah replaces (usually Capy)",
+			makeSingleW(sec, "Pet Switch (Slot 2)", "Pet from the Team that the Elephant replaces (usually Capy)",
 				function() return ctx.elephantV2SwitchOptions() end,
 				function() return CFG.elephantV2Switch end,
 				function(uuid) CFG.elephantV2Switch = uuid end,
@@ -12560,7 +12560,7 @@ end
 			makeInputW(sec, "Max Target Pets", "How many target pets are active at once in the garden",
 				function() return CFG.elephantV2MaxPets end,
 				function(t) CFG.elephantV2MaxPets = math.max(1, math.floor(tonumber(t) or 3)) end)
-			makeInputW(sec, "Trigger Level", "Target level to send the Gajah in (default 40)",
+			makeInputW(sec, "Trigger Level", "Target level to send the Elephant in (default 40)",
 				function() return CFG.elephantV2Level end,
 				function(t) CFG.elephantV2Level = math.floor(tonumber(t) or 40) end)
 			makeToggleW(sec, "Enable Elephant V2",

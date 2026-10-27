@@ -205,7 +205,7 @@ return function(ctx)
 			end
 		end
 
-		ctx.state.elephantStatus = string.format("Elephant: %d/%d aktif", #currentGrowing, maxPets)
+		ctx.state.elephantStatus = string.format("Elephant: %d/%d active", #currentGrowing, maxPets)
 	end
 
 	local function elephantLoop()
@@ -251,7 +251,7 @@ return function(ctx)
 				end
 				task.wait(0.4)
 			end
-			ctx.state.elephantStatus = "Idle (garden kosong)"
+			ctx.state.elephantStatus = "Idle (garden empty)"
 		end)
 	end
 end
