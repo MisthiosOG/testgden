@@ -59,7 +59,8 @@ return function(ctx)
 
 	-- Single dropdown: opsi bisa string atau {name=, display=}; snapshot saat build
 	-- + refresh() buat dipanggil ulang (WindUI Dropdown punya :Refresh).
-	local function makeSingleW(parent, title, desc, getOptions, getv, setv)
+	local function makeSingleW(parent, title, desc, getOptions, getv, setv, opts)
+		opts = opts or {}
 		local d2v, v2d = {}, {}
 		local function snapshot()
 			local opts, displays, selected = {}, {}, nil
@@ -89,13 +90,17 @@ return function(ctx)
 				persist()
 			end),
 		})
-		return control, function()
+		local function refresh()
 			task.spawn(function()
 				local ds, sel2 = snapshot()
 				pcall(function() control:Refresh(ds) end)
 				pcall(function() control:Select(sel2) end)
 			end)
 		end
+		if opts.register and W.refreshers then
+			W.refreshers[#W.refreshers + 1] = refresh
+		end
+		return control, refresh
 	end
 
 	-- Multi dropdown dinamis (pet team dll): opsi {value=, display=}, selSet keyed value.
@@ -211,21 +216,129 @@ return function(ctx)
 	-- Chevron dibunuh via polling: begitu muncul (Frame+ImageLabel di header), dipatikan.
 	local function section(tab, title, opened)
 		local sec = tab:Section({ Title = title, TextSize = 19, Opened = true })
-		task.spawn(function()
-			for _ = 1, 50 do
-				pcall(function()
-					local top = sec.ElementFrame.Outline.Top
-					for _, ch in ipairs(top:GetChildren()) do
-						if ch:IsA("Frame") and ch:FindFirstChildOfClass("ImageLabel") then
-							ch.Visible = false
-						end
+	task.spawn(function()
+		for _ = 1, 50 do
+			pcall(function()
+				local top = sec.ElementFrame.Outline.Top
+				for _, ch in ipairs(top:GetChildren()) do
+					if ch:IsA("Frame") and ch:FindFirstChildOfClass("ImageLabel") then
+						ch.Visible = false
 					end
-				end)
-				task.wait(0.5)
+				end
+			end)
+			task.wait(0.5)
+		end
+	end)
+	return sec
+end
+
+-- Tombol "Update Pet List" (style Pet): jalankan semua refresher dropdown dinamis.
+local function addRefresh(sec)
+	sec:Button({
+		Title = "Update Pet List",
+		Desc = "Baca ulang inventory — refresh dropdown dinamis",
+		Callback = safe(function()
+			for _, fn in ipairs(W.refreshers) do
+				pcall(fn)
 			end
-		end)
-		return sec
+			ctx.log("Pet list di-refresh.")
+		end),
+	})
+end
+
+-- Mini-tab bar native (style Pet): [A][B][C...] di atas panel section.
+-- Parent sama dgn card sections (ContainerFrame, padding halaman identik) ->
+-- lebar bar PERSIS selebar cards. SortOrder kontainer = LayoutOrder + semua
+-- element WindUI LayoutOrder 0 -> -1000 dipastikan row pertama.
+-- Warna dari theme WindUI langsung (GetThemes), fallback konstanta Dark.
+-- JANGAN baca Outline.BackgroundColor3: konstanta theme "Outline" = #FFFFFF,
+-- ThemeTag-nya belum di-apply pas tab dibangun -> bar nyala putih.
+local function miniBar(secs, order, defs, defaultId)
+	local container = secs[order[1]].ElementFrame.Parent
+	local lib = W.windui
+	local okTheme, cur = pcall(function()
+		local th = lib and lib.GetThemes and lib:GetThemes() or nil
+		local name = lib and lib.GetCurrentTheme and lib:GetCurrentTheme() or nil
+		return th and name and th[name] or nil
+	end)
+	local bgc = (okTheme and cur and cur.Background) or Color3.fromRGB(16, 16, 16)
+	local elc = (okTheme and cur and cur.ElementBackground) or Color3.fromRGB(42, 42, 44)
+	local txth = (okTheme and cur and cur.Placeholder) or Color3.fromRGB(161, 161, 170)
+	local pillBg = bgc:Lerp(elc, 0.30)
+	local activeBg = elc:Lerp(Color3.new(1, 1, 1), 0.10)
+
+	local bar = Instance.new("Frame")
+	bar.Name = "MiniTabs"
+	bar.LayoutOrder = -1000
+	bar.Size = UDim2.new(1, 0, 0, 40)
+	bar.BackgroundColor3 = pillBg
+	bar.Parent = container
+	Instance.new("UICorner", bar).CornerRadius = UDim.new(0, 10)
+
+	local row = Instance.new("UIListLayout")
+	row.FillDirection = Enum.FillDirection.Horizontal
+	row.Padding = UDim.new(0, 6)
+	row.SortOrder = Enum.SortOrder.LayoutOrder
+	row.VerticalAlignment = Enum.VerticalAlignment.Center
+	row.Parent = bar
+
+	local btns = {}
+	local function paint(id, on)
+		local b = btns[id]
+		b.BackgroundColor3 = activeBg
+		b.BackgroundTransparency = on and 0 or 1
+		b.TextColor3 = on and ((cur and cur.Text) or Color3.fromRGB(255, 255, 255)) or txth
 	end
+
+	for i, id in ipairs(order) do
+		local b = Instance.new("TextButton")
+		b.Name = "Tab_" .. id
+		b.LayoutOrder = i
+		b.Size = UDim2.new(1 / #order, -4, 1, -8)
+		b.AutoButtonColor = false
+		b.BackgroundTransparency = 1
+		b.Text = defs[id].name
+		b.TextTruncate = Enum.TextTruncate.AtEnd
+		b.TextSize = 14
+		b.Font = Enum.Font.GothamMedium
+		Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
+		b.Parent = bar
+		btns[id] = b
+	end
+
+	local function selectPanel(id)
+		for pid, sec in pairs(secs) do
+			pcall(function() sec.ElementFrame.Visible = (pid == id) end)
+		end
+		for _, pid in ipairs(order) do paint(pid, pid == id) end
+	end
+	for _, id in ipairs(order) do
+		btns[id].Activated:Connect(function() selectPanel(id) end)
+	end
+
+	-- Ukuran section dist dipin manual (Open/Close = snapshot Top+Contentpx).
+	-- Kalau pin kebaca sebelum layout jalan -> pin kecil -> konten ter-clip
+	-- (panel "kosong"). Matikan mode expandable + force auto-size: section selalu
+	-- sebesar konten, Open/Close dist jadi no-op permanen.
+	local function unlockSize()
+		for _, id in ipairs(order) do
+			local s = secs[id]
+			local ef = s and s.ElementFrame
+			if ef and ef:FindFirstChild("Outline") then
+				s.Expandable = false
+				pcall(function()
+					ef.AutomaticSize = Enum.AutomaticSize.Y
+					ef.Size = UDim2.new(1, 0, 0, 0)
+					ef.Outline.Content.Visible = true
+				end)
+			end
+		end
+	end
+	task.defer(unlockSize)
+	task.delay(0.15, unlockSize)
+
+	selectPanel(defaultId)
+end
 
 	-- (hrow/HStack dibuang: element WindUI ngelewat padding halaman -> bar kepotong kanan)
 
@@ -233,10 +346,8 @@ return function(ctx)
 	local v2Ctrl -- sync mutual exclusion
 
 	local function buildPetTab(tab)
-	-- Mini-tab [Pickup V1][Pickup V2][Boost]: native, ukuran beku.
-	-- WindUI Button + SetTitle nambah "▸ " -> panjang teks beda -> label wrap -> bar melar
-	-- (tab "ga solid"). Bar Roblox polos: parent SAMA dgn card sections -> padding halaman
-	-- kebaca identik, lebar fix 1/3 per tombol, status aktif via warna (teks ga pernah diubah).
+	-- Mini-tab [Pickup V1][Pickup V2][Boost]: miniBar() — bar native beku + panel
+	-- section auto-size (bukan HStack WindUI: element-nya ngelewat padding halaman).
 	local DEFS = {
 		v1    = { name = "Pickup V1" },
 		v2    = { name = "Pickup V2" },
@@ -250,19 +361,6 @@ return function(ctx)
 		buildFn(sec)
 		secs[id] = sec
 	end
-
-		local function addRefresh(sec)
-			sec:Button({
-				Title = "Update Pet List",
-				Desc = "Baca ulang inventory — refresh dropdown dinamis",
-				Callback = safe(function()
-					for _, fn in ipairs(W.refreshers) do
-						pcall(fn)
-					end
-					ctx.log("Pet list di-refresh.")
-				end),
-			})
-		end
 
 		--------------------------------------------------- panel 1: Pickup Pet V1
 		miniTab("v1", function(sec)
@@ -354,104 +452,202 @@ return function(ctx)
 			addRefresh(sec)
 		end)
 
-		--------------------------------------------------- mini-tab bar (native, ukuran beku)
-		-- Parent = parent card sections (ContainerFrame, padding halaman sama) ->
-		-- lebar bar PERSIS selebar cards. SortOrder kontainer = LayoutOrder + semua
-		-- element WindUI LayoutOrder 0 -> -1000 dipastikan row pertama.
-		-- Warna dari theme WindUI langsung (GetThemes), fallback konstanta Dark.
-		-- JANGAN baca Outline.BackgroundColor3: konstanta theme "Outline" = #FFFFFF,
-		-- ThemeTag-nya belum di-apply pas tab dibangun -> bar nyala putih.
-		local container = secs.v1.ElementFrame.Parent
-		local lib = W.windui
-		local okTheme, cur = pcall(function()
-			local th = lib and lib.GetThemes and lib:GetThemes() or nil
-			local name = lib and lib.GetCurrentTheme and lib:GetCurrentTheme() or nil
-			return th and name and th[name] or nil
-		end)
-		local bgc = (okTheme and cur and cur.Background) or Color3.fromRGB(16, 16, 16)
-		local elc = (okTheme and cur and cur.ElementBackground) or Color3.fromRGB(42, 42, 44)
-		local txth = (okTheme and cur and cur.Placeholder) or Color3.fromRGB(161, 161, 170)
-		local pillBg = bgc:Lerp(elc, 0.30)
-		local activeBg = elc:Lerp(Color3.new(1, 1, 1), 0.10)
+		miniBar(secs, ORDER, DEFS, "v1")
+	end
 
-		local bar = Instance.new("Frame")
-		bar.Name = "PetMiniTabs"
-		bar.LayoutOrder = -1000
-		bar.Size = UDim2.new(1, 0, 0, 40)
-		bar.BackgroundColor3 = pillBg
-		bar.Parent = container
-		Instance.new("UICorner", bar).CornerRadius = UDim.new(0, 10)
+	----------------------------------------------------------------- TAB: INVENTORY (Trade Ticket/Gift + Accept + Favorite)
+	local function buildInventoryTab(tab)
+		local idefs = {
+			ticket = { name = "Trade Ticket" },
+			gift   = { name = "Trade Gift" },
+			accept = { name = "Auto Accept" },
+			fav    = { name = "Favorite" },
+		}
+		local iorder = { "ticket", "gift", "accept", "fav" }
+		local isecs = {}
 
-		local row = Instance.new("UIListLayout")
-		row.FillDirection = Enum.FillDirection.Horizontal
-		row.Padding = UDim.new(0, 6)
-		row.SortOrder = Enum.SortOrder.LayoutOrder
-		row.VerticalAlignment = Enum.VerticalAlignment.Center
-		row.Parent = bar
-
-		local btns = {}
-		local function paint(id, on)
-			local b = btns[id]
-			b.BackgroundColor3 = activeBg
-			b.BackgroundTransparency = on and 0 or 1
-			b.TextColor3 = on and ((cur and cur.Text) or Color3.fromRGB(255, 255, 255)) or txth
+		local function miniTab(id, buildFn)
+			local sec = section(tab, idefs[id].name)
+			buildFn(sec)
+			isecs[id] = sec
 		end
 
-		for i, id in ipairs(ORDER) do
-			local b = Instance.new("TextButton")
-			b.Name = "Tab_" .. id
-			b.LayoutOrder = i
-			b.Size = UDim2.new(1 / 3, -4, 1, -8)
-			b.AutoButtonColor = false
-			b.BackgroundTransparency = 1
-			b.Text = DEFS[id].name
-			b.TextTruncate = Enum.TextTruncate.AtEnd
-			b.TextSize = 14
-			b.Font = Enum.Font.GothamMedium
-			Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
-			b.Parent = bar
-			btns[id] = b
-		end
-
-		local function selectPanel(id)
-			for pid, sec in pairs(secs) do
-				pcall(function() sec.ElementFrame.Visible = (pid == id) end)
+		local function playerOptions()
+			local out = {}
+			if ctx.getPlayers then
+				pcall(function()
+					for _, n in ipairs(ctx.getPlayers()) do out[#out + 1] = n end
+				end)
 			end
-			for _, pid in ipairs(ORDER) do paint(pid, pid == id) end
-		end
-		for _, id in ipairs(ORDER) do
-			btns[id].Activated:Connect(function() selectPanel(id) end)
+			return out
 		end
 
-		-- Ukuran section dist dipin manual (Open/Close = snapshot Top+Contentpx).
-		-- Kalau pin kebaca sebelum layout jalan -> pin kecil -> konten ter-clip
-		-- (panel "kosong", kasus V1/V2). Matikan mode expandable + force auto-size:
-		-- section selalu sebesar konten, Open/Close dist jadi no-op permanen.
-		local function unlockSize()
-			for _, id in ipairs(ORDER) do
-				local s = secs[id]
-				local ef = s and s.ElementFrame
-				if ef and ef:FindFirstChild("Outline") then
-					s.Expandable = false
+		-- Status trade live: Paragraph :SetDesc tiap 2s (RichText tag warna dist).
+		local function addStatus(sec, isGift)
+			local stat = sec:Paragraph({
+				Title = isGift and "Gift Trade Status" or "Ticket Trade Status",
+				Desc = "Completed: 0\nPet cocok filter: -\nStatus: IDLE",
+			})
+			task.spawn(function()
+				while ctx.alive() do
 					pcall(function()
-						ef.AutomaticSize = Enum.AutomaticSize.Y
-						ef.Size = UDim2.new(1, 0, 0, 0)
-						ef.Outline.Content.Visible = true
+						local avail = ctx.countMatchingPets and ctx.countMatchingPets(isGift) or 0
+						local availCol = avail > 0 and "#5acc78" or "#dc5050"
+						local active = isGift and CFG.tradeGiftEnabled or CFG.tradeTicketEnabled
+						local methodRunning = ctx.state.tradeRunning
+							and ((isGift and CFG.tradeMethod == "gift") or (not isGift and CFG.tradeMethod == "ticket"))
+						local statusText = methodRunning and ctx.state.status
+							or (active and "RUNNING" or "IDLE")
+						local comp = methodRunning and (ctx.state.completed or 0) or 0
+						local total = isGift and (CFG.giftTotalGifts or 0) or (CFG.totalTrades or 0)
+						local unit = isGift and " gifts" or ""
+						stat:SetDesc(("Completed: %d / %d%s\nPet cocok filter: <font color=\"%s\"><b>%d</b></font>\nStatus: %s")
+							:format(comp, total, unit, availCol, avail, statusText))
 					end)
+					task.wait(2)
 				end
-			end
+			end)
 		end
-		task.defer(unlockSize)
-		task.delay(0.15, unlockSize)
 
-		selectPanel("v1")
+		miniTab("ticket", function(sec)
+			makeSingleW(sec, "Target Player", "Pemain tujuan trade tiket",
+				playerOptions,
+				function() return CFG.targetPlayer end,
+				function(v) CFG.targetPlayer = v end, { register = true })
+			makeMultiW(sec, "Pet Types to Trade", "Filter pet by type (kosong = semua non-favorite)",
+				reg.PET_OPTIONS, CFG.petTypes, function() persist() end)
+			makeInputW(sec, "Weight Filter (KG)", "Berat tampilan game | 0=off | +6 = min 6kg | -6 = max 6kg",
+				function() return CFG.weightFilter end,
+				function(t) CFG.weightFilter = tonumber(t) or 0 end)
+			makeInputW(sec, "Age Filter", "0 = off | +50 = min age 50 | -50 = max age 50",
+				function() return CFG.ageFilter end,
+				function(t) CFG.ageFilter = tonumber(t) or 0 end)
+			makeInputW(sec, "Pets Per Trade", "Jumlah pet tiap trade",
+				function() return CFG.petsPerTrade end,
+				function(t)
+					local n = tonumber(t)
+					CFG.petsPerTrade = (n and n > 0) and math.floor(n) or 1
+				end)
+			makeInputW(sec, "Total Trades", "Berapa trade dilakukan",
+				function() return CFG.totalTrades end,
+				function(t)
+					local n = tonumber(t)
+					CFG.totalTrades = (n and n >= 0) and math.floor(n) or 0
+				end)
+			makeToggleW(sec, "Auto Unfavorite [Trade]", "Lepas favorite sebelum trade",
+				function() return CFG.autoUnfavorite end,
+				function(v) CFG.autoUnfavorite = v end)
+			addStatus(sec, false)
+			makeToggleW(sec, "Enable Trade by Ticket", "Kirim trade request tiket, isi pet, terima & confirm",
+				function() return CFG.tradeTicketEnabled or (CFG.tradeEnabled and CFG.tradeMethod == "ticket") end,
+				function(v)
+					CFG.tradeTicketEnabled = v
+					CFG.tradeEnabled = v
+					if v then
+						CFG.tradeGiftEnabled = false
+						CFG.tradeMethod = "ticket"
+						persist()
+						ctx.state.completed = 0
+						if ctx.startTrade then pcall(function() ctx.startTrade("ticket") end) end
+					else
+						persist()
+						if CFG.tradeMethod == "ticket" and ctx.stopTrade then pcall(ctx.stopTrade) end
+					end
+				end)
+			addRefresh(sec)
+		end)
+
+		miniTab("gift", function(sec)
+			makeSingleW(sec, "Target Player", "Pemain tujuan gift (defaults ke target ticket)",
+				playerOptions,
+				function() return (CFG.giftTargetPlayer ~= "" and CFG.giftTargetPlayer) or CFG.targetPlayer end,
+				function(v) CFG.giftTargetPlayer = v end, { register = true })
+			makeMultiW(sec, "Pet Types to Gift", "Filter pet by type (kosong = semua non-favorite)",
+				reg.PET_OPTIONS, CFG.giftPetTypes, function() persist() end)
+			makeInputW(sec, "Weight Filter (KG)", "0=off | +6 = min 6kg | -6 = max 6kg",
+				function() return CFG.giftWeightFilter end,
+				function(t) CFG.giftWeightFilter = tonumber(t) or 0 end)
+			makeInputW(sec, "Age Filter", "0=off | +50 = min age 50 | -50 = max age 50",
+				function() return CFG.giftAgeFilter end,
+				function(t) CFG.giftAgeFilter = tonumber(t) or 0 end)
+			makeInputW(sec, "Pets Per Batch", "Jumlah pet di-gift per ronde",
+				function() return CFG.giftPetsPerBatch end,
+				function(t)
+					local n = tonumber(t)
+					CFG.giftPetsPerBatch = (n and n > 0) and math.floor(n) or 1
+				end)
+			makeInputW(sec, "Total Gifts", "Berapa pet/gift dikirim sebelum berhenti",
+				function() return CFG.giftTotalGifts end,
+				function(t)
+					local n = tonumber(t)
+					CFG.giftTotalGifts = (n and n >= 0) and math.floor(n) or 0
+				end)
+			makeToggleW(sec, "Auto Unfavorite [Gift]", "Lepas favorite sebelum kirim gift",
+				function() return CFG.giftAutoUnfavorite end,
+				function(v) CFG.giftAutoUnfavorite = v end)
+			addStatus(sec, true)
+			makeToggleW(sec, "Enable Trade by Gift", "Kirim gift pet langsung tanpa tiket (cepat & otomatis)",
+				function() return CFG.tradeGiftEnabled or (CFG.tradeEnabled and CFG.tradeMethod == "gift") end,
+				function(v)
+					CFG.tradeGiftEnabled = v
+					if v then
+						CFG.tradeTicketEnabled = false
+						CFG.tradeEnabled = false
+						CFG.tradeMethod = "gift"
+						persist()
+						ctx.state.completed = 0
+						if ctx.startTrade then pcall(function() ctx.startTrade("gift") end) end
+					else
+						persist()
+						if CFG.tradeMethod == "gift" and ctx.stopTrade then pcall(ctx.stopTrade) end
+					end
+				end)
+			addRefresh(sec)
+		end)
+
+		miniTab("accept", function(sec)
+			makeToggleW(sec, "Automation Accept Gifts", "Otomatis terima gift masuk",
+				function() return CFG.acceptGifts end,
+				function(v) CFG.acceptGifts = v end)
+			makeToggleW(sec, "Automation Accept Trades", "Otomatis terima trade masuk",
+				function() return CFG.acceptTrades end,
+				function(v) CFG.acceptTrades = v end)
+			addRefresh(sec)
+		end)
+
+		miniTab("fav", function(sec)
+			makeToggleW(sec, "Auto Favourite Pets", "Otomatis favorite pet type terpilih",
+				function() return CFG.autoFavorite end,
+				function(v)
+					CFG.autoFavorite = v
+					if ctx.startAutoFavorite and ctx.stopAutoFavorite then
+						if v then pcall(ctx.startAutoFavorite)
+						else pcall(ctx.stopAutoFavorite) end
+					end
+				end)
+			makeMultiW(sec, "Favourite Pet Types", "Pet type yang difavoritkan",
+				reg.PET_OPTIONS, CFG.favoritePetTypes, function() persist() end)
+			makeToggleW(sec, "Auto Unfavourite Pets", "Otomatis unfavorite pet type terpilih",
+				function() return CFG.autoUnfavoritePets end,
+				function(v)
+					CFG.autoUnfavoritePets = v
+					if v and ctx.startAutoUnfavorite then pcall(ctx.startAutoUnfavorite)
+					elseif ctx.stopAutoUnfavorite then pcall(ctx.stopAutoUnfavorite) end
+				end)
+			makeMultiW(sec, "Unfavourite Pet Types", "Pet type yang di-unfavorite (kosong = semua pet)",
+				reg.PET_OPTIONS, CFG.unfavoritePetTypes, function() persist() end)
+			addRefresh(sec)
+		end)
+
+		miniBar(isecs, iorder, idefs, "ticket")
 	end
 
 	----------------------------------------------------------------- REGISTRY TAB
 	-- Urutan sesuai Pink Royale. build = nil -> placeholder (belum dimigrasi).
 	local MIGRATED = {
 		Pet = buildPetTab,
-		-- berikutnya: Inventory, Misc, Farm, Hatch, ... (satu per satu)
+		Inventory = buildInventoryTab,
+		-- berikutnya: Misc, Farm, Hatch, Elephant, ... (satu per satu)
 	}
 
 	local TABS = {
