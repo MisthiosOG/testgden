@@ -22,6 +22,7 @@ local detectedTarget = (game.PlaceId == TRADE_WORLD_PLACE) and "trade" or "garde
 -- Garden World must never inherit a stale GAG_APP="trade" from the executor.
 local target = (appOverride == "trade" and detectedTarget ~= "trade")
     and detectedTarget or (appOverride or detectedTarget)
+print(("[GAGHub][WINDUI] router target=%s place=%s"):format(target, tostring(game.PlaceId)))
 
 -- Telemetry ke dashboard web (heartbeat + inventory). Logika di modul terpisah biar loader tetap bersih.
 pcall(function()

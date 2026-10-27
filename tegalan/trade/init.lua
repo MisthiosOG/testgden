@@ -24,14 +24,19 @@ pcall(function()
     local Players = game:GetService("Players")
     local player = Players.LocalPlayer
     local host = (gethui and gethui()) or game:GetService("CoreGui")
-    for _, name in ipairs({ "GAGGarden", "CeszParadiseGarden", "AllegiaanGarden", "GAGSeller", "GAGTrade", "CeszParadiseTrade" }) do
-        local old = host:FindFirstChild(name)
-        if old then old:Destroy() end
-        local oldPlayerGui = player and player:FindFirstChild("PlayerGui")
-            and player.PlayerGui:FindFirstChild(name)
-        if oldPlayerGui then oldPlayerGui:Destroy() end
+    local function clear(container)
+        for _, child in ipairs(container:GetChildren()) do
+            local n = child.Name:lower()
+            if n:find("cesz", 1, true) or n:find("gag", 1, true)
+                or n:find("allegiaan", 1, true) then
+                child:Destroy()
+            end
+        end
     end
+    clear(host)
+    if player and player:FindFirstChild("PlayerGui") then clear(player.PlayerGui) end
 end)
+print("[GAGHub][WINDUI] trade loader selected")
 
 --------------------------------------------------------------------- loader
 -- Selalu load dari bundle.lua (1 HttpGet, kilat). Workflow: edit modul ->
