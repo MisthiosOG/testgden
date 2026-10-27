@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T20:30:51.862Z
+-- 42 modul, di-generate 2026-10-27T20:34:50.446Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -1019,6 +1019,17 @@ return function(ctx)
 			return
 		end
 		if lastSaved == ser then return end
+		-- Backup rotasi: sebelum nimpa file utama, arsipkan isi lamanya ke .bak.
+		-- Kalau ada wipe aneh, selalu ada jalan pulang satu langkah.
+		if type(readfile) == "function" and type(writefile) == "function" then
+			pcall(function()
+				local mainP = STATE_CANDIDATES[1]
+				local old = readfile(mainP)
+				if old and #old > 0 and old ~= ser then
+					writefile(mainP .. ".bak", old)
+				end
+			end)
+		end
 		-- Tulis ke SEMUA kandidat: VFS executor beda-beda tingkahnya, dan
 		-- satu path yang nyantol itu semua yang dibutuhkan buat load balik.
 		local wroteAny = false
@@ -11205,7 +11216,11 @@ return function(ctx)
 			MenuWidth = 240,
 			Value = {},
 			Callback = safe(function(sel)
-				if echoGuard then echoGuard = false; return end
+				if echoGuard then
+					echoGuard = false
+					if ctx.log then ctx.log("[ddx] " .. title .. ": ctor echo IGNORED") end
+					return
+				end
 				if type(sel) == "string" then sel = { sel } end
 				-- Normalisasi dulu, baru wipe+isi: echo Refresh mengirim table
 				-- opsi (ada .v), kadang title string. Tanpa ini, echo berisi
@@ -11222,6 +11237,14 @@ return function(ctx)
 				end
 				for k in pairs(selSet) do selSet[k] = nil end
 				for k in pairs(newSet) do selSet[k] = true end
+				if ctx.log then
+					local kinds = {}
+					for _, t in ipairs(sel or {}) do kinds[#kinds + 1] = type(t) end
+					local kept = 0
+					for _ in pairs(newSet) do kept = kept + 1 end
+					ctx.log(("[ddx] %s: in=%d (%s) kept=%d"):format(
+						title, #sel, table.concat(kinds, ","), kept))
+				end
 				persist()
 				if onChange then onChange() end
 			end),
@@ -12382,6 +12405,32 @@ end
 				end
 				pcall(function() fsDiag:SetDesc(table.concat(lines, "\n")) end)
 				ctx.log("[config] storage test: " .. tostring(#lines) .. " path(s) checked")
+			end),
+		})
+
+		sec:Button({
+			Title = "Restore Config Backup",
+			Desc = "Copy the last good config (.bak) over the main file, then re-exec.",
+			Callback = safe(function()
+				local mainP = tostring(ctx.CFG_STATE_PATH or "")
+				local bakP = mainP .. ".bak"
+				local okr, detail = pcall(function()
+					local data = readfile(bakP)
+					assert(data and #data > 0, "backup empty")
+					writefile(mainP, data)
+					pcall(function()
+						local gp = "garden_state_" .. tostring(ctx.LP.UserId) .. ".json"
+						if isfile(gp) then writefile(gp, data) end
+					end)
+					return #data
+				end)
+				if okr then
+					W.notify("Config", "Backup restored (" .. tostring(detail) .. " bytes), re-exec the script now")
+					ctx.log("[config] backup restored -> " .. mainP)
+				else
+					W.notify("Config", "No backup file found")
+					ctx.log("[config] restore FAILED: " .. tostring(detail))
+				end
 			end),
 		})
 

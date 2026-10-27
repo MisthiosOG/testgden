@@ -737,6 +737,17 @@ return function(ctx)
 			return
 		end
 		if lastSaved == ser then return end
+		-- Backup rotasi: sebelum nimpa file utama, arsipkan isi lamanya ke .bak.
+		-- Kalau ada wipe aneh, selalu ada jalan pulang satu langkah.
+		if type(readfile) == "function" and type(writefile) == "function" then
+			pcall(function()
+				local mainP = STATE_CANDIDATES[1]
+				local old = readfile(mainP)
+				if old and #old > 0 and old ~= ser then
+					writefile(mainP .. ".bak", old)
+				end
+			end)
+		end
 		-- Tulis ke SEMUA kandidat: VFS executor beda-beda tingkahnya, dan
 		-- satu path yang nyantol itu semua yang dibutuhkan buat load balik.
 		local wroteAny = false
