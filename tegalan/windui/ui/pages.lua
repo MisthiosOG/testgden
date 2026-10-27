@@ -1231,43 +1231,21 @@ end
 		--------------------------------------------------- panel 4: Bronto Configuration
 		miniTab("bronto", function(sec)
 			sec:Paragraph({
-				Title = "Bronto Configuration",
-				Desc = "Egg yg di-hatch pakai Bronto team (+30% berat). Prioritas: aturan per-pet di tab Sell Config. Filter di bawah = fallback kalau aturan kosong.",
-			})
-			makeMultiW(sec, "Special Pets", "Pet yg WAJIB di-hatch pakai Bronto team (★ Special).",
-				reg.PET_EGG_ONLY, CFG.brontoSpecialPets, function() persist() end, { fillDelay = 1.0 })
-			makeInputW(sec, "Special Pets Weight Filter", "Special cuma dihitung kalau weight > ini (0 = ga difilter).",
-				function() return tostring(CFG.brontoSpecialWeight or 0) end,
-				function(t) CFG.brontoSpecialWeight = tonumber(t) or 0 end)
-			makeMultiW(sec, "Universal Weight Pet Types", "Tipe pet buat aturan universal (kosong = semua).",
-				reg.PET_EGG_ONLY, CFG.brontoUniversalTypes, function() persist() end, { fillDelay = 1.1 })
-			makeInputW(sec, "Universal Weight Threshold", "Pakai Bronto team kalau weight > ini (0 = off).",
-				function() return tostring(CFG.brontoUniversalWeight or 0) end,
-				function(t) CFG.brontoUniversalWeight = tonumber(t) or 0 end)
-			makeToggleW(sec, "Don't Hatch Special Pets", "Skip special pet sama sekali (jangan di-hatch).",
-				function() return CFG.brontoSkipSpecial end,
-				function(v) CFG.brontoSkipSpecial = v end)
-			addRefresh(sec)
-		end)
-
-		--------------------------------------------------- panel 5: Sell Configuration
-		miniTab("sell", function(sec)
-			sec:Paragraph({
-				Title = "Sell & Bronto Rule Per-Pet",
-				Desc = "Aturan utama: Weight < KG -> aksi (SELL/KEEP). Weight >= KG -> KEEP + BRONTO. Tandai ★ Special = wajib Bronto.",
+				Title = "Sell & Bronto Rule (Bulk)",
+				Desc = "Weight < KG -> aksi (SELL/KEEP). Weight >= KG -> KEEP + BRONTO (hatch pakai Bronto team). Tandai ★ Special = wajib Bronto + alert.",
 			})
 
-			-- Bulk editor (pengganti tabel per-pet build lama):
+			-- Bulk editor: per-pet rule terpadu (dipakai sell & bronto).
 			local bulkSel, bulkKg, bulkAction, bulkSpecial = {}, 0.8, "sell", false
 			makeMultiW(sec, "Select Pet Types (Bulk)", "Pilih beberapa jenis pet sekaligus",
-				reg.PET_OPTIONS, bulkSel, function() persist() end, { fillDelay = 1.2 })
+				reg.PET_OPTIONS, bulkSel, function() persist() end, { fillDelay = 1.0 })
 			makeInputW(sec, "KG (Bulk)", "Batas berat target pet",
 				function() return tostring(bulkKg) end,
 				function(t) bulkKg = tonumber(t) or 0.8 end)
 			makeSingleW(sec, "Below KG Action (Bulk)", "Aksi kalau berat di bawah batas",
 				function() return { "sell", "keep" } end,
 				function() return bulkAction end,
-				function(v) bulkAction = (v == "keep") and "keep" or "sell" end, { fillDelay = 1.4 })
+				function(v) bulkAction = (v == "keep") and "keep" or "sell" end, { fillDelay = 1.1 })
 			makeToggleW(sec, "Special Pet (Bulk)", "Tandai pet terpilih sbg Special (★ alert & bronto).",
 				function() return bulkSpecial end,
 				function(v) bulkSpecial = v end)
@@ -1305,7 +1283,7 @@ end
 					return list
 				end,
 				function() return remVal end,
-				function(v) remVal = v end, { register = true, fillDelay = 1.6 })
+				function(v) remVal = v end, { register = true, fillDelay = 1.2 })
 
 			sec:Button({
 				Title = "Remove Selected Rule",
@@ -1332,12 +1310,16 @@ end
 				end),
 			})
 
-			sec:Paragraph({
-				Title = "Filter Cepat (dipakai kalau Rules kosong)",
-				Desc = "Jual sederhana: cocok tipe + di bawah threshold. Rules per-pet di atas SELALU menang kalau ada.",
-			})
+			makeToggleW(sec, "Don't Hatch Special Pets", "Skip special pet sama sekali (jangan di-hatch).",
+				function() return CFG.brontoSkipSpecial end,
+				function(v) CFG.brontoSkipSpecial = v end)
+			addRefresh(sec)
+		end)
+
+		--------------------------------------------------- panel 5: Sell Configuration
+		miniTab("sell", function(sec)
 			makeMultiW(sec, "Pets to Sell", "Tipe pet yg DIJUAL (sisanya difavoritin biar aman)",
-				reg.PET_OPTIONS, CFG.sellPetTypes, function() persist() end, { fillDelay = 1.7 })
+				reg.PET_OPTIONS, CFG.sellPetTypes, function() persist() end, { fillDelay = 1.0 })
 			makeInputW(sec, "Sell Weight Threshold", "Jual kalau weight < ini (0 = off)",
 				function() return tostring(CFG.sellWeightThreshold or 0) end,
 				function(t) CFG.sellWeightThreshold = tonumber(t) or 0 end)
@@ -1345,7 +1327,7 @@ end
 				function() return tostring(CFG.sellAgeThreshold or 0) end,
 				function(t) CFG.sellAgeThreshold = tonumber(t) or 0 end)
 			makeMultiW(sec, "Special Pets to Sell", "Pet spesial (jual by weight)",
-				reg.PET_EGG_ONLY, CFG.sellSpecialTypes, function() persist() end, { fillDelay = 1.8 })
+				reg.PET_EGG_ONLY, CFG.sellSpecialTypes, function() persist() end, { fillDelay = 1.1 })
 			makeInputW(sec, "Special Pet Weight Threshold", "Jual pet spesial dgn weight < ini (0 = off)",
 				function() return tostring(CFG.sellSpecialWeight or 0) end,
 				function(t) CFG.sellSpecialWeight = tonumber(t) or 0 end)
@@ -1357,7 +1339,7 @@ end
 			makeSingleW(sec, "Sell Trigger", "Cycle = jual tiap N cycle hatch. Backpack = jual pas pet >= batas.",
 				function() return { "Cycle", "Backpack" } end,
 				function() return CFG.sellMode or "Cycle" end,
-				function(v) CFG.sellMode = (v == "Backpack") and "Backpack" or "Cycle" end, { fillDelay = 1.9 })
+				function(v) CFG.sellMode = (v == "Backpack") and "Backpack" or "Cycle" end, { fillDelay = 1.2 })
 			makeInputW(sec, "Sell Tiap Berapa Cycle", "Dipakai kalau Sell Trigger = Cycle.",
 				function() return tostring(CFG.sellEveryNCycles or 1) end,
 				function(t) CFG.sellEveryNCycles = math.max(1, tonumber(t) or 1) end)
@@ -1367,7 +1349,7 @@ end
 			makeSingleW(sec, "Sell Style", "One by One = jual yg cocok filter saja (aman). All at Once = jual semua non-favorit yg cocok.",
 				function() return { "One by One", "All at Once" } end,
 				function() return CFG.sellStyle or "All at Once" end,
-				function(v) CFG.sellStyle = (v == "One by One") and "One by One" or "All at Once" end, { fillDelay = 2.0 })
+				function(v) CFG.sellStyle = (v == "One by One") and "One by One" or "All at Once" end, { fillDelay = 1.3 })
 			makeToggleW(sec, "Auto Boost Before Sell", "Boost pet aktif pakai toy sebelum jual",
 				function() return CFG.autoBoostBeforeSell end,
 				function(v) CFG.autoBoostBeforeSell = v end)
