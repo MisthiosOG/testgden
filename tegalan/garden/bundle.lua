@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 43 modul, di-generate 2026-10-27T12:51:35.250Z
+-- 43 modul, di-generate 2026-10-27T13:00:16.697Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua — init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -13948,11 +13948,6 @@ return function(ctx)
     end
 
     local tabs = {}
-    local uiBuildOps = 0
-    local function yieldUiBuild()
-        uiBuildOps += 1
-        if uiBuildOps % 5 == 0 then task.wait() end
-    end
     local tabIcons = {
         Pet = "paw-print", Farm = "wheat", Hatch = "egg",
         Elephant = "rabbit", Flow = "git-branch", Leveling = "zap",
@@ -14016,42 +14011,64 @@ return function(ctx)
         return { __windTab = tab, Visible = false }
     end
 
+    -- Every adapter is crash-proof: a failing getter or failing WindUI control
+    -- logs one line and returns a harmless stub instead of killing pages.lua
+    -- (one throw used to blank every tab built after it).
+    local function safe(tag, fn)
+        local ok, result = pcall(fn)
+        if not ok then
+            print("[GAGHub][WINDUI] adapter fail " .. tostring(tag) .. ": " .. tostring(result))
+            return nil
+        end
+        return result
+    end
+
     local function makeToggle(parent, title, desc, getValue, setValue)
-        yieldUiBuild()
+        task.wait()
         local tab = parentTab(parent)
-        local control = tab:Toggle({
-            Title = title,
-            Desc = desc,
-            Value = type(getValue) == "function" and getValue() or false,
-            Callback = function(value)
-                if setValue then setValue(value) end
-            end,
-        })
+        local initial = (type(getValue) == "function" and safe("toggle-get", getValue)) or false
+        local control = safe("toggle", function()
+            return tab:Toggle({
+                Title = title,
+                Desc = desc,
+                Value = initial == true,
+                Callback = function(value)
+                    if setValue then pcall(setValue, value) end
+                end,
+            })
+        end)
         return setmetatable({ _windControl = control }, {
             __index = control,
             __call = function()
-                if control and control.Set and getValue then control:Set(getValue()) end
+                if control and control.Set and getValue then
+                    local ok, v = pcall(getValue)
+                    if ok and v ~= nil then pcall(function() control:Set(v == true) end) end
+                end
             end,
         })
     end
 
     local function makeInput(parent, title, desc, getValue, setValue)
-        yieldUiBuild()
+        task.wait()
         local tab = parentTab(parent)
-        return tab:Input({
-            Title = title,
-            Desc = desc,
-            Value = type(getValue) == "function" and tostring(getValue()) or "",
-            Callback = function(value)
-                if setValue then setValue(value) end
-            end,
-        })
+        local initial = (type(getValue) == "function" and safe("input-get", getValue)) or nil
+        return safe("input", function()
+            return tab:Input({
+                Title = title,
+                Desc = desc,
+                Value = initial ~= nil and tostring(initial) or "",
+                Callback = function(value)
+                    if setValue then pcall(setValue, value) end
+                end,
+            })
+        end)
     end
 
     local function makeSingleDropdown(parent, title, desc, getOptions, getValue, setValue)
-        yieldUiBuild()
+        task.wait()
         local tab = parentTab(parent)
-        local options = type(getOptions) == "function" and getOptions() or {}
+        local options = (type(getOptions) == "function" and safe("dropdown-get", getOptions)) or {}
+        if type(options) ~= "table" then options = {} end
         local displayToCode = {}
         local codeToDisplay = {}
         for _, option in ipairs(options) do
@@ -14060,21 +14077,24 @@ return function(ctx)
                 codeToDisplay[option.name or option.value] = option.display or option.name or option.value
             end
         end
-        return tab:Dropdown({
-            Title = title,
-            Desc = desc,
-            Values = asValues(options),
-            Value = type(getValue) == "function" and codeToDisplay[getValue()] or nil,
-            AllowNone = true,
-            SearchBarEnabled = #options > 12,
-            Callback = function(value)
-                if setValue then setValue(displayToCode[value] or value) end
-            end,
-        })
+        local current = (type(getValue) == "function" and safe("dropdown-cur", getValue)) or nil
+        return safe("dropdown", function()
+            return tab:Dropdown({
+                Title = title,
+                Desc = desc,
+                Values = asValues(options),
+                Value = current ~= nil and codeToDisplay[current] or nil,
+                AllowNone = true,
+                SearchBarEnabled = #options > 25,
+                Callback = function(value)
+                    if setValue then pcall(setValue, displayToCode[value] or value) end
+                end,
+            })
+        end)
     end
 
     local function makeMultiDropdown(parent, title, desc, options, selected, onChange)
-        yieldUiBuild()
+        task.wait()
         local tab = parentTab(parent)
         local values, displayToValue = {}, {}
         for _, option in ipairs(options or {}) do
@@ -14083,52 +14103,58 @@ return function(ctx)
             values[#values + 1] = display
             displayToValue[display] = value
         end
-        return tab:Dropdown({
-            Title = title,
-            Desc = desc,
-            Values = values,
-            Multi = true,
-            AllowNone = true,
-            SearchBarEnabled = true,
-            Callback = function(items)
-                for key in pairs(selected or {}) do selected[key] = nil end
-                for _, value in ipairs(items or {}) do selected[displayToValue[value] or value] = true end
-                if onChange then onChange() end
-            end,
-        })
+        return safe("multidd", function()
+            return tab:Dropdown({
+                Title = title,
+                Desc = desc,
+                Values = values,
+                Multi = true,
+                AllowNone = true,
+                SearchBarEnabled = #values > 25,
+                Callback = function(items)
+                    for key in pairs(selected or {}) do selected[key] = nil end
+                    for _, value in ipairs(items or {}) do selected[displayToValue[value] or value] = true end
+                    if onChange then pcall(onChange) end
+                end,
+            })
+        end)
     end
 
     local function makeMultiDropdownDyn(parent, title, desc, getOptions, selected, onChange)
-        yieldUiBuild()
+        task.wait()
         local tab = parentTab(parent)
-        local values = type(getOptions) == "function" and getOptions() or {}
+        local values = (type(getOptions) == "function" and safe("dyn-get", getOptions)) or {}
+        if type(values) ~= "table" then values = {} end
         local displayToValue = {}
         for _, option in ipairs(values) do
             if type(option) == "table" then
                 displayToValue[option.display or option.name or option.value] = option.value or option.name
             end
         end
-        local dropdown = tab:Dropdown({
-            Title = title,
-            Desc = desc,
-            Values = asValues(values),
-            Multi = true,
-            AllowNone = true,
-            SearchBarEnabled = true,
-            Callback = function(items)
-                for key in pairs(selected or {}) do selected[key] = nil end
-                for _, value in ipairs(items or {}) do
-                    selected[displayToValue[value] or value] = true
-                end
-                if onChange then onChange() end
-            end,
-        })
-        return dropdown
+        return safe("dyndd", function()
+            return tab:Dropdown({
+                Title = title,
+                Desc = desc,
+                Values = asValues(values),
+                Multi = true,
+                AllowNone = true,
+                SearchBarEnabled = #values > 25,
+                Callback = function(items)
+                    for key in pairs(selected or {}) do selected[key] = nil end
+                    for _, value in ipairs(items or {}) do
+                        selected[displayToValue[value] or value] = true
+                    end
+                    if onChange then pcall(onChange) end
+                end,
+            })
+        end)
     end
 
     local function makeButton(parent, title, desc, callback)
-        yieldUiBuild()
-        return parentTab(parent):Button({ Title = title, Desc = desc, Callback = callback })
+        task.wait()
+        return safe("button", function()
+            return parentTab(parent):Button({ Title = title, Desc = desc, Callback = callback })
+        end)
     end
 
     local function makeSubTabs(parent, list, defaultId)
