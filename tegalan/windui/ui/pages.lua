@@ -1385,8 +1385,17 @@ end
 			Desc = "Force-save all settings to the state file.",
 			Callback = safe(function()
 				persist()
-				W.notify("Settings", "Config saved.")
-				ctx.log("Settings: config saved manually.")
+				local okr, info = pcall(function()
+					local path = tostring(ctx.CFG_STATE_PATH or "")
+					return path .. " (" .. tostring(#readfile(path)) .. " bytes)"
+				end)
+				if okr then
+					W.notify("Settings", "Saved -> " .. info)
+					ctx.log("Settings: manual save -> " .. info)
+				else
+					W.notify("Settings", "Save FAILED, read the log")
+					ctx.log("Settings: save FAILED (readfile/writefile rejected)")
+				end
 			end),
 		})
 

@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T20:02:29.296Z
+-- 42 modul, di-generate 2026-10-27T20:06:48.114Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -919,9 +919,38 @@ return function(ctx)
 			print("[WindUIHub] " .. tostring(msg))
 		end
 	end
+	-- jsonSafe CFG runtime bisa nyampur nilai non-JSON (fungsi, Instance, NaN)
+	-- -> JSONEncode nge-throw -> file gak pernah ketulis & folder kosong.
+	-- Drop-in clone yang cuma nyimpen number/string/boolean/table polos.
+	local function jsonSafe(v, depth)
+		local t = type(v)
+		if t == "number" then
+			if v ~= v or v == math.huge or v == -math.huge then return 0 end
+			return v
+		elseif t == "string" or t == "boolean" then
+			return v
+		elseif t == "table" and depth < 9 then
+			local out = {}
+			for k, val in pairs(v) do
+				local kt = type(k)
+				if kt == "string" or kt == "number" then
+					local sv = jsonSafe(val, depth + 1)
+					if sv ~= nil then out[k] = sv end
+				end
+			end
+			return out
+		end
+		return nil
+	end
 	local function autoSave()
 		if type(writefile) ~= "function" then return end
-		local ok, ser = pcall(function() return HttpService:JSONEncode(CFG) end)
+		-- jsonSafe: BGANYA executor JSONEncode-nya nge-throw kalau CFG kecampur
+		-- fungsi/instance/NaN (module runtime bisa nambahin) -> file gak pernah
+		-- ketulis & folder tetap kosong. Bersihin dulu: cuma angka/string/boolean
+		-- yang lolos, sisanya dibuang. 1e-20 aman, hasil string pasti encodable.
+		local ok, ser = pcall(function()
+			return HttpService:JSONEncode(jsonSafe(CFG, 0))
+		end)
 		if not ok then
 			if not fsWarned then
 				fsWarned = true
@@ -951,6 +980,26 @@ return function(ctx)
 		end
 	end)
 	pcall(function() game:BindToClose(autoSave) end)
+
+	-- Probe filesystem: tulis 1 byte + baca balik. DANAKAN ini biar nggak
+	-- nebak-nebak lagi kalau config nggak nempel di executor tertentu.
+	pcall(function() ctx.CFG_STATE_PATH = STATE_FILE end)
+	task.spawn(function()
+		local probeOk = false
+		if type(writefile) == "function" and type(readfile) == "function" then
+			pcall(function()
+				local pf = STATE_FILE .. ".probe"
+				writefile(pf, "1")
+				probeOk = (readfile(pf) == "1")
+				pcall(delfile, pf)
+			end)
+		end
+		if probeOk then
+			earlyLog("filesystem OK: " .. STATE_FILE)
+		else
+			earlyLog("filesystem probe GAGAL, config tidak bakal tersimpan di executor ini")
+		end
+	end)
 
 	if type(writefile) ~= "function" then
 		earlyLog("executor tanpa writefile, config tidak bisa disimpan")
@@ -12177,8 +12226,17 @@ end
 			Desc = "Force-save all settings to the state file.",
 			Callback = safe(function()
 				persist()
-				W.notify("Settings", "Config saved.")
-				ctx.log("Settings: config saved manually.")
+				local okr, info = pcall(function()
+					local path = tostring(ctx.CFG_STATE_PATH or "")
+					return path .. " (" .. tostring(#readfile(path)) .. " bytes)"
+				end)
+				if okr then
+					W.notify("Settings", "Saved -> " .. info)
+					ctx.log("Settings: manual save -> " .. info)
+				else
+					W.notify("Settings", "Save FAILED, read the log")
+					ctx.log("Settings: save FAILED (readfile/writefile rejected)")
+				end
 			end),
 		})
 

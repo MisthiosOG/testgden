@@ -637,9 +637,38 @@ return function(ctx)
 			print("[WindUIHub] " .. tostring(msg))
 		end
 	end
+	-- jsonSafe CFG runtime bisa nyampur nilai non-JSON (fungsi, Instance, NaN)
+	-- -> JSONEncode nge-throw -> file gak pernah ketulis & folder kosong.
+	-- Drop-in clone yang cuma nyimpen number/string/boolean/table polos.
+	local function jsonSafe(v, depth)
+		local t = type(v)
+		if t == "number" then
+			if v ~= v or v == math.huge or v == -math.huge then return 0 end
+			return v
+		elseif t == "string" or t == "boolean" then
+			return v
+		elseif t == "table" and depth < 9 then
+			local out = {}
+			for k, val in pairs(v) do
+				local kt = type(k)
+				if kt == "string" or kt == "number" then
+					local sv = jsonSafe(val, depth + 1)
+					if sv ~= nil then out[k] = sv end
+				end
+			end
+			return out
+		end
+		return nil
+	end
 	local function autoSave()
 		if type(writefile) ~= "function" then return end
-		local ok, ser = pcall(function() return HttpService:JSONEncode(CFG) end)
+		-- jsonSafe: BGANYA executor JSONEncode-nya nge-throw kalau CFG kecampur
+		-- fungsi/instance/NaN (module runtime bisa nambahin) -> file gak pernah
+		-- ketulis & folder tetap kosong. Bersihin dulu: cuma angka/string/boolean
+		-- yang lolos, sisanya dibuang. 1e-20 aman, hasil string pasti encodable.
+		local ok, ser = pcall(function()
+			return HttpService:JSONEncode(jsonSafe(CFG, 0))
+		end)
 		if not ok then
 			if not fsWarned then
 				fsWarned = true
@@ -669,6 +698,26 @@ return function(ctx)
 		end
 	end)
 	pcall(function() game:BindToClose(autoSave) end)
+
+	-- Probe filesystem: tulis 1 byte + baca balik. DANAKAN ini biar nggak
+	-- nebak-nebak lagi kalau config nggak nempel di executor tertentu.
+	pcall(function() ctx.CFG_STATE_PATH = STATE_FILE end)
+	task.spawn(function()
+		local probeOk = false
+		if type(writefile) == "function" and type(readfile) == "function" then
+			pcall(function()
+				local pf = STATE_FILE .. ".probe"
+				writefile(pf, "1")
+				probeOk = (readfile(pf) == "1")
+				pcall(delfile, pf)
+			end)
+		end
+		if probeOk then
+			earlyLog("filesystem OK: " .. STATE_FILE)
+		else
+			earlyLog("filesystem probe GAGAL, config tidak bakal tersimpan di executor ini")
+		end
+	end)
 
 	if type(writefile) ~= "function" then
 		earlyLog("executor tanpa writefile, config tidak bisa disimpan")
