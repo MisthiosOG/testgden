@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T15:42:42.721Z
+-- 42 modul, di-generate 2026-10-27T15:44:58.554Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -10633,16 +10633,17 @@ return function(ctx)
 			end
 			return displays, selected
 		end
-		local displays, selected = snapshot()
+		-- Values kosong saat build: snapshot (bisa nge-getData, first-call nunggu
+		-- data game = freeze) dikerjakan task.spawn di bawah setelah window jadi.
 		local control = parent:Dropdown({
 			Title = title,
 			Desc = desc,
-			Values = displays,
+			Values = {},
 			Multi = true,
 			AllowNone = true,
 			SearchBarEnabled = true,
 			MenuWidth = 240,
-			Value = selected,
+			Value = {},
 			Callback = safe(function(sel)
 				if type(sel) == "string" then sel = { sel } end
 				for k in pairs(selSet) do selSet[k] = nil end
@@ -10674,7 +10675,6 @@ return function(ctx)
 				if tl then tl.TextWrapped = true end
 			end
 		end
-		wrapTitles()
 		local function refresh()
 			task.spawn(function()
 				local ds, sel2 = snapshot()
@@ -10683,6 +10683,15 @@ return function(ctx)
 				wrapTitles()
 			end)
 		end
+		-- Snapshot awal DI-DEFER: getOptions() bisa nge-getData (DataService:GetData
+		-- first-call nunggu data game -> serial 3x dropdown = freeze 4.5s saat load).
+		-- Dropdown kebangun kosong instan, diisi + select persist belakangan.
+		task.spawn(function()
+			local ds, sel2 = snapshot()
+			pcall(function() control:Refresh(ds) end)
+			pcall(function() control:Select(sel2) end)
+			wrapTitles()
+		end)
 		if opts.register then
 			W.refreshers[#W.refreshers + 1] = refresh
 		end
