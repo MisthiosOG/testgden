@@ -2,8 +2,8 @@
 -- Bypasses stale GAG_APP/router overrides; production diagnostic entrypoint.
 local compile = loadstring or load
 assert(compile, "No Luau compiler available")
-local BUILD = "windui-legacy-2026-10-27c"
-local REVISION = "22fd0b5cf751e0f03b636d0e27b5260abd920039"
+local BUILD = "pink-royale-2026-10-27"
+local REVISION = "6e5100e7ed6d598c74032f3392f67aa7b8566648"
 local BASE = "https://raw.githubusercontent.com/MisthiosOG/testgden/" .. REVISION .. "/tegalan/garden"
 print("[iStealth][DIRECT] build=" .. BUILD)
 
