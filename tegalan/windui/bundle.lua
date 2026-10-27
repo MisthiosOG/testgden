@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T15:44:58.554Z
+-- 42 modul, di-generate 2026-10-27T15:53:16.266Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -10561,6 +10561,33 @@ return function(ctx)
 		})
 	end
 
+	-- Cache opsi dinamis: dropdown V1, V2 & Boost pets sama-sama ambil
+	-- ctx.inventoryPetOptions -> GetData bisa nunggu data game pas baru join
+	-- (freeze 4.5-23s kalau 3 dropdown fetch serial). Caller pertama fetch,
+	-- caller lain nunggu hasilnya -> cukup SATU GetData per cacheKey per TTL.
+	local optCache = {}
+	local function fetchOptions(cacheKey, getOptions)
+		if not cacheKey then
+			local ok, list = pcall(getOptions)
+			return (ok and type(list) == "table") and list or {}
+		end
+		local c = optCache[cacheKey]
+		if c then
+			if not c.done then
+				local t0 = os.clock()
+				while not optCache[cacheKey].done and os.clock() - t0 < 30 do task.wait(0.2) end
+				local fc = optCache[cacheKey]
+				return (fc and fc.done) and fc.list or {}
+			end
+			if os.clock() - c.at < 5 then return c.list end
+		end
+		optCache[cacheKey] = { done = false }
+		local ok, list = pcall(getOptions)
+		list = (ok and type(list) == "table") and list or {}
+		optCache[cacheKey] = { done = true, at = os.clock(), list = list }
+		return list
+	end
+
 	-- Single dropdown: opsi bisa string atau {name=, display=}; snapshot saat build
 	-- + refresh() buat dipanggil ulang (WindUI Dropdown punya :Refresh).
 	local function makeSingleW(parent, title, desc, getOptions, getv, setv, opts)
@@ -10622,16 +10649,18 @@ return function(ctx)
 			return d, nil
 		end
 		local function snapshot()
-			local list, displays, selected = {}, {}, {}
-			pcall(function()
-				list = getOptions() or {}
-			end)
-			for _, o in ipairs(list) do
+			-- fetchOptions: cache+dedupe (GetData). Cap opts.max: inventory GAG
+			-- bisa ribuan pet -> Refresh dist bangun baris sinkron = freeze.
+			local list = fetchOptions(opts.cacheKey, getOptions)
+			local max = opts.max or 250
+			local displays, selected = {}, {}
+			for i, o in ipairs(list) do
+				if i > max then break end
 				local t, rest = splitDisplay(o.display)
 				displays[#displays + 1] = { Title = t, Desc = rest, v = o.value }
 				if selSet[o.value] then selected[#selected + 1] = t end
 			end
-			return displays, selected
+			return displays, selected, math.max(0, #list - max)
 		end
 		-- Values kosong saat build: snapshot (bisa nge-getData, first-call nunggu
 		-- data game = freeze) dikerjakan task.spawn di bawah setelah window jadi.
@@ -10675,23 +10704,26 @@ return function(ctx)
 				if tl then tl.TextWrapped = true end
 			end
 		end
-		local function refresh()
-			task.spawn(function()
-				local ds, sel2 = snapshot()
-				pcall(function() control:Refresh(ds) end)
-				pcall(function() control:Select(sel2) end)
-				wrapTitles()
-			end)
-		end
-		-- Snapshot awal DI-DEFER: getOptions() bisa nge-getData (DataService:GetData
-		-- first-call nunggu data game -> serial 3x dropdown = freeze 4.5s saat load).
-		-- Dropdown kebangun kosong instan, diisi + select persist belakangan.
-		task.spawn(function()
-			local ds, sel2 = snapshot()
+		local function fill()
+			local t0 = os.clock()
+			local ds, sel2, extra = snapshot()
+			local t1 = os.clock()
 			pcall(function() control:Refresh(ds) end)
 			pcall(function() control:Select(sel2) end)
 			wrapTitles()
-		end)
+			if ctx.log then
+				ctx.log(("dropdown '%s' terisi: fetch+snapshot %.2fs, refresh %.2fs (%d opsi%s)")
+					:format(title, t1 - t0, os.clock() - t1, #ds, extra > 0 and (", +" .. extra .. " pet tak ditampilkan") or ""))
+			end
+		end
+		local function refresh()
+			-- Tombol "Update Pet List": cache TTL 5s bikin ini murah.
+			task.spawn(function() pcall(fill) end)
+		end
+		-- Isi awal DI-DELAY + DI-STAGGER per dropdown: task.spawn jalan inline
+		-- sampai yield pertama -> GetData cold bisa ngaretin build. delay tiap
+		-- dropdown beda (0.3/1.3/2.3/3.3) biar fetch & Refresh gak numpuk.
+		task.delay(opts.fillDelay or 1, function() pcall(fill) end)
 		if opts.register then
 			W.refreshers[#W.refreshers + 1] = refresh
 		end
@@ -10880,7 +10912,8 @@ end
 			makeMultiDynW(sec, "Select Pets for Pickup [V1]",
 				"Pilih pet dari backpack (kosong = semua yg di garden)",
 				function() return ctx.inventoryPetOptions(CFG.pnpUuids) end,
-				CFG.pnpUuids, function() persist() end, { register = true })
+				CFG.pnpUuids, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.3, max = 250 })
 			makeInputW(sec, "Pickup Delay (sec)", "Jeda tiap siklus (idealnya = saat skill ready)",
 				function() return CFG.pickupDelay end,
 				function(t) CFG.pickupDelay = tonumber(t) or 0.3 end)
@@ -10921,7 +10954,8 @@ end
 			makeMultiDynW(sec, "Select Pets for Pickup [V2]",
 				"Pilih pet dari backpack (kosong = semua yg di garden)",
 				function() return ctx.inventoryPetOptions(CFG.pnpV2Uuids) end,
-				CFG.pnpV2Uuids, function() persist() end, { register = true })
+				CFG.pnpV2Uuids, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 1.3, max = 250 })
 			makeInputW(sec, "Pickup Delay (sec)", "Jeda sebelum tiap pickup",
 				function() return CFG.pnpV2PickupDelay end,
 				function(t) CFG.pnpV2PickupDelay = tonumber(t) or 0.05 end)
@@ -10951,10 +10985,12 @@ end
 		miniTab("boost", function(sec)
 			makeMultiDynW(sec, "Select Pets to Boost", "Pet yang mau di-boost (aktif di garden)",
 				function() return ctx.inventoryPetOptions(CFG.boostPetUuids) end,
-				CFG.boostPetUuids, function() persist() end, { register = true })
+				CFG.boostPetUuids, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 2.3, max = 250 })
 			makeMultiDynW(sec, "Select Boost Items", "Item boost (Pet Toy) yang dipakai",
 				function() return ctx.getBoostItemOptions(CFG.boostItemNames) end,
-				CFG.boostItemNames, function() persist() end, { register = true })
+				CFG.boostItemNames, function() persist() end,
+				{ register = true, cacheKey = "boost_items", fillDelay = 3.3, max = 250 })
 			makeToggleW(sec, "Enable Automation Boost",
 				"Auto apply boost item ke pet, re-apply pas boost habis",
 				function() return CFG.boostEnabled end,
