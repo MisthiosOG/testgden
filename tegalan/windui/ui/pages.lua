@@ -32,9 +32,9 @@ return function(ctx)
 				setv(v)
 				persist()
 				if notifyTitle then
-					W.notify(notifyTitle, title .. " ➔ " .. (v and "ON" or "OFF"))
+					W.notify(notifyTitle, title .. " -> " .. (v and "ON" or "OFF"))
 				end
-				if ctx.log then ctx.log(title .. " ➔ " .. (v and "ON" or "OFF")) end
+				if ctx.log then ctx.log(title .. " -> " .. (v and "ON" or "OFF")) end
 				if control and control.Set and type(getv) == "function" then
 					local real = getv()
 					if real ~= v then pcall(function() control:Set(real) end) end
@@ -200,7 +200,7 @@ return function(ctx)
 		local function fill()
 			local displays, selected = snapshot()
 			local n = dropdownFill(control, displays, selected)
-			if ctx.log then ctx.log(("dropdown '%s' terisi (%d opsi)"):format(title, n)) end
+			if ctx.log then ctx.log(("dropdown '%s' filled (%d options)"):format(title, n)) end
 		end
 		snapshot() -- isi mapping d2v/v2d buat Callback; rows-nya ditahan kosong
 		control = parent:Dropdown({
@@ -282,8 +282,8 @@ return function(ctx)
 		local function buildRows(p)
 			local n = dropdownFill(control, p.ds, p.sel2)
 			if ctx.log then
-				ctx.log(("dropdown '%s' terisi: %d opsi%s")
-					:format(title, n, p.extra > 0 and (", +" .. p.extra .. " pet tak ditampilkan") or ""))
+				ctx.log(("dropdown '%s' filled: %d options%s")
+					:format(title, n, p.extra > 0 and (", +" .. p.extra .. " pets not shown") or ""))
 			end
 		end
 		-- LAZY: baris dibangun pas menu pertama dibuka. Snapshot datanya sendiri
@@ -351,7 +351,7 @@ return function(ctx)
 		lazyOpen(control, function()
 			local n = dropdownFill(control, options, savedTitles())
 			if ctx.log then
-				ctx.log(("dropdown '%s' terisi (%d opsi)"):format(title, n))
+				ctx.log(("dropdown '%s' filled (%d options)"):format(title, n))
 			end
 		end)
 		return control
@@ -382,12 +382,12 @@ end
 local function addRefresh(sec)
 	sec:Button({
 		Title = "Update Pet List",
-		Desc = "Baca ulang inventory — refresh dropdown dinamis",
+		Desc = "Re-read the inventory and refresh dynamic dropdowns",
 		Callback = safe(function()
 			for _, fn in ipairs(W.refreshers) do
 				pcall(fn)
 			end
-			ctx.log("Pet list di-refresh.")
+			ctx.log("Pet list refreshed.")
 		end),
 	})
 end
@@ -530,14 +530,14 @@ end
 		--------------------------------------------------- panel 1: Pickup Pet V1
 		miniTab("v1", function(sec)
 			makeMultiDynW(sec, "Select Pets for Pickup [V1]",
-				"Pilih pet dari backpack (kosong = semua yg di garden)",
+				"Pick pets from your backpack (empty = every pet in the garden)",
 				function() return ctx.inventoryPetOptions(CFG.pnpUuids) end,
 				CFG.pnpUuids, function() persist() end,
 				{ register = true, cacheKey = "inv_pets", fillDelay = 0.3, max = 250 })
-			makeInputW(sec, "Pickup Delay (sec)", "Jeda tiap siklus (idealnya = saat skill ready)",
+			makeInputW(sec, "Pickup Delay (sec)", "Delay per cycle (ideally when the skill is ready)",
 				function() return CFG.pickupDelay end,
 				function(t) CFG.pickupDelay = tonumber(t) or 0.3 end)
-			makeInputW(sec, "Equip Delay (sec)", "Jeda unequip -> equip (1E-20 = near-instant)",
+			makeInputW(sec, "Equip Delay (sec)", "Delay unequip -> equip (1E-20 = near instant)",
 				function()
 					if CFG.equipDelay == 1e-20 or CFG.equipDelay == 0 or not CFG.equipDelay then return "1E-20" end
 					return tostring(CFG.equipDelay)
@@ -549,11 +549,11 @@ end
 						CFG.equipDelay = tonumber(t) or 1e-20
 					end
 				end)
-			makeInputW(sec, "Scan Interval (sec)", "Frekuensi cek cooldown (min 0.01)",
+			makeInputW(sec, "Scan Interval (sec)", "Cooldown check frequency (min 0.01)",
 				function() return CFG.pnpScanInterval end,
 				function(t) CFG.pnpScanInterval = math.max(0.01, tonumber(t) or 0.05) end)
 			makeToggleW(sec, "Enable Automation Pickup V1",
-				"Polling GetPetCooldown (lama). Nyalain ini matiin V2.",
+				"Polling GetPetCooldown (legacy). Enabling this turns V2 off.",
 				function() return CFG.pnpEnabled end,
 				function(v)
 					CFG.pnpEnabled = v; persist()
@@ -572,21 +572,21 @@ end
 		--------------------------------------------------- panel 2: Pickup Pet V2
 		miniTab("v2", function(sec)
 			makeMultiDynW(sec, "Select Pets for Pickup [V2]",
-				"Pilih pet dari backpack (kosong = semua yg di garden)",
+				"Pick pets from your backpack (empty = every pet in the garden)",
 				function() return ctx.inventoryPetOptions(CFG.pnpV2Uuids) end,
 				CFG.pnpV2Uuids, function() persist() end,
 				{ register = true, cacheKey = "inv_pets", fillDelay = 1.3, max = 250 })
-			makeInputW(sec, "Pickup Delay (sec)", "Jeda sebelum tiap pickup",
+			makeInputW(sec, "Pickup Delay (sec)", "Delay before each pickup",
 				function() return CFG.pnpV2PickupDelay end,
 				function(t) CFG.pnpV2PickupDelay = tonumber(t) or 0.05 end)
-			makeInputW(sec, "Equip Delay (sec)", "Jeda antara unequip -> equip",
+			makeInputW(sec, "Equip Delay (sec)", "Delay between unequip -> equip",
 				function() return CFG.pnpV2EquipDelay end,
 				function(t) CFG.pnpV2EquipDelay = tonumber(t) or 0.03 end)
-			makeInputW(sec, "Scan Interval (sec)", "Frekuensi cek cd dari cache event (min 0.02)",
+			makeInputW(sec, "Scan Interval (sec)", "CD check frequency via the event cache (min 0.02)",
 				function() return CFG.pnpV2ScanInterval end,
 				function(t) CFG.pnpV2ScanInterval = math.max(0.02, tonumber(t) or 0.05) end)
 			v2Ctrl = makeToggleW(sec, "Enable Automation Pickup V2",
-				"Event-driven (PetCooldownsUpdated), stabil. Nyalain ini matiin V1.",
+				"Event-driven (PetCooldownsUpdated), stable. Enabling this turns V1 off.",
 				function() return CFG.pnpV2Enabled end,
 				function(v)
 					CFG.pnpV2Enabled = v; persist()
@@ -603,16 +603,16 @@ end
 
 		--------------------------------------------------- panel 3: Boost Pet
 		miniTab("boost", function(sec)
-			makeMultiDynW(sec, "Select Pets to Boost", "Pet yang mau di-boost (aktif di garden)",
+			makeMultiDynW(sec, "Select Pets to Boost", "Pets to boost (active in the garden)",
 				function() return ctx.inventoryPetOptions(CFG.boostPetUuids) end,
 				CFG.boostPetUuids, function() persist() end,
 				{ register = true, cacheKey = "inv_pets", fillDelay = 2.3, max = 250 })
-			makeMultiDynW(sec, "Select Boost Items", "Item boost (Pet Toy) yang dipakai",
+			makeMultiDynW(sec, "Select Boost Items", "Boost items (Pet Toy) to use",
 				function() return ctx.getBoostItemOptions(CFG.boostItemNames) end,
 				CFG.boostItemNames, function() persist() end,
 				{ register = true, cacheKey = "boost_items", fillDelay = 3.3, max = 250 })
 			makeToggleW(sec, "Enable Automation Boost",
-				"Auto apply boost item ke pet, re-apply pas boost habis",
+				"Auto apply boost items to pets, re-applies when the boost expires",
 				function() return CFG.boostEnabled end,
 				function(v)
 					CFG.boostEnabled = v; persist()
@@ -657,7 +657,7 @@ end
 		local function addStatus(sec, isGift)
 			local stat = sec:Paragraph({
 				Title = isGift and "Gift Trade Status" or "Ticket Trade Status",
-				Desc = "Completed: 0\nPet cocok filter: -\nStatus: IDLE",
+				Desc = "Completed: 0\nMatching pets: -\nStatus: IDLE",
 			})
 			task.spawn(function()
 				task.wait(3)
@@ -674,7 +674,7 @@ end
 						local comp = methodRunning and (ctx.state.completed or 0) or 0
 						local total = isGift and (CFG.giftTotalGifts or 0) or (CFG.totalTrades or 0)
 						local unit = isGift and " gifts" or ""
-						local txt = ("Completed: %d / %d%s\nPet cocok filter: <font color=\"%s\"><b>%d</b></font>\nStatus: %s")
+						local txt = ("Completed: %d / %d%s\nMatching pets: <font color=\"%s\"><b>%d</b></font>\nStatus: %s")
 							:format(comp, total, unit, availCol, avail, statusText)
 						if txt ~= last then
 							last = txt
@@ -687,35 +687,35 @@ end
 		end
 
 		miniTab("ticket", function(sec)
-			makeSingleW(sec, "Target Player", "Pemain tujuan trade tiket",
+			makeSingleW(sec, "Target Player", "Target player for ticket trades",
 				playerOptions,
 				function() return CFG.targetPlayer end,
 				function(v) CFG.targetPlayer = v end, { register = true, fillDelay = 0.5 })
-			makeMultiW(sec, "Pet Types to Trade", "Filter pet by type (kosong = semua non-favorite)",
+			makeMultiW(sec, "Pet Types to Trade", "Filter pets by type (empty = all non-favorite)",
 				reg.PET_OPTIONS, CFG.petTypes, function() persist() end, { fillDelay = 1.1 })
-			makeInputW(sec, "Weight Filter (KG)", "Berat tampilan game | 0=off | +6 = min 6kg | -6 = max 6kg",
+			makeInputW(sec, "Weight Filter (KG)", "In-game display weight | 0=off | +6 = min 6kg | -6 = max 6kg",
 				function() return CFG.weightFilter end,
 				function(t) CFG.weightFilter = tonumber(t) or 0 end)
 			makeInputW(sec, "Age Filter", "0 = off | +50 = min age 50 | -50 = max age 50",
 				function() return CFG.ageFilter end,
 				function(t) CFG.ageFilter = tonumber(t) or 0 end)
-			makeInputW(sec, "Pets Per Trade", "Jumlah pet tiap trade",
+			makeInputW(sec, "Pets Per Trade", "Pets included in each trade",
 				function() return CFG.petsPerTrade end,
 				function(t)
 					local n = tonumber(t)
 					CFG.petsPerTrade = (n and n > 0) and math.floor(n) or 1
 				end)
-			makeInputW(sec, "Total Trades", "Berapa trade dilakukan",
+			makeInputW(sec, "Total Trades", "How many trades to run",
 				function() return CFG.totalTrades end,
 				function(t)
 					local n = tonumber(t)
 					CFG.totalTrades = (n and n >= 0) and math.floor(n) or 0
 				end)
-			makeToggleW(sec, "Auto Unfavorite [Trade]", "Lepas favorite sebelum trade",
+			makeToggleW(sec, "Auto Unfavorite [Trade]", "Remove favorite before trading",
 				function() return CFG.autoUnfavorite end,
 				function(v) CFG.autoUnfavorite = v end)
 			addStatus(sec, false)
-			makeToggleW(sec, "Enable Trade by Ticket", "Kirim trade request tiket, isi pet, terima & confirm",
+			makeToggleW(sec, "Enable Trade by Ticket", "Send a ticket trade request, fill pets, accept & confirm",
 				function() return CFG.tradeTicketEnabled or (CFG.tradeEnabled and CFG.tradeMethod == "ticket") end,
 				function(v)
 					CFG.tradeTicketEnabled = v
@@ -735,11 +735,11 @@ end
 		end)
 
 		miniTab("gift", function(sec)
-			makeSingleW(sec, "Target Player", "Pemain tujuan gift (defaults ke target ticket)",
+			makeSingleW(sec, "Target Player", "Target player for gifts (defaults to the ticket target)",
 				playerOptions,
 				function() return (CFG.giftTargetPlayer ~= "" and CFG.giftTargetPlayer) or CFG.targetPlayer end,
 				function(v) CFG.giftTargetPlayer = v end, { register = true, fillDelay = 0.8 })
-			makeMultiW(sec, "Pet Types to Gift", "Filter pet by type (kosong = semua non-favorite)",
+			makeMultiW(sec, "Pet Types to Gift", "Filter pets by type (empty = all non-favorite)",
 				reg.PET_OPTIONS, CFG.giftPetTypes, function() persist() end, { fillDelay = 1.4 })
 			makeInputW(sec, "Weight Filter (KG)", "0=off | +6 = min 6kg | -6 = max 6kg",
 				function() return CFG.giftWeightFilter end,
@@ -747,23 +747,23 @@ end
 			makeInputW(sec, "Age Filter", "0=off | +50 = min age 50 | -50 = max age 50",
 				function() return CFG.giftAgeFilter end,
 				function(t) CFG.giftAgeFilter = tonumber(t) or 0 end)
-			makeInputW(sec, "Pets Per Batch", "Jumlah pet di-gift per ronde",
+			makeInputW(sec, "Pets Per Batch", "Pets gifted per round",
 				function() return CFG.giftPetsPerBatch end,
 				function(t)
 					local n = tonumber(t)
 					CFG.giftPetsPerBatch = (n and n > 0) and math.floor(n) or 1
 				end)
-			makeInputW(sec, "Total Gifts", "Berapa pet/gift dikirim sebelum berhenti",
+			makeInputW(sec, "Total Gifts", "Pets/gifts to send before stopping",
 				function() return CFG.giftTotalGifts end,
 				function(t)
 					local n = tonumber(t)
 					CFG.giftTotalGifts = (n and n >= 0) and math.floor(n) or 0
 				end)
-			makeToggleW(sec, "Auto Unfavorite [Gift]", "Lepas favorite sebelum kirim gift",
+			makeToggleW(sec, "Auto Unfavorite [Gift]", "Remove favorite before gifting",
 				function() return CFG.giftAutoUnfavorite end,
 				function(v) CFG.giftAutoUnfavorite = v end)
 			addStatus(sec, true)
-			makeToggleW(sec, "Enable Trade by Gift", "Kirim gift pet langsung tanpa tiket (cepat & otomatis)",
+			makeToggleW(sec, "Enable Trade by Gift", "Send pet gifts directly without tickets (fast & automatic)",
 				function() return CFG.tradeGiftEnabled or (CFG.tradeEnabled and CFG.tradeMethod == "gift") end,
 				function(v)
 					CFG.tradeGiftEnabled = v
@@ -783,17 +783,17 @@ end
 		end)
 
 		miniTab("accept", function(sec)
-			makeToggleW(sec, "Automation Accept Gifts", "Otomatis terima gift masuk",
+			makeToggleW(sec, "Automation Accept Gifts", "Auto accept incoming gifts",
 				function() return CFG.acceptGifts end,
 				function(v) CFG.acceptGifts = v end)
-			makeToggleW(sec, "Automation Accept Trades", "Otomatis terima trade masuk",
+			makeToggleW(sec, "Automation Accept Trades", "Auto accept incoming trades",
 				function() return CFG.acceptTrades end,
 				function(v) CFG.acceptTrades = v end)
 			addRefresh(sec)
 		end)
 
 		miniTab("fav", function(sec)
-			makeToggleW(sec, "Auto Favourite Pets", "Otomatis favorite pet type terpilih",
+			makeToggleW(sec, "Auto Favourite Pets", "Auto favorite the selected pet types",
 				function() return CFG.autoFavorite end,
 				function(v)
 					CFG.autoFavorite = v
@@ -802,16 +802,16 @@ end
 						else pcall(ctx.stopAutoFavorite) end
 					end
 				end)
-			makeMultiW(sec, "Favourite Pet Types", "Pet type yang difavoritkan",
+			makeMultiW(sec, "Favourite Pet Types", "Pet types to favorite",
 				reg.PET_OPTIONS, CFG.favoritePetTypes, function() persist() end, { fillDelay = 1.7 })
-			makeToggleW(sec, "Auto Unfavourite Pets", "Otomatis unfavorite pet type terpilih",
+			makeToggleW(sec, "Auto Unfavourite Pets", "Auto unfavorite the selected pet types",
 				function() return CFG.autoUnfavoritePets end,
 				function(v)
 					CFG.autoUnfavoritePets = v
 					if v and ctx.startAutoUnfavorite then pcall(ctx.startAutoUnfavorite)
 					elseif ctx.stopAutoUnfavorite then pcall(ctx.stopAutoUnfavorite) end
 				end)
-			makeMultiW(sec, "Unfavourite Pet Types", "Pet type yang di-unfavorite (kosong = semua pet)",
+			makeMultiW(sec, "Unfavourite Pet Types", "Pet types to unfavorite (empty = all pets)",
 				reg.PET_OPTIONS, CFG.unfavoritePetTypes, function() persist() end, { fillDelay = 2.0 })
 			addRefresh(sec)
 		end)
@@ -838,21 +838,21 @@ end
 
 		--------------------------------------------------- panel 1: Plants
 		miniTab("plants", function(sec)
-			makeMultiDynW(sec, "Select Seeds", "Pilih seed dari inventory (angka = jumlah).",
+			makeMultiDynW(sec, "Select Seeds", "Pick seeds from the inventory (number = quantity).",
 				function() return ctx.getPlantSeedOptions() end,
 				CFG.plantSeedNames, function() persist() end,
 				{ register = true, cacheKey = "inv_seeds", fillDelay = 0.3 })
-			makeSingleW(sec, "Select Position", "Lokasi tanam. Good Position = barisan lurus urut kiri -> kanan.",
+			makeSingleW(sec, "Select Position", "Plant location. Good Position = tidy rows ordered left -> right.",
 				function() return { "Random", "Player Position", "Good Position" } end,
 				function() return CFG.plantPosition end,
 				function(v) CFG.plantPosition = v end, { fillDelay = 0.5 })
-			makeToggleW(sec, "Shovel Penghalang", "Good Position: plant lama yang nutup cell barisan di-shovel, biar tanamannya beneran urut tanpa digeser server.",
+			makeToggleW(sec, "Shovel Blocking Plants", "Good Position: shovel old plants blocking row cells so rows stay truly ordered without server-side shifting.",
 				function() return CFG.goodClear ~= false end,
 				function(v) CFG.goodClear = v; persist() end)
-			makeInputW(sec, "Delay To Plants", "Extra delay (detik) tiap tanam seed.",
+			makeInputW(sec, "Delay To Plants", "Extra delay (sec) per seed planted.",
 				function() return tostring(CFG.plantDelay) end,
 				function(t) CFG.plantDelay = tonumber(t) or 0 end)
-			makeToggleW(sec, "Auto Plants Seed", "Tanam seed terpilih otomatis.",
+			makeToggleW(sec, "Auto Plants Seed", "Auto plant the selected seeds.",
 				function() return CFG.plantSeedEnabled end,
 				function(v)
 					CFG.plantSeedEnabled = v
@@ -863,44 +863,44 @@ end
 
 		--------------------------------------------------- panel 2: Care (Sprinkler + Sprinkler Shovel + Water)
 		miniTab("care", function(sec)
-			makeMultiDynW(sec, "Select Sprinkler", "Sprinkler yg mau dipasang (angka = jumlah).",
+			makeMultiDynW(sec, "Select Sprinkler", "Sprinklers to place (number = quantity).",
 				function() return ctx.getSprinklerOptions() end,
 				CFG.sprinklerNames, function() persist() end, { register = true, fillDelay = 0.6 })
-			makeMultiDynW(sec, "Select Sprinkler Plants", "Pasang dekat plant ini. Kosong = pakai Position.",
+			makeMultiDynW(sec, "Select Sprinkler Plants", "Place near these plants. Empty = use Position.",
 				function() return ctx.getSprinklerPlantOptions() end,
 				CFG.sprinklerPlantNames, function() persist() end, { register = true, fillDelay = 0.8 })
-			makeSingleW(sec, "Select Sprinkler Position", "Lokasi pasang kalau Plants kosong.",
+			makeSingleW(sec, "Select Sprinkler Position", "Place location when Plants is empty.",
 				function() return { "Random", "Player Position" } end,
 				function() return CFG.sprinklerPosition end,
 				function(v) CFG.sprinklerPosition = v end, { fillDelay = 1.0 })
-			makeInputW(sec, "Delay To Sprinkler", "Extra delay (detik) tiap pasang.",
+			makeInputW(sec, "Delay To Sprinkler", "Extra delay (sec) per placement.",
 				function() return tostring(CFG.sprinklerDelay) end,
 				function(t) CFG.sprinklerDelay = tonumber(t) or 0 end)
-			makeToggleW(sec, "Auto Sprinkler", "Pasang sprinkler terpilih otomatis.",
+			makeToggleW(sec, "Auto Sprinkler", "Auto place the selected sprinklers.",
 				function() return CFG.sprinklerEnabled end,
 				function(v)
 					CFG.sprinklerEnabled = v
 					if v and ctx.startSprinkler then pcall(function() ctx.startSprinkler() end) end
 				end)
-			makeMultiDynW(sec, "Select Shovel Sprinkler", "Sprinkler terpasang yg mau dicabut. 'All' = semua.",
+			makeMultiDynW(sec, "Select Shovel Sprinkler", "Placed sprinklers to remove. 'All' = every sprinkler.",
 				function() return ctx.getShovelSprinklerOptions() end,
 				CFG.shovelSprinklerNames, function() persist() end, { register = true, fillDelay = 1.2 })
-			makeInputW(sec, "Delay To Shovel Sprinkler", "Extra delay (detik) tiap cabut.",
+			makeInputW(sec, "Delay To Shovel Sprinkler", "Extra delay (sec) per removal.",
 				function() return tostring(CFG.shovelSprinklerDelay) end,
 				function(t) CFG.shovelSprinklerDelay = tonumber(t) or 0 end)
-			makeToggleW(sec, "Auto Shovel Sprinkler", "Cabut sprinkler terpilih otomatis (equip Shovel).",
+			makeToggleW(sec, "Auto Shovel Sprinkler", "Auto remove the selected sprinklers (equips the Shovel).",
 				function() return CFG.shovelSprinklerEnabled end,
 				function(v)
 					CFG.shovelSprinklerEnabled = v
 					if v and ctx.startShovelSprinkler then pcall(function() ctx.startShovelSprinkler() end) end
 				end)
-			makeMultiDynW(sec, "Select Water Fruits", "Pilih fruit/plant yang mau disiram. 'All' = semua.",
+			makeMultiDynW(sec, "Select Water Fruits", "Pick fruits/plants to water. 'All' = everything.",
 				function() return ctx.getWaterFruitOptions() end,
 				CFG.waterFruitNames, function() persist() end, { register = true, fillDelay = 1.4 })
-			makeInputW(sec, "Delay to Water", "Extra delay (detik) tiap siklus siram.",
+			makeInputW(sec, "Delay to Water", "Extra delay (sec) per watering cycle.",
 				function() return tostring(CFG.waterDelay) end,
 				function(t) CFG.waterDelay = tonumber(t) or 1 end)
-			makeToggleW(sec, "Auto Water Fruits", "Siram fruit terpilih otomatis.",
+			makeToggleW(sec, "Auto Water Fruits", "Auto water the selected fruits.",
 				function() return CFG.waterEnabled end,
 				function(v)
 					CFG.waterEnabled = v
@@ -911,38 +911,38 @@ end
 
 		--------------------------------------------------- panel 3: Shovel (Tree + Fruits)
 		miniTab("shovel", function(sec)
-			makeMultiDynW(sec, "Select Tree", "Pilih tree/plant yang mau di-shovel. 'All' = semua.",
+			makeMultiDynW(sec, "Select Tree", "Pick trees/plants to shovel. 'All' = everything.",
 				function() return ctx.getShovelTreeOptions() end,
 				CFG.shovelTreeNames, function() persist() end, { register = true, fillDelay = 1.6 })
-			makeInputW(sec, "Delay To Shovel Tree", "Extra delay (detik) tiap siklus shovel tree.",
+			makeInputW(sec, "Delay To Shovel Tree", "Extra delay (sec) per shovel tree cycle.",
 				function() return tostring(CFG.shovelTreeDelay) end,
 				function(t) CFG.shovelTreeDelay = tonumber(t) or 0 end)
-			makeToggleW(sec, "Auto Shovel Tree", "Shovel tree/plant terpilih otomatis.",
+			makeToggleW(sec, "Auto Shovel Tree", "Auto shovel the selected trees/plants.",
 				function() return CFG.shovelTreeEnabled end,
 				function(v)
 					CFG.shovelTreeEnabled = v
 					if v and ctx.startShovelTree then pcall(function() ctx.startShovelTree() end) end
 				end)
-			makeMultiDynW(sec, "Select Shovel Fruits", "Tipe fruit yang mau di-shovel. 'All' = semua.",
+			makeMultiDynW(sec, "Select Shovel Fruits", "Fruit types to shovel. 'All' = everything.",
 				function() return ctx.getShovelFruitOptions() end,
 				CFG.shovelFruitNames, function() persist() end, { register = true, fillDelay = 1.8 })
-			makeMultiDynW(sec, "Select Shovel Mutation", "Filter mutasi. Kosong/'All' = abaikan.",
+			makeMultiDynW(sec, "Select Shovel Mutation", "Mutation filter. Empty/'All' = ignore.",
 				function() return ctx.getShovelMutationOptions() end,
 				CFG.shovelFruitMuts, function() persist() end, { register = true, fillDelay = 2.0 })
-			makeMultiDynW(sec, "Select Shovel Variant", "Filter variant (Gold/Rainbow/dll). Kosong/'All' = abaikan.",
+			makeMultiDynW(sec, "Select Shovel Variant", "Variant filter (Gold/Rainbow/etc). Empty/'All' = ignore.",
 				function() return ctx.getShovelVariantOptions() end,
 				CFG.shovelFruitVariants, function() persist() end, { register = true, fillDelay = 2.2 })
-			makeSingleW(sec, "Select Shovel Threshold Mode", "Cara banding berat fruit.",
+			makeSingleW(sec, "Select Shovel Threshold Mode", "How fruit weight is compared.",
 				function() return ctx.getShovelModeOptions() end,
 				function() return CFG.shovelFruitMode end,
 				function(v) CFG.shovelFruitMode = v end, { fillDelay = 2.4 })
-			makeInputW(sec, "Shovel Weight Threshold", "Kalau ga mau pakai, isi '0'.",
+			makeInputW(sec, "Shovel Weight Threshold", "Enter '0' to skip this filter.",
 				function() return tostring(CFG.shovelFruitWeight) end,
 				function(t) CFG.shovelFruitWeight = tonumber(t) or 0 end)
-			makeInputW(sec, "Delay To Shovel Fruit", "Extra delay (detik) tiap siklus shovel fruit.",
+			makeInputW(sec, "Delay To Shovel Fruit", "Extra delay (sec) per shovel fruit cycle.",
 				function() return tostring(CFG.shovelFruitDelay) end,
 				function(t) CFG.shovelFruitDelay = tonumber(t) or 0 end)
-			makeToggleW(sec, "Auto Shovel Fruits", "Shovel plant yang fruit-nya cocok filter.",
+			makeToggleW(sec, "Auto Shovel Fruits", "Shovel plants whose fruits match the filter.",
 				function() return CFG.shovelFruitEnabled end,
 				function(v)
 					CFG.shovelFruitEnabled = v
@@ -953,29 +953,29 @@ end
 
 		--------------------------------------------------- panel 4: Harvest (Collect + Favorite + Reclaimer)
 		miniTab("harvest", function(sec)
-			makeInputW(sec, "Delay To Collect", "Extra delay (detik) tiap siklus collect.",
+			makeInputW(sec, "Delay To Collect", "Extra delay (sec) per collect cycle.",
 				function() return tostring(CFG.collectDelay) end,
 				function(t) CFG.collectDelay = tonumber(t) or 0 end)
-			makeToggleW(sec, "Stop Collect If Backpack Is Full Max", "Stop collect pas backpack penuh.",
+			makeToggleW(sec, "Stop Collect If Backpack Is Full Max", "Stop collecting once the backpack is full.",
 				function() return CFG.collectStopIfFull end,
 				function(v) CFG.collectStopIfFull = v end)
-			makeToggleW(sec, "Auto Sell Fruit If Backpack Full", "Jual semua fruit pas backpack penuh.",
+			makeToggleW(sec, "Auto Sell Fruit If Backpack Full", "Sell all fruits once the backpack is full.",
 				function() return CFG.collectAutoSellIfFull end,
 				function(v) CFG.collectAutoSellIfFull = v end)
-			makeMultiDynW(sec, "Select Whitelist Fruit", "Pilih tipe fruit yang mau di-collect.",
+			makeMultiDynW(sec, "Select Whitelist Fruit", "Pick fruit types to collect.",
 				function() return ctx.getCollectFruitOptions() end,
 				CFG.collectWlFruitNames, function() persist() end,
 				{ register = true, cacheKey = "collect_fruits", fillDelay = 2.6 })
-			makeToggleW(sec, "Auto Collect Whitelisted Fruits", "Collect cuma tipe fruit yang di-whitelist.",
+			makeToggleW(sec, "Auto Collect Whitelisted Fruits", "Collect only whitelisted fruit types.",
 				function() return CFG.collectWlFruitEnabled end,
 				function(v)
 					CFG.collectWlFruitEnabled = v
 					if v and ctx.startCollect then pcall(function() ctx.startCollect() end) end
 				end)
-			makeMultiDynW(sec, "Select Whitelist Mutations", "Pilih mutasi yang mau di-collect.",
+			makeMultiDynW(sec, "Select Whitelist Mutations", "Pick mutations to collect.",
 				function() return ctx.getCollectMutationOptions() end,
 				CFG.collectWlMutNames, function() persist() end, { register = true, fillDelay = 2.8 })
-			makeToggleW(sec, "Auto Collect Whitelisted Mutations", "Collect cuma fruit dgn mutasi yang di-whitelist.",
+			makeToggleW(sec, "Auto Collect Whitelisted Mutations", "Collect only fruits with whitelisted mutations.",
 				function() return CFG.collectWlMutEnabled end,
 				function(v)
 					CFG.collectWlMutEnabled = v
@@ -991,51 +991,51 @@ end
 			makeMultiDynW(sec, "Select Combined Variant", "Filter by variant type.",
 				function() return ctx.getCollectVariantOptions() end,
 				CFG.collectCombVariants, function() persist() end, { register = true, fillDelay = 3.4 })
-			makeSingleW(sec, "Whitelist Weight Mode", "Cara banding berat fruit.",
+			makeSingleW(sec, "Whitelist Weight Mode", "How fruit weight is compared.",
 				function() return ctx.getCollectModeOptions() end,
 				function() return CFG.collectCombMode end,
 				function(v) CFG.collectCombMode = v end, { fillDelay = 3.6 })
-			makeInputW(sec, "Whitelist Weight", "Kalau ga dipakai, isi '0'.",
+			makeInputW(sec, "Whitelist Weight", "Enter '0' to skip this filter.",
 				function() return tostring(CFG.collectCombWeight) end,
 				function(t) CFG.collectCombWeight = tonumber(t) or 0 end)
-			makeToggleW(sec, "Auto Collect Fruits", "Collect fruit yang cocok SEMUA kriteria combined.",
+			makeToggleW(sec, "Auto Collect Fruits", "Collect fruits matching ALL combined criteria.",
 				function() return CFG.collectCombEnabled end,
 				function(v)
 					CFG.collectCombEnabled = v
 					if v and ctx.startCollect then pcall(function() ctx.startCollect() end) end
 				end)
-			makeMultiDynW(sec, "Select Fruits [Fav]", "Tipe fruit di garden buat di-favorite (kosong = any).",
+			makeMultiDynW(sec, "Select Fruits [Fav]", "Garden fruit types to favorite (empty = any).",
 				function() return ctx.getFavFruitOptions() end,
 				CFG.favFruitNames, function() persist() end, { register = true, fillDelay = 3.8 })
-			makeMultiDynW(sec, "Filter Mutations [Fav]", "Mutasi yang diperluin (kosong = mutasi apapun OK).",
+			makeMultiDynW(sec, "Filter Mutations [Fav]", "Required mutations (empty = any mutation counts).",
 				function() return ctx.getFavMutationOptions() end,
 				CFG.favMutNames, function() persist() end, { register = true, fillDelay = 4.0 })
-			makeSingleW(sec, "Weight Mode [Fav]", "Banding berat fruit (kosong = off).",
+			makeSingleW(sec, "Weight Mode [Fav]", "Fruit weight comparison (empty = off).",
 				function() return ctx.getFavModeOptions() end,
 				function() return CFG.favMode end,
 				function(v) CFG.favMode = v end, { fillDelay = 4.2 })
-			makeInputW(sec, "Weight Value [Fav]", "Threshold berat (0 = off).",
+			makeInputW(sec, "Weight Value [Fav]", "Weight threshold (0 = off).",
 				function() return tostring(CFG.favWeight) end,
 				function(t) CFG.favWeight = tonumber(t) or 0 end)
-			makeInputW(sec, "Delay To Favorite", "Detik tiap siklus scan favorite.",
+			makeInputW(sec, "Delay To Favorite", "Seconds per favorite scan cycle.",
 				function() return tostring(CFG.favDelay) end,
 				function(t) CFG.favDelay = tonumber(t) or 1 end)
-			makeToggleW(sec, "Auto Favorite Fruits", "Favorite fruit garden yang cocok filter.",
+			makeToggleW(sec, "Auto Favorite Fruits", "Favorite garden fruits matching the filter.",
 				function() return CFG.favEnabled end,
 				function(v)
 					CFG.favEnabled = v
 					if v and ctx.startFavorite then pcall(function() ctx.startFavorite() end) end
 				end)
-			makeToggleW(sec, "Auto Unfavorite Fruits", "Unfavorite fruit garden yang cocok filter.",
+			makeToggleW(sec, "Auto Unfavorite Fruits", "Unfavorite garden fruits matching the filter.",
 				function() return CFG.unfavEnabled end,
 				function(v)
 					CFG.unfavEnabled = v
 					if v and ctx.startFavorite then pcall(function() ctx.startFavorite() end) end
 				end)
-			makeMultiDynW(sec, "Select Plants [Reclaim]", "Pilih plant yg mau di-reclaim. 'All' = semua.",
+			makeMultiDynW(sec, "Select Plants [Reclaim]", "Pick plants to reclaim. 'All' = everything.",
 				function() return ctx.getReclaimPlantOptions() end,
 				CFG.reclaimPlantNames, function() persist() end, { register = true, fillDelay = 4.4 })
-			makeToggleW(sec, "Auto Reclaimer Plants", "Auto reclaim plant terpilih pakai tool Reclaimer",
+			makeToggleW(sec, "Auto Reclaimer Plants", "Auto reclaim the selected plants with the Reclaimer tool",
 				function() return CFG.reclaimEnabled end,
 				function(v)
 					CFG.reclaimEnabled = v
@@ -1081,15 +1081,16 @@ end
 						if s then
 							local proc = s.proc or {}
 							local txt = table.concat({
-								("Status: %s | Phase: %s"):format(tostring(s.status or "-"), tostring(s.phase or "-")),
-								("Pet di backpack: %s/%s"):format(tostring(s.backpack or 0), tostring(s.maxBackpack or 0)),
-								("Egg: %s\n  Sebelum: %s | Sekarang: %s"):format(
-									tostring(s.currentEgg or "-"), tostring(s.eggBefore or 0), tostring(s.currentAmount or 0)),
-								("Placed: %s/%s (ready %s)"):format(
+								("Status: %s   |   Phase: %s"):format(tostring(s.status or "-"), tostring(s.phase or "-")),
+								("Backpack: %s / %s"):format(tostring(s.backpack or 0), tostring(s.maxBackpack or 0)),
+								("Egg: %s"):format(tostring(s.currentEgg or "-")),
+								("   Before: %s  ->  Now: %s"):format(
+									tostring(s.eggBefore or 0), tostring(s.currentAmount or 0)),
+								("Placed: %s / %s   |   Ready: %s"):format(
 									tostring(s.placed or 0), tostring(s.maxPlaced or 0), tostring(s.ready or 0)),
-								("Eggs hatched: %s | Sell cycle: %s/%s (%s)"):format(
+								("Hatched: %s   |   Sell Cycle: %s / %s   (%s)"):format(
 									tostring(s.eggsHatched or 0), tostring(s.cycleProg or 0), tostring(s.cycleTarget or 0), tostring(s.sellMode or "-")),
-								("Recovery — Koi: %s (%s%%) | Seal: %s (%s%%)"):format(
+								("Recovery: Koi %s (%s%%)  |  Seal %s (%s%%)"):format(
 									tostring(proc.koiCount or 0), tostring(proc.koiPct or 0),
 									tostring(proc.sealCount or 0), tostring(proc.sealPct or 0)),
 							}, "\n")
@@ -1103,7 +1104,7 @@ end
 			-- Master toggle = pengganti Start/Stop bar; handleInventoryFull
 			-- memanggil ctx.ui.rHatchToggle pas Auto Hatch distop (Invent Max).
 			local masterCtrl = makeToggleW(sec, "Enable Auto Hatch",
-				"Otomatis place egg, hatch (Main/Hatch/Bronto team), sell sesuai config.",
+				"Auto place eggs, hatch (Core/Hatch/Bronto teams), and sell per your config.",
 				function() return CFG.hatchEnabled end,
 				function(v)
 					-- WAJIB set flag dulu: loop hatch while CFG.hatchEnabled —
@@ -1121,7 +1122,7 @@ end
 			ctx.ui.rHatchToggle = function()
 				pcall(function() masterCtrl:Set(CFG.hatchEnabled) end)
 			end
-			makeToggleW(sec, "Auto Sell Pets", "Jual otomatis pet di backpack sesuai pengaturan.",
+			makeToggleW(sec, "Auto Sell Pets", "Auto sell backpack pets per your settings.",
 				function() return CFG.autoSellEnabled end,
 				function(v) CFG.autoSellEnabled = v end)
 		end)
@@ -1132,52 +1133,52 @@ end
 				function() return ctx.inventoryPetOptions(CFG.hatchCoreTeam) end,
 				CFG.hatchCoreTeam, function() persist() end,
 				{ register = true, cacheKey = "inv_pets", fillDelay = 0.2, max = 250 })
-			makeInputW(sec, "Delay Equip — Core (sec)", "Jeda antar pet pas equip Core team",
+			makeInputW(sec, "Core Equip Delay (sec)", "Delay between pets while equipping the Core team",
 				function() return tostring(CFG.hatchCoreEquipDelay or 0) end,
 				function(t) CFG.hatchCoreEquipDelay = tonumber(t) or 0 end)
-			makeInputW(sec, "Delay Unequip — Core (sec)", "Jeda antar pet pas unequip Core team",
+			makeInputW(sec, "Core Unequip Delay (sec)", "Delay between pets while unequipping the Core team",
 				function() return tostring(CFG.hatchCoreUnequipDelay or 1) end,
 				function(t) CFG.hatchCoreUnequipDelay = tonumber(t) or 1 end)
 
-			makeMultiDynW(sec, "Hatch Team", "Hatch egg ready (Koi = balikin egg)",
+			makeMultiDynW(sec, "Hatch Team", "Hatch ready eggs (Koi = refunds the egg)",
 				function() return ctx.inventoryPetOptions(CFG.hatchHatchTeam) end,
 				CFG.hatchHatchTeam, function() persist() end,
 				{ register = true, cacheKey = "inv_pets", fillDelay = 0.4, max = 250 })
-			makeInputW(sec, "Delay Equip — Hatch (sec)", "Jeda antar pet pas equip Hatch team",
+			makeInputW(sec, "Hatch Equip Delay (sec)", "Delay between pets while equipping the Hatch team",
 				function() return tostring(CFG.hatchTeamEquipDelay or 0) end,
 				function(t) CFG.hatchTeamEquipDelay = tonumber(t) or 0 end)
-			makeInputW(sec, "Delay Unequip — Hatch (sec)", "Jeda antar pet pas unequip Hatch team",
+			makeInputW(sec, "Hatch Unequip Delay (sec)", "Delay between pets while unequipping the Hatch team",
 				function() return tostring(CFG.hatchTeamUnequipDelay or 1) end,
 				function(t) CFG.hatchTeamUnequipDelay = tonumber(t) or 1 end)
-			makeInputW(sec, "Hatch Team Delay (sec)", "Tunggu abis swap team sebelum hatch",
+			makeInputW(sec, "Hatch Team Delay (sec)", "Wait after the team swap before hatching",
 				function() return tostring(CFG.hatchTeamDelay or 5.5) end,
 				function(t) CFG.hatchTeamDelay = tonumber(t) or 5.5 end)
 
-			makeMultiDynW(sec, "Bronto Team", "+30% berat pet pas hatch (Brontosaurus)",
+			makeMultiDynW(sec, "Bronto Team", "+30% pet weight while hatching (Brontosaurus)",
 				function() return ctx.inventoryPetOptions(CFG.hatchBrontoTeam) end,
 				CFG.hatchBrontoTeam, function() persist() end,
 				{ register = true, cacheKey = "inv_pets", fillDelay = 0.6, max = 250 })
-			makeInputW(sec, "Delay Equip — Bronto (sec)", "Jeda antar pet pas equip Bronto team",
+			makeInputW(sec, "Bronto Equip Delay (sec)", "Delay between pets while equipping the Bronto team",
 				function() return tostring(CFG.hatchBrontoEquipDelay or 0) end,
 				function(t) CFG.hatchBrontoEquipDelay = tonumber(t) or 0 end)
-			makeInputW(sec, "Delay Unequip — Bronto (sec)", "Jeda antar pet pas unequip Bronto team",
+			makeInputW(sec, "Bronto Unequip Delay (sec)", "Delay between pets while unequipping the Bronto team",
 				function() return tostring(CFG.hatchBrontoUnequipDelay or 1) end,
 				function(t) CFG.hatchBrontoUnequipDelay = tonumber(t) or 1 end)
-			makeInputW(sec, "Bronto Team Delay (sec)", "Tunggu abis swap team sebelum hatch bronto",
+			makeInputW(sec, "Bronto Team Delay (sec)", "Wait after the team swap before the Bronto hatch",
 				function() return tostring(CFG.brontoTeamDelay or 5.5) end,
 				function(t) CFG.brontoTeamDelay = tonumber(t) or 5.5 end)
 
-			makeMultiDynW(sec, "Sell Team", "Jual + balikin pet jadi egg (Seal the Deal)",
+			makeMultiDynW(sec, "Sell Team", "Sell + convert pets back into eggs (Seal the Deal)",
 				function() return ctx.inventoryPetOptions(CFG.hatchSellTeam) end,
 				CFG.hatchSellTeam, function() persist() end,
 				{ register = true, cacheKey = "inv_pets", fillDelay = 0.8, max = 250 })
-			makeInputW(sec, "Delay Equip — Sell (sec)", "Jeda antar pet pas equip Sell team",
+			makeInputW(sec, "Sell Equip Delay (sec)", "Delay between pets while equipping the Sell team",
 				function() return tostring(CFG.hatchSellEquipDelay or 0) end,
 				function(t) CFG.hatchSellEquipDelay = tonumber(t) or 0 end)
-			makeInputW(sec, "Delay Unequip — Sell (sec)", "Jeda antar pet pas unequip Sell team",
+			makeInputW(sec, "Sell Unequip Delay (sec)", "Delay between pets while unequipping the Sell team",
 				function() return tostring(CFG.hatchSellUnequipDelay or 1) end,
 				function(t) CFG.hatchSellUnequipDelay = tonumber(t) or 1 end)
-			makeInputW(sec, "Sell Team Delay (sec)", "Tunggu abis swap team sebelum jual",
+			makeInputW(sec, "Sell Team Delay (sec)", "Wait after the team swap before selling",
 				function() return tostring(CFG.sellTeamDelay or 5.5) end,
 				function(t) CFG.sellTeamDelay = tonumber(t) or 5.5 end)
 			addRefresh(sec)
@@ -1185,20 +1186,20 @@ end
 
 		--------------------------------------------------- panel 3: Egg Configuration
 		miniTab("eggs", function(sec)
-			makeSingleW(sec, "Egg to Hatch", "Egg dari backpack (angka = jumlah).",
+			makeSingleW(sec, "Egg to Hatch", "Eggs from the backpack (number = quantity).",
 				function() return ctx.getEggBackpackOptions() end,
 				function() return tostring(CFG.hatchEggName or "") end,
 				function(v) if v ~= "" then CFG.hatchEggName = v end end,
 				{ register = true, fillDelay = 1.8 })
-			makeSingleW(sec, "Placement Pattern", "Grid = rapih, Random = sebar acak.",
+			makeSingleW(sec, "Placement Pattern", "Grid = tidy rows, Random = scattered.",
 				function() return { "Grid", "Random" } end,
 				function() return CFG.hatchPlacePattern or "Grid" end,
 				function(v) CFG.hatchPlacePattern = (v == "Random") and "Random" or "Grid" end, { fillDelay = 2.0 })
-			makeInputW(sec, "Max Placed", "Maksimal egg ke-place di garden.",
+			makeInputW(sec, "Max Placed", "Maximum eggs placed in the garden.",
 				function() return tostring(CFG.hatchMaxPlaced or 8) end,
 				function(t) CFG.hatchMaxPlaced = math.max(1, tonumber(t) or 8) end)
 
-			makeToggleW(sec, "Auto Rejoin on Egg Minus", "Rejoin server kalau jumlah egg minus mencapai batas.",
+			makeToggleW(sec, "Auto Rejoin on Egg Minus", "Rejoin the server once the egg deficit hits the threshold.",
 				function() return CFG.hatchRejoinMinusEnabled end,
 				function(v)
 					CFG.hatchRejoinMinusEnabled = v
@@ -1207,10 +1208,10 @@ end
 						pcall(function() ctx.stopEggMinusWatcher() end)
 					end
 				end)
-			makeInputW(sec, "Egg Minus Threshold", "Batas minus trigger rejoin (misal 20).",
+			makeInputW(sec, "Egg Minus Threshold", "Deficit that triggers the rejoin (e.g. 20).",
 				function() return tostring(CFG.hatchRejoinMinusThreshold or 20) end,
 				function(t) CFG.hatchRejoinMinusThreshold = tonumber(t) or 20 end)
-			makeToggleW(sec, "Auto Rejoin on Egg Plus", "Rejoin server kalau egg bertambah mencapai batas.",
+			makeToggleW(sec, "Auto Rejoin on Egg Plus", "Rejoin the server once the egg surplus hits the threshold.",
 				function() return CFG.hatchRejoinPlusEnabled end,
 				function(v)
 					CFG.hatchRejoinPlusEnabled = v
@@ -1219,10 +1220,10 @@ end
 						pcall(function() ctx.stopEggMinusWatcher() end)
 					end
 				end)
-			makeInputW(sec, "Egg Plus Threshold", "Batas plus trigger rejoin (misal 20).",
+			makeInputW(sec, "Egg Plus Threshold", "Surplus that triggers the rejoin (e.g. 20).",
 				function() return tostring(CFG.hatchRejoinPlusThreshold or 20) end,
 				function(t) CFG.hatchRejoinPlusThreshold = tonumber(t) or 20 end)
-			makeInputW(sec, "Hatch Webhook URL", "Webhook alert bronto/special egg (kosong = ga kirim).",
+			makeInputW(sec, "Hatch Webhook URL", "Webhook alert for bronto/special eggs (empty = off).",
 				function() return tostring(CFG.hatchWebhookUrl or "") end,
 				function(t) CFG.hatchWebhookUrl = tostring(t or "") end)
 			addRefresh(sec)
@@ -1232,28 +1233,28 @@ end
 		miniTab("bronto", function(sec)
 			sec:Paragraph({
 				Title = "Sell & Bronto Rule (Bulk)",
-				Desc = "Weight < KG -> aksi (SELL/KEEP). Weight >= KG -> KEEP + BRONTO (hatch pakai Bronto team). Tandai ★ Special = wajib Bronto + alert.",
+				Desc = "Weight < KG -> action (SELL/KEEP). Weight >= KG -> KEEP + BRONTO (hatched with the Bronto team). Mark ★ Special = always Bronto + alert.",
 			})
 
 			-- Bulk editor: per-pet rule terpadu (dipakai sell & bronto).
 			local bulkSel, bulkKg, bulkAction, bulkSpecial = {}, 0.8, "sell", false
-			makeMultiW(sec, "Select Pet Types (Bulk)", "Pilih beberapa jenis pet sekaligus",
+			makeMultiW(sec, "Select Pet Types (Bulk)", "Select multiple pet types at once",
 				reg.PET_OPTIONS, bulkSel, function() persist() end, { fillDelay = 1.0 })
-			makeInputW(sec, "KG (Bulk)", "Batas berat target pet",
+			makeInputW(sec, "KG (Bulk)", "Weight threshold for the selected pets",
 				function() return tostring(bulkKg) end,
 				function(t) bulkKg = tonumber(t) or 0.8 end)
-			makeSingleW(sec, "Below KG Action (Bulk)", "Aksi kalau berat di bawah batas",
+			makeSingleW(sec, "Below KG Action (Bulk)", "Action when weight is below the threshold",
 				function() return { "sell", "keep" } end,
 				function() return bulkAction end,
 				function(v) bulkAction = (v == "keep") and "keep" or "sell" end, { fillDelay = 1.1 })
-			makeToggleW(sec, "Special Pet (Bulk)", "Tandai pet terpilih sbg Special (★ alert & bronto).",
+			makeToggleW(sec, "Special Pet (Bulk)", "Mark the selected pets as Special (★ alert & Bronto).",
 				function() return bulkSpecial end,
 				function(v) bulkSpecial = v end)
 
 			local remVal, remRefresh = nil, nil
 			sec:Button({
 				Title = "APPLY BULK LIST",
-				Desc = "Terapkan aturan di atas ke semua pet terpilih (menimpa rule lama).",
+				Desc = "Apply the rules above to all selected pets (overwrites existing rules).",
 				Callback = safe(function()
 					CFG.hatchSellList = CFG.hatchSellList or {}
 					local n = 0
@@ -1267,15 +1268,15 @@ end
 					end
 					if n > 0 then
 						persist()
-						ctx.log(("Hatch: bulk %d rule di-apply"):format(n))
+						ctx.log(("Hatch: %d bulk rules applied"):format(n))
 						if remRefresh then pcall(remRefresh) end
-						W.notify("Hatch", n .. " rule di-apply")
+						W.notify("Hatch", n .. " rules applied")
 					end
 				end),
 			})
 
 			remCtrl, remRefresh = makeSingleW(sec, "Pick Rule to Remove",
-				"Rule yg terdaftar di Sell & Bronto Config.",
+				"Rules listed in the Sell & Bronto Config.",
 				function()
 					local list = {}
 					for k in pairs(CFG.hatchSellList or {}) do list[#list + 1] = k end
@@ -1287,30 +1288,30 @@ end
 
 			sec:Button({
 				Title = "Remove Selected Rule",
-				Desc = "Hapus rule pet yang dipilih di dropdown atas.",
+				Desc = "Delete the pet rule selected in the dropdown above.",
 				Callback = safe(function()
 					if remVal and CFG.hatchSellList then
 						CFG.hatchSellList[remVal] = nil
 						remVal = nil
 						persist()
 						if remRefresh then pcall(remRefresh) end
-						ctx.log("Hatch: rule dihapus")
+						ctx.log("Hatch: rule removed")
 					end
 				end),
 			})
 
 			sec:Button({
 				Title = "CLEAR ALL RULES",
-				Desc = "Hapus SEMUA aturan Sell & Bronto.",
+				Desc = "Delete ALL Sell & Bronto rules.",
 				Callback = safe(function()
 					CFG.hatchSellList = {}
 					persist()
 					if remRefresh then pcall(remRefresh) end
-					ctx.log("Hatch: semua rule dihapus")
+					ctx.log("Hatch: all rules removed")
 				end),
 			})
 
-			makeToggleW(sec, "Don't Hatch Special Pets", "Skip special pet sama sekali (jangan di-hatch).",
+			makeToggleW(sec, "Don't Hatch Special Pets", "Skip special pets entirely (never hatch them).",
 				function() return CFG.brontoSkipSpecial end,
 				function(v) CFG.brontoSkipSpecial = v end)
 			addRefresh(sec)
@@ -1318,43 +1319,43 @@ end
 
 		--------------------------------------------------- panel 5: Sell Configuration
 		miniTab("sell", function(sec)
-			makeMultiW(sec, "Pets to Sell", "Tipe pet yg DIJUAL (sisanya difavoritin biar aman)",
+			makeMultiW(sec, "Pets to Sell", "Pet types TO SELL (the rest get favorited for safety)",
 				reg.PET_OPTIONS, CFG.sellPetTypes, function() persist() end, { fillDelay = 1.0 })
-			makeInputW(sec, "Sell Weight Threshold", "Jual kalau weight < ini (0 = off)",
+			makeInputW(sec, "Sell Weight Threshold", "Sell when weight is below this (0 = off)",
 				function() return tostring(CFG.sellWeightThreshold or 0) end,
 				function(t) CFG.sellWeightThreshold = tonumber(t) or 0 end)
-			makeInputW(sec, "Sell Age Threshold", "Jual kalau age < ini (0 = off)",
+			makeInputW(sec, "Sell Age Threshold", "Sell when age is below this (0 = off)",
 				function() return tostring(CFG.sellAgeThreshold or 0) end,
 				function(t) CFG.sellAgeThreshold = tonumber(t) or 0 end)
-			makeMultiW(sec, "Special Pets to Sell", "Pet spesial (jual by weight)",
+			makeMultiW(sec, "Special Pets to Sell", "Special pets (sold by weight)",
 				reg.PET_EGG_ONLY, CFG.sellSpecialTypes, function() persist() end, { fillDelay = 1.1 })
-			makeInputW(sec, "Special Pet Weight Threshold", "Jual pet spesial dgn weight < ini (0 = off)",
+			makeInputW(sec, "Special Pet Weight Threshold", "Sell special pets with weight below this (0 = off)",
 				function() return tostring(CFG.sellSpecialWeight or 0) end,
 				function(t) CFG.sellSpecialWeight = tonumber(t) or 0 end)
 
 			sec:Paragraph({
-				Title = "Trigger & Eksekusi",
-				Desc = "Kapan sell dijalankan & caranya.",
+				Title = "Trigger & Execution",
+				Desc = "When selling runs and how.",
 			})
-			makeSingleW(sec, "Sell Trigger", "Cycle = jual tiap N cycle hatch. Backpack = jual pas pet >= batas.",
+			makeSingleW(sec, "Sell Trigger", "Cycle = sell every N hatch cycles. Backpack = sell once pets reach the limit.",
 				function() return { "Cycle", "Backpack" } end,
 				function() return CFG.sellMode or "Cycle" end,
 				function(v) CFG.sellMode = (v == "Backpack") and "Backpack" or "Cycle" end, { fillDelay = 1.2 })
-			makeInputW(sec, "Sell Tiap Berapa Cycle", "Dipakai kalau Sell Trigger = Cycle.",
+			makeInputW(sec, "Sell Every N Cycles", "Used when Sell Trigger = Cycle.",
 				function() return tostring(CFG.sellEveryNCycles or 1) end,
 				function(t) CFG.sellEveryNCycles = math.max(1, tonumber(t) or 1) end)
-			makeInputW(sec, "Auto Sell Aktif Saat Total Pet", "Dipakai kalau Sell Trigger = Backpack.",
+			makeInputW(sec, "Auto Sell At Total Pets", "Used when Sell Trigger = Backpack.",
 				function() return tostring(CFG.sellWhenReach or 100) end,
 				function(t) CFG.sellWhenReach = tonumber(t) or 100 end)
-			makeSingleW(sec, "Sell Style", "One by One = jual yg cocok filter saja (aman). All at Once = jual semua non-favorit yg cocok.",
+			makeSingleW(sec, "Sell Style", "One by One = sell only matching pets (safe). All at Once = sell every matching non-favorited pet.",
 				function() return { "One by One", "All at Once" } end,
 				function() return CFG.sellStyle or "All at Once" end,
 				function(v) CFG.sellStyle = (v == "One by One") and "One by One" or "All at Once" end, { fillDelay = 1.3 })
-			makeToggleW(sec, "Auto Boost Before Sell", "Boost pet aktif pakai toy sebelum jual",
+			makeToggleW(sec, "Auto Boost Before Sell", "Boost active pets with toys before selling",
 				function() return CFG.autoBoostBeforeSell end,
 				function(v) CFG.autoBoostBeforeSell = v end)
 			sec:Button({
-				Title = "Sell Now (manual)", Desc = "Jalankan proses sell sekali sekarang.",
+				Title = "Sell Now (manual)", Desc = "Run the sell process once, right now.",
 				Callback = safe(function()
 					if ctx.hatchDoSell then task.spawn(function() pcall(ctx.hatchDoSell) end) end
 				end),
@@ -1373,7 +1374,7 @@ end
 
 		sec:Paragraph({
 			Title = "CeszParadise WindUI",
-			Desc = ("Build: %s\nToggle UI: klik logo open-button / tekan K.\nConfig file: garden_state_%s.json (otomatis ke-save tiap ubah).")
+			Desc = ("Build: %s\nToggle UI: click the logo open button or press K.\nConfig file: garden_state_%s.json (auto-saves on every change).")
 				:format(
 					tostring((getgenv and getgenv().GAG_REVISION) or ctx.BASE or "-"),
 					tostring(ctx.LP.UserId)),
@@ -1381,11 +1382,11 @@ end
 
 		sec:Button({
 			Title = "Save Config Now",
-			Desc = "Paksa simpan semua setting ke file state.",
+			Desc = "Force-save all settings to the state file.",
 			Callback = safe(function()
 				persist()
-				W.notify("Settings", "Config tersimpan.")
-				ctx.log("Settings: config tersimpan manual.")
+				W.notify("Settings", "Config saved.")
+				ctx.log("Settings: config saved manually.")
 			end),
 		})
 
@@ -1418,21 +1419,21 @@ end
 			if ctx.setDisable3d then pcall(function() ctx.setDisable3d(false) end) end
 			if ctx.setPerfMode then pcall(function() ctx.setPerfMode("off") end) end
 			persist()
-			ctx.log("Settings: SEMUA automation dimatikan.")
-			W.notify("Settings", "Semua automation STOP.")
+			ctx.log("Settings: ALL automation stopped.")
+			W.notify("Settings", "All automation STOPPED.")
 		end
 
 		sec:Button({
 			Title = "STOP ALL Automation",
-			Desc = "Matikan semua automation + player/perf mods (konfirmasi dulu).",
+			Desc = "Turn off all automation + player/perf mods (asks for confirmation first).",
 			Callback = safe(function()
 				local okd = pcall(function()
 					window:Dialog({
 						Title = "Stop All Automation?",
-						Content = "Semua automation, player mods, dan perf mode akan dimatikan.",
+						Content = "All automation, player mods, and perf mode will be turned off.",
 						Buttons = {
-							{ Title = "Ya, Stop Semua", Variant = "Primary", Callback = doStopAll },
-							{ Title = "Batal", Variant = "Secondary", Callback = function() end },
+							{ Title = "Yes, Stop All", Variant = "Primary", Callback = doStopAll },
+							{ Title = "Cancel", Variant = "Secondary", Callback = function() end },
 						},
 					})
 				end)
@@ -1466,7 +1467,7 @@ end
 		if #themes == 0 then themes = { "Dark", "Light" } end
 		local curTheme = nil
 		pcall(function() curTheme = W.windui.GetCurrentTheme and W.windui:GetCurrentTheme() end)
-		makeSingleW(sec, "Theme WindUI", "Tema bawaan WindUI — langsung apply.",
+		makeSingleW(sec, "Theme WindUI", "Built-in WindUI theme, applies instantly.",
 			function() return themes end,
 			function() return curTheme or themes[1] end,
 			function(v)
@@ -1476,7 +1477,7 @@ end
 
 		sec:Button({
 			Title = "Reload Hub",
-			Desc = "Jalankan ulang loader (ambil build terbaru dari repo).",
+			Desc = "Re-run the loader (pulls the latest build from the repo).",
 			Callback = safe(function()
 				local rev = (getgenv and getgenv().GAG_REVISION) or "main"
 				pcall(function()
@@ -1540,19 +1541,19 @@ end
 				ctx.log("build tab " .. def.id .. " gagal: " .. tostring(err))
 				pcall(function()
 					tab:Paragraph({
-						Title = "Tab gagal dibangun",
+						Title = "Tab Failed To Build",
 						Desc = tostring(err),
 					})
 				end)
 			end
 		else
 			tab:Paragraph({
-				Title = "Belum dimigrasi",
-				Desc = "Tab '" .. def.id .. "' masih jalan di build lama (Pink Royale). Migrasi tab-per-tab ke WindUI — tab ini menyusul.",
+				Title = "Not Migrated Yet",
+				Desc = "Tab '" .. def.id .. "' still runs in the old build (Pink Royale). Migration to WindUI goes one tab at a time; this tab is next.",
 			})
 			tab:Paragraph({
-				Title = "Status fitur",
-				Desc = "Logika fitur TETAP LOADED (CFG, persistence, auto-resume). Cuma panel kontrol-nya yang belum pindah.",
+				Title = "Feature Status",
+				Desc = "Feature logic stays LOADED (CFG, persistence, auto-resume). Only the control panel has not moved yet.",
 			})
 		end
 	end
