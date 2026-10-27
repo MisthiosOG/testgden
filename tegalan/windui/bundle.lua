@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T19:09:25.417Z
+-- 42 modul, di-generate 2026-10-27T19:11:33.179Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -10850,6 +10850,24 @@ return function(ctx)
 		return (values and #values) or 0
 	end
 
+	-- Antrian rebuild dropdown: tombol "Update Pet List" nge-refresh 4+ dropdown
+	-- dgn list ratusan baris — kalau dibangun BARENGAN (task.spawn paralel),
+	-- UI threadfreeze gila. Serial: satu job per 0.2s, frame tetap hidup.
+	local rebuildQueue, rebuilding = {}, false
+	local function queueRebuild(job)
+		rebuildQueue[#rebuildQueue + 1] = job
+		if rebuilding then return end
+		rebuilding = true
+		task.spawn(function()
+			while #rebuildQueue > 0 do
+				local j = table.remove(rebuildQueue, 1)
+				pcall(j)
+				task.wait(0.2)
+			end
+			rebuilding = false
+		end)
+	end
+
 	-- Lazy open: dist ngebind klik ke <menuTabel>:Open() (bukan selalu table
 	-- yang kitaa hold) -> hook dipasang di KEDUA sink: menu.Open & control.Open.
 	local function lazyOpen(control, fillFn)
@@ -10918,7 +10936,7 @@ return function(ctx)
 		-- masih ngehitch — upgrade path = list virtualisasi.
 		lazyOpen(control, fill)
 		local function refresh()
-			task.spawn(function() pcall(fill) end)
+			queueRebuild(function() pcall(fill) end)
 		end
 		if opts.register and W.refreshers then
 			W.refreshers[#W.refreshers + 1] = refresh
@@ -11002,12 +11020,10 @@ return function(ctx)
 		lazyOpen(control, fill)
 		local function refresh()
 			-- Tombol "Update Pet List": rebuild penuh (aksi eksplisit user);
-			-- cache TTL 5s bikin fetch-nya murah.
-			task.spawn(function()
-				pcall(function()
-					local ds, sel2, extra = snapshot()
-					buildRows({ ds = ds, sel2 = sel2, extra = extra })
-				end)
+			-- via queueRebuild -> antar dropdown serial, gak freeze barengan.
+			queueRebuild(function()
+				local ds, sel2, extra = snapshot()
+				buildRows({ ds = ds, sel2 = sel2, extra = extra })
 			end)
 		end
 		if opts.register then
