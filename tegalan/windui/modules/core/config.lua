@@ -304,41 +304,108 @@ return function(ctx)
 		webhookEnabled = false,
 	}
 
-	-- Setiap clone punya file terpisah di folder hub (contoh:
-	-- CeszParadiseWindUI/state_12345.json). PAKAI FOLDER, bukan root: sebagian
-	-- executor menolak writefile di root workspace secara diam-diam, sementara
-	-- write di dalam folder buatan makefolder selalu lolos.
+	-- Setiap clone punya file terpisah. Tujuh executor, tujuh tingkah: yang
+	-- nolak write di root, yang nolak slash, yang cuma nerima backslash, yang
+	-- VFS-nya ngaco. Jadi simpan ke SEMUA kandidat path (murah), dan saat load
+	-- baca yang pertama ketemu. Paling nggak SATU pasti lengket.
 	local STORAGE_DIR = "CeszParadiseWindUI"
 	pcall(makefolder, STORAGE_DIR)
-	local STATE_FILE = STORAGE_DIR .. "/state_" .. tostring(userId) .. ".json"
-	-- Migrasi file lama yang pernah tersimpan di root (jangan hilangkan setting).
-	local LEGACY_FILE = "garden_state_" .. tostring(userId) .. ".json"
-	pcall(function()
-		if type(isfile) == "function" and type(readfile) == "function"
-			and type(writefile) == "function"
-			and isfile(LEGACY_FILE) and not isfile(STATE_FILE) then
-			writefile(STATE_FILE, readfile(LEGACY_FILE))
-			print("[GAGHub][WINDUI] config migrated: " .. LEGACY_FILE .. " -> " .. STATE_FILE)
-		end
-	end)
+	local baseName = "state_" .. tostring(userId) .. ".json"
+	local legacyName = "garden_state_" .. tostring(userId) .. ".json"
+	local STATE_CANDIDATES = {
+		STORAGE_DIR .. "/" .. baseName,
+		STORAGE_DIR .. "\\" .. baseName,
+		STORAGE_DIR .. "\\" .. baseName:gsub("%.", "_%.") .. ".json", -- netral buat VFS aneh
+		baseName,              -- root, format baru
+		legacyName,            -- root, format lama (kompat garden build)
+	}
+	-- API FS alias: sebagian runtime expose writefile sebagai write_of_file dll.
+	local FS = {}
+	for _, names in ipairs({
+		{ "writefile", "writefile" },
+		{ "readfile", "readfile" },
+		{ "isfile", "isfile" },
+		{ "delfile", "delfile" },
+	}) do
+		local primary, aliases = names[1], names[2]
+		FS[primary] = rawget(_G, primary)
+			or (getgenv and rawget(getgenv(), primary))
+		FS[primary] = FS[primary] or (aliases ~= primary and rawget(_G, aliases) or nil)
+	end
+	-- (writefile/readfile/isfile/delfile global standar selalu dicek pas dipakai
+	--  via type(FS.x)=="function"; enggak ada alias resmi lain, jadi cukup begini.)
 
-	-- 1. Simpan langsung ke file akun ini saja
-	local function persistState()
+	local function fsIsFile(p)
+		if type(isfile) == "function" then return pcall(isfile, p) and isfile(p) or false end
+		return false
+	end
+	local function fsRead(p)
+		if type(readfile) == "function" then
+			local ok, r = pcall(readfile, p)
+			if ok then return r end
+		end
+		return nil
+	end
+	local function fsWrite(p, content)
+		if type(writefile) == "function" then
+			local ok, err = pcall(writefile, p, content)
+			return ok, err
+		end
+		return false, "no writefile"
+	end
+	local statePathUsed = nil
+
+	local function findStatePath()
+		for _, p in ipairs(STATE_CANDIDATES) do
+			if fsIsFile(p) then return p end
+		end
+		return nil
+	end
+
+	-- Migrasi file lama yang pernah tersimpan di root (jangan hilangkan setting).
+	do
+		local target = STATE_CANDIDATES[1]
+		local okWriteFlag = false
 		pcall(function()
-			if type(writefile) == "function" then
-				writefile(STATE_FILE, HttpService:JSONEncode(CFG))
+			if fsIsFile(legacyName) and not fsIsFile(target) then
+				local old = fsRead(legacyName)
+				if old and #old > 0 then
+					okWriteFlag = fsWrite(target, old)
+					print("[GAGHub][WINDUI] config migrated: " .. legacyName .. " -> " .. target)
+				end
 			end
 		end)
 	end
 
-	-- 2. Muat langsung dari file akun ini saja
+	-- 1. Simpan ke SEMUA kandidat path (paling mentok satu pasti nyantol)
+	local function persistState()
+		local okAny = false
+		if type(writefile) == "function" then
+			local okSer, ser = pcall(function() return HttpService:JSONEncode(CFG) end)
+			if okSer then
+				for _, p in ipairs(STATE_CANDIDATES) do
+					local okw = pcall(writefile, p, ser)
+					if okw then
+						okAny = true
+						statePathUsed = p
+					end
+				end
+			end
+		end
+		return okAny
+	end
+
+	-- 2. Muat dari kandidat pertama yang ada
 	local function loadState()
-		if type(isfile) == "function" and isfile(STATE_FILE) then
-			local ok, data = pcall(function()
-				return HttpService:JSONDecode(readfile(STATE_FILE))
-			end)
-			if ok and type(data) == "table" then
-				return data
+		local path = findStatePath()
+		if path then
+			local raw = fsRead(path)
+			if raw and #raw > 0 then
+				local ok, data = pcall(function() return HttpService:JSONDecode(raw) end)
+				if ok and type(data) == "table" then
+					statePathUsed = path
+					return data
+				end
 			end
 		end
 		return nil
@@ -347,7 +414,7 @@ return function(ctx)
 	do
 		local st = loadState()
 		if st then
-			print("[GAGHub][WINDUI] config loaded: " .. STATE_FILE)
+			print("[GAGHub][WINDUI] config loaded")
 			local function tbl(v) return (type(v) == "table") and v or {} end
 			local function migratePetSet(t)
 				if type(t) ~= "table" then return {} end
@@ -613,7 +680,7 @@ return function(ctx)
 			CFG.webhookUrl     = st.webhookUrl or ""
 			CFG.webhookEnabled = st.webhookEnabled or false
 		else
-			print("[GAGHub][WINDUI] config: no saved state, defaults (" .. STATE_FILE .. ")")
+			print("[GAGHub][WINDUI] config: no saved state, defaults")
 		end
 	end
 
@@ -677,12 +744,21 @@ return function(ctx)
 			return
 		end
 		if lastSaved == ser then return end
-		local okw, err = pcall(function() writefile(STATE_FILE, ser) end)
-		if okw then
+		-- Tulis ke SEMUA kandidat: VFS executor beda-beda tingkahnya, dan
+		-- satu path yang nyantol itu semua yang dibutuhkan buat load balik.
+		local wroteAny = false
+		for _, p in ipairs(STATE_CANDIDATES) do
+			local okw = pcall(writefile, p, ser)
+			if okw then
+				wroteAny = true
+				statePathUsed = p
+			end
+		end
+		if wroteAny then
 			lastSaved = ser
 		elseif not fsWarned then
 			fsWarned = true
-			earlyLog("autosave FAIL (write): " .. tostring(err))
+			earlyLog("autosave FAIL (write): semua kandidat path ditolak executor")
 		end
 	end
 
@@ -699,31 +775,35 @@ return function(ctx)
 	end)
 	pcall(function() game:BindToClose(autoSave) end)
 
-	-- Probe filesystem: tulis 1 byte + baca balik. DANAKAN ini biar nggak
-	-- nebak-nebak lagi kalau config nggak nempel di executor tertentu.
-	pcall(function() ctx.CFG_STATE_PATH = STATE_FILE end)
+	-- Probe filesystem tiap kandidat: tulis 1 byte + baca balik. DANAKAN ini
+	-- biar nggak nebak-nebak lagi kalau config nggak nempel di executor tertentu.
+	pcall(function() ctx.CFG_STATE_PATH = STATE_CANDIDATES[1] end)
 	task.spawn(function()
-		local probeOk = false
+		local okPaths = {}
 		if type(writefile) == "function" and type(readfile) == "function" then
-			pcall(function()
-				local pf = STATE_FILE .. ".probe"
-				writefile(pf, "1")
-				probeOk = (readfile(pf) == "1")
-				pcall(delfile, pf)
-			end)
+			for _, p in ipairs(STATE_CANDIDATES) do
+				local okPing = pcall(function()
+					local pf = p .. ".probe"
+					writefile(pf, "1")
+					if readfile(pf) == "1" then okPaths[#okPaths + 1] = p end
+					pcall(delfile, pf)
+				end)
+				if not okPing then break end -- FS mati total, stop nulis
+			end
 		end
-		if probeOk then
-			earlyLog("filesystem OK: " .. STATE_FILE)
+		local summary
+		if #okPaths > 0 then
+			summary = "Config storage OK via: " .. table.concat(okPaths, ", ")
 		else
-			earlyLog("filesystem probe GAGAL, config tidak bakal tersimpan di executor ini")
+			summary = "Config storage MATI di executor ini (writefile/readfile gagal semua)"
 		end
+		ctx.state.fsStatus = summary
+		earlyLog(summary)
+		-- Toast biar gak perlu buka console/log buat tahu statusnya.
+		task.delay(4.5, function()
+			if ctx.wi and ctx.wi.notify then
+				pcall(function() ctx.wi.notify("Config", summary, 7) end)
+			end
+		end)
 	end)
-
-	if type(writefile) ~= "function" then
-		earlyLog("executor tanpa writefile, config tidak bisa disimpan")
-	elseif type(isfile) == "function" and isfile(STATE_FILE) then
-		earlyLog("config ditemukan: " .. STATE_FILE)
-	else
-		earlyLog("config baru: " .. STATE_FILE)
-	end
 end
