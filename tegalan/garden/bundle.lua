@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 44 modul, di-generate 2026-10-27T12:06:14.788Z
+-- 44 modul, di-generate 2026-10-27T12:40:29.554Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua — init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -11710,126 +11710,147 @@ return function(ctx)
 end
 ]=],
 	["ui/pages_wind.lua"] = [=[
--- WindUI-native garden pages. This intentionally replaces the legacy pages.lua
--- builder; automation modules and CFG remain unchanged.
+-- Native WindUI pages. Mirrors the old hierarchy:
+-- main tab -> sub-tab sections -> collapsible WindUI sections -> controls.
 return function(ctx)
-    local WindUI = ctx.ui.windWindow
+    local window = ctx.ui.windWindow
     local CFG = ctx.CFG
-    local function tab(name, icon) return ctx.ui.windTabs[name] or WindUI:Tab({ Title = name, Icon = icon }) end
-    local function toggle(t, title, desc, key, starter)
-        local control = t:Toggle({
-            Title = title, Desc = desc, Value = CFG[key] == true,
-            Callback = function(v)
-                CFG[key] = v
-                if ctx.persistState then ctx.persistState() end
-                if v and starter then starter() end
-            end,
-        })
-        return control
+    local function save() if ctx.persistState then ctx.persistState() end end
+    local function t(name, icon) return ctx.ui.windTabs[name] or window:Tab({ Title = name, Icon = icon }) end
+    local function section(tab, title)
+        if tab.Section then
+            local ok, value = pcall(function() return tab:Section({ Title = title }) end)
+            if ok and value then return value end
+        end
+        return tab
     end
-    local function input(t, title, key, default)
-        return t:Input({
-            Title = title, Value = tostring(CFG[key] or default),
-            Callback = function(v) CFG[key] = tonumber(v) or default; if ctx.persistState then ctx.persistState() end end,
-        })
+    -- Starter receives the toggle value: loop-based starters ignore it,
+    -- imperative modifiers (setNoclip / setInfJump) need the direction.
+    local function toggle(tab, title, desc, key, starter)
+        return tab:Toggle({ Title = title, Desc = desc, Value = CFG[key] == true,
+            Callback = function(v) CFG[key] = v; save(); if v and starter then starter(v) end end })
     end
-    local function multi(t, title, values, selected, callback)
-        return t:Dropdown({
-            Title = title, Values = values, Multi = true, AllowNone = true,
-            SearchBarEnabled = true,
+    local function input(tab, title, key, fallback, desc)
+        return tab:Input({ Title = title, Desc = desc, Value = tostring(CFG[key] or fallback),
+            Callback = function(v) CFG[key] = tonumber(v) or fallback; save() end })
+    end
+    local function multi(tab, title, getter, selected, desc)
+        local options = type(getter) == "function" and getter() or getter or {}
+        local values, reverse = {}, {}
+        for _, item in ipairs(options) do
+            local value = type(item) == "table" and (item.value or item.name) or item
+            local display = type(item) == "table" and (item.display or item.name or item.value) or item
+            values[#values + 1] = display; reverse[display] = value
+        end
+        return tab:Dropdown({ Title = title, Desc = desc, Values = values, Multi = true,
+            AllowNone = true, SearchBarEnabled = true,
             Callback = function(items)
                 for k in pairs(selected) do selected[k] = nil end
-                for _, item in ipairs(items or {}) do selected[item] = true end
-                if callback then callback() end
-            end,
-        })
-    end
-
-    local function dynamicMulti(t, title, getter, selected, callback)
-        local values = type(getter) == "function" and getter() or {}
-        local display, reverse = {}, {}
-        for _, item in ipairs(values) do
-            if type(item) == "table" then
-                local label = item.display or item.name or item.value
-                display[#display + 1] = label
-                reverse[label] = item.value or item.name or label
-            else
-                display[#display + 1] = item
-            end
-        end
-        return t:Dropdown({
-            Title = title, Values = display, Multi = true, AllowNone = true,
-            SearchBarEnabled = true,
-            Callback = function(items)
-                for key in pairs(selected) do selected[key] = nil end
                 for _, item in ipairs(items or {}) do selected[reverse[item] or item] = true end
-                if callback then callback() end
-            end,
-        })
+                save()
+            end })
+    end
+    local function button(tab, title, callback) return tab:Button({ Title = title, Callback = callback }) end
+
+    -- PET
+    do
+        local tab = t("Pet", "paw-print")
+        local pnp = section(tab, "Pick & Place")
+        toggle(pnp, "PNP V1", "Polling implementation", "pnpEnabled", ctx.startPnpV1)
+        toggle(pnp, "PNP V2", "Event-driven implementation", "pnpV2Enabled", ctx.startPnpV2)
+        input(pnp, "V1 Pickup Delay", "pickupDelay", 0.3)
+        input(pnp, "V2 Pickup Delay", "pnpV2PickupDelay", 0.05)
+        multi(pnp, "V1 Pet Selection", function() return ctx.inventoryPetOptions and ctx.inventoryPetOptions(CFG.pnpUuids) or {} end, CFG.pnpUuids)
+        multi(pnp, "V2 Pet Selection", function() return ctx.inventoryPetOptions and ctx.inventoryPetOptions(CFG.pnpV2Uuids) or {} end, CFG.pnpV2Uuids)
+        local boost = section(tab, "Boost")
+        toggle(boost, "Auto Boost Pet", "Existing boost module", "boostEnabled", ctx.startBoostPet)
     end
 
-    local pet = tab("Pet", "paw-print")
-    toggle(pet, "Auto Pick & Place V1", "Existing polling PNP logic", "pnpEnabled", ctx.startPnpV1)
-    toggle(pet, "Auto Pick & Place V2", "Existing event-driven PNP logic", "pnpV2Enabled", ctx.startPnpV2)
-    input(pet, "PNP V1 Pickup Delay", "pickupDelay", 0.3)
-    input(pet, "PNP V2 Pickup Delay", "pnpV2PickupDelay", 0.05)
-    toggle(pet, "Auto Boost Pet", "Existing pet boost automation", "boostEnabled", ctx.startBoostPet)
-    dynamicMulti(pet, "PNP V1 Pets", function() return ctx.inventoryPetOptions and ctx.inventoryPetOptions(CFG.pnpUuids) or {} end, CFG.pnpUuids, function() if ctx.persistState then ctx.persistState() end end)
-    dynamicMulti(pet, "PNP V2 Pets", function() return ctx.inventoryPetOptions and ctx.inventoryPetOptions(CFG.pnpV2Uuids) or {} end, CFG.pnpV2Uuids, function() if ctx.persistState then ctx.persistState() end end)
+    -- FARM WITH SUBTAB SECTIONS
+    do
+        local tab = t("Farm", "wheat")
+        local plants = section(tab, "Plants")
+        multi(plants, "Seeds", function() return ctx.getPlantSeedOptions and ctx.getPlantSeedOptions() or {} end, CFG.plantSeedNames)
+        toggle(plants, "Auto Plants", "Plant selected seeds", "plantSeedEnabled", ctx.startPlant)
+        input(plants, "Plant Delay", "plantDelay", 0)
+        local care = section(tab, "Sprinkler & Water")
+        multi(care, "Sprinklers", function() return ctx.getSprinklerOptions and ctx.getSprinklerOptions() or {} end, CFG.sprinklerNames)
+        toggle(care, "Auto Sprinkler", "Place selected sprinklers", "sprinklerEnabled", ctx.startSprinkler)
+        toggle(care, "Auto Water", "Water selected fruit", "waterEnabled", ctx.startWater)
+        input(care, "Water Delay", "waterDelay", 1)
+        local harvest = section(tab, "Harvest & Favorite")
+        toggle(harvest, "Auto Collect", "Harvest selected fruit", "collectWlFruitEnabled", ctx.startCollect)
+        toggle(harvest, "Auto Favorite", "Favorite selected fruit", "favEnabled", ctx.startFavorite)
+        toggle(harvest, "Auto Unfavorite", "Unfavorite selected fruit", "unfavEnabled", ctx.startFavorite)
+        local shovel = section(tab, "Shovel & Reclaimer")
+        toggle(shovel, "Auto Shovel Tree", "Remove selected trees", "shovelTreeEnabled", ctx.startShovelTree)
+        toggle(shovel, "Auto Shovel Fruit", "Remove selected fruit", "shovelFruitEnabled", ctx.startShovelFruit)
+        toggle(shovel, "Auto Reclaimer", "Reclaim selected plants", "reclaimEnabled", ctx.startReclaim)
+    end
 
-    local farm = tab("Farm", "wheat")
-    toggle(farm, "Auto Plants", "Plant selected seeds", "plantSeedEnabled", ctx.startPlant)
-    toggle(farm, "Auto Sprinkler", "Place selected sprinklers", "sprinklerEnabled", ctx.startSprinkler)
-    toggle(farm, "Auto Water", "Water selected fruits", "waterEnabled", ctx.startWater)
-    toggle(farm, "Auto Collect", "Harvest selected fruits", "collectWlFruitEnabled", ctx.startCollect)
-    toggle(farm, "Auto Favorite", "Favorite selected fruits", "favEnabled", ctx.startFavorite)
-    toggle(farm, "Auto Unfavorite", "Unfavorite selected fruits", "unfavEnabled", ctx.startFavorite)
-    toggle(farm, "Auto Reclaimer", "Reclaim selected plants", "reclaimEnabled", ctx.startReclaim)
-    dynamicMulti(farm, "Seeds", function() return ctx.getPlantSeedOptions and ctx.getPlantSeedOptions() or {} end, CFG.plantSeedNames, function() if ctx.persistState then ctx.persistState() end end)
-    dynamicMulti(farm, "Sprinklers", function() return ctx.getSprinklerOptions and ctx.getSprinklerOptions() or {} end, CFG.sprinklerNames, function() if ctx.persistState then ctx.persistState() end end)
+    -- HATCH SUBTABS AS SECTIONS
+    do
+        local tab = t("Hatch", "egg")
+        local core = section(tab, "Main Team")
+        toggle(core, "Auto Hatch", "Hatch selected eggs", "hatchEnabled", ctx.startHatch)
+        input(core, "Egg Name", "hatchEggName", "Rare Egg")
+        input(core, "Max Eggs", "hatchMaxPlaced", 8)
+        input(core, "Team Delay", "hatchTeamDelay", 5.5)
+        local bronto = section(tab, "Bronto Team")
+        multi(bronto, "Bronto Team", function() return ctx.inventoryPetOptions and ctx.inventoryPetOptions(CFG.hatchBrontoTeam) or {} end, CFG.hatchBrontoTeam)
+        input(bronto, "Bronto Weight", "brontoUniversalWeight", 0)
+        local sell = section(tab, "Sell Team")
+        toggle(sell, "Auto Sell", "Sell configured hatch results", "autoSellEnabled")
+        multi(sell, "Sell Pet Types", function() return ctx.reg and ctx.reg.PET_OPTIONS or {} end, CFG.sellPetTypes)
+        local config = section(tab, "Hatch Config")
+        toggle(config, "Egg Minus Rejoin", "Reconnect on minus egg delta", "hatchRejoinMinusEnabled", ctx.startEggMinusWatcher)
+        toggle(config, "Egg Plus Rejoin", "Reconnect on plus egg delta", "hatchRejoinPlusEnabled", ctx.startEggMinusWatcher)
+    end
 
-    local hatch = tab("Hatch", "egg")
-    toggle(hatch, "Auto Hatch", "Existing hatch automation", "hatchEnabled", ctx.startHatch)
-    toggle(hatch, "Auto Sell", "Existing hatch sell automation", "autoSellEnabled")
-    input(hatch, "Hatch Team Delay", "hatchTeamDelay", 5.5)
-    input(hatch, "Max Eggs Placed", "hatchMaxPlaced", 8)
+    -- FLOW SUBTABS
+    do
+        local tab = t("Flow", "git-branch")
+        local main = section(tab, "Flow Controls")
+        toggle(main, "Growth Pipeline", "Elephant -> Mutation -> Leveling", "growthEnabled", ctx.startGrowth)
+        multi(main, "Default Target Types", function() return ctx.reg and ctx.reg.PET_OPTIONS or {} end, CFG.growthPetTypes)
+        local elephant = section(tab, "Elephant Step")
+        input(elephant, "Target Weight", "growthElephantWeight", 5.5)
+        input(elephant, "Max Pets", "growthElephantMax", 2)
+        local mutation = section(tab, "Mutation Step")
+        multi(mutation, "Target Mutations", function() return ctx.reg and ctx.reg.MUT_OPTIONS or {} end, CFG.growthMutationTargets)
+        toggle(mutation, "Mutation", "Existing mutation module", "mutationEnabled", ctx.startMutation)
+        local leveling = section(tab, "Leveling Step")
+        input(leveling, "Phase 1 Target", "growthLevP1Target", 40)
+        input(leveling, "Phase 2 Target", "growthLevP2Target", 500)
+    end
 
-    local elephant = tab("Elephant", "rabbit")
-    toggle(elephant, "Auto Elephant", "Existing elephant automation", "elephantEnabled", ctx.startElephant)
-    toggle(elephant, "Auto Elephant V2", "Existing elephant V2 automation", "elephantV2Enabled", ctx.startElephantV2)
+    local level = t("Leveling", "zap")
+    toggle(section(level, "Leveling Controls"), "Leveling V1", "Existing leveling", "levelingEnabled", ctx.startLeveling)
+    toggle(section(level, "Leveling Controls"), "Leveling V2", "Two-phase leveling", "levelingV2Enabled", ctx.startLevelingV2)
+    input(section(level, "Leveling Controls"), "Target Level", "levelingTargetLevel", 500)
 
-    local flow = tab("Flow", "git-branch")
-    toggle(flow, "Growth Pipeline", "Existing elephant/mutation/leveling pipeline", "growthEnabled", ctx.startGrowth)
-    toggle(flow, "Beanstalk Event", "Existing Beanstalk automation", "beanstalkPlantEnabled", ctx.startBeanstalk)
+    local mut = t("Mutation", "flask-conical")
+    toggle(section(mut, "Mutation Machine"), "Auto Mutation", "Existing mutation machine", "mutationEnabled", ctx.startMutation)
+    toggle(section(mut, "Mutation Machine"), "Auto Cleanse", "Existing cleanse module", "cleanseEnabled", ctx.startCleanse)
 
-    local inventory = tab("Inventory", "backpack")
-    toggle(inventory, "Accept Gifts", "Existing gift accept automation", "acceptGifts")
-    toggle(inventory, "Accept Trades", "Existing trade accept automation", "acceptTrades")
-    toggle(inventory, "Trade Ticket", "Existing trade ticket automation", "tradeTicketEnabled", function() if ctx.startTrade then ctx.startTrade("ticket") end end)
-    toggle(inventory, "Trade Gift", "Existing gift automation", "tradeGiftEnabled", function() if ctx.startTrade then ctx.startTrade("gift") end end)
+    local inv = t("Inventory", "backpack")
+    toggle(section(inv, "Trade & Gifts"), "Trade Ticket", "Existing trade automation", "tradeTicketEnabled", function() if ctx.startTrade then ctx.startTrade("ticket") end end)
+    toggle(section(inv, "Trade & Gifts"), "Trade Gift", "Existing gift automation", "tradeGiftEnabled", function() if ctx.startTrade then ctx.startTrade("gift") end end)
+    toggle(section(inv, "Trade & Gifts"), "Accept Gifts", "Accept incoming gifts", "acceptGifts")
+    toggle(section(inv, "Trade & Gifts"), "Accept Trades", "Accept incoming trades", "acceptTrades")
 
-    local leveling = tab("Leveling", "zap")
-    toggle(leveling, "Leveling", "Existing leveling automation", "levelingEnabled", ctx.startLeveling)
-    toggle(leveling, "Leveling V2", "Existing leveling V2 automation", "levelingV2Enabled", ctx.startLevelingV2)
-    input(leveling, "Level Target", "levelingTargetLevel", 500)
+    local shop = t("Shop", "shopping-cart")
+    toggle(section(shop, "Seeds"), "Buy Seeds", "Existing shop automation", "buySeedEnabled", ctx.startBuySeed)
+    toggle(section(shop, "Eggs"), "Buy Eggs", "Existing shop automation", "buyEggEnabled", ctx.startBuyEgg)
+    toggle(section(shop, "Gears"), "Buy Gear", "Existing shop automation", "buyGearEnabled", ctx.startBuyGear)
+    toggle(section(shop, "Merchant"), "Buy Merchant", "Existing merchant automation", "merchantBuyEnabled", ctx.startBuyMerchant)
 
-    local mutation = tab("Mutation", "flask-conical")
-    toggle(mutation, "Mutation", "Existing mutation automation", "mutationEnabled", ctx.startMutation)
-    toggle(mutation, "Cleanse", "Existing cleanse automation", "cleanseEnabled", ctx.startCleanse)
-
-    local shop = tab("Shop", "shopping-cart")
-    toggle(shop, "Buy Seeds", "Existing shop automation", "buySeedEnabled", ctx.startBuySeed)
-    toggle(shop, "Buy Eggs", "Existing shop automation", "buyEggEnabled", ctx.startBuyEgg)
-    toggle(shop, "Buy Gear", "Existing shop automation", "buyGearEnabled", ctx.startBuyGear)
-    toggle(shop, "Buy Merchant", "Existing merchant automation", "merchantBuyEnabled", ctx.startBuyMerchant)
-
-    local misc = tab("Misc", "settings")
-    toggle(misc, "ESP Labels", "Existing ESP label module", "espEnabled", ctx.startEsp)
-    toggle(misc, "ESP Inventory", "Existing ESP inventory module", "espInvEnabled", ctx.startEspInv)
-    toggle(misc, "Noclip", "Existing player modifier", "noclipEnabled", function() if ctx.setNoclip then ctx.setNoclip(true) end end)
-    toggle(misc, "Infinity Jump", "Existing player modifier", "infJumpEnabled", function() if ctx.setInfJump then ctx.setInfJump(true) end end)
-    toggle(misc, "Auto Reconnect", "Existing reconnect module", "reconnectEnabled", ctx.startReconnect)
-    toggle(misc, "Performance Mode", "Existing performance module", "perfMode", ctx.startPerf)
+    local misc = t("Misc", "settings")
+    toggle(section(misc, "Performance"), "Noclip", "Player modifier", "noclipEnabled", function(v) if ctx.setNoclip then ctx.setNoclip(v) end end)
+    toggle(section(misc, "Performance"), "Infinity Jump", "Player modifier", "infJumpEnabled", function(v) if ctx.setInfJump then ctx.setInfJump(v) end end)
+    toggle(section(misc, "Performance"), "ESP Labels", "Existing ESP labels", "espEnabled", ctx.startEsp)
+    toggle(section(misc, "Performance"), "ESP Inventory", "Existing ESP inventory", "espInvEnabled", ctx.startEspInv)
+    toggle(section(misc, "Reconnect"), "Auto Reconnect", "Reconnect on disconnect", "reconnectEnabled", ctx.startReconnect)
 
     if ctx.notify then ctx.notify("Native WindUI pages loaded") end
 end
