@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 43 modul, di-generate 2026-10-27T22:26:19.009Z
+-- 43 modul, di-generate 2026-10-27T22:27:36.951Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -8319,7 +8319,12 @@ return function(ctx)
 		local entries = {}
 		for _, egg in ipairs(CS:GetTagged("PetEggServer")) do
 			if egg:GetAttribute("OWNER") == LP.Name then
-				if egg:GetAttribute("READY") or tonumber(egg:GetAttribute("TimeToHatch")) then
+				local tl = tonumber(egg:GetAttribute("TimeToHatch"))
+				-- Countdown jalan kapan pun TimeToHatch > 0. READY dipercaya
+				-- cuma kalo timer habis/absen — game ngeset READY=true duluan
+				-- sebelum egg beneran siap.
+				local isReady = not (tl and tl > 0)
+				if egg:GetAttribute("READY") ~= nil or tl then
 					local uuid = tostring(egg:GetAttribute("OBJECT_UUID"))
 					local bw = getBW(uuid)
 					if bw then
@@ -8328,8 +8333,8 @@ return function(ctx)
 							eggName = egg:GetAttribute("EggName") or egg.Name,
 							uuid = uuid,
 							bw = bw,
-							ready = egg:GetAttribute("READY"),
-							timeLeft = tonumber(egg:GetAttribute("TimeToHatch")) or 0,
+							ready = isReady,
+							timeLeft = tl or 0,
 						}
 					end
 				end
