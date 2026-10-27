@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T16:06:22.853Z
+-- 42 modul, di-generate 2026-10-27T16:16:31.075Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -10609,6 +10609,42 @@ return function(ctx)
 		end)
 	end
 
+	-- Isi rows via TABEL MENU langsung: Refresh dist bangun baris dari ARGUMEN
+	-- dan nandain seleksi dari ap.Value milik menu (bukan element). Jangan
+	-- andelin :Select — itu Refresh(ap.Values) dgn Values menu yang bisa beda
+	-- table dari assignment ke element.
+	local function dropdownFill(control, values, selected)
+		local menu = control.DropdownMenu or control
+		menu.Values = values
+		control.Values = values
+		menu.Value = selected
+		pcall(function() menu:Refresh(values) end)
+		pcall(patchDropdown, menu)
+		return (values and #values) or 0
+	end
+
+	-- Lazy open: dist ngebind klik ke <menuTabel>:Open() (bukan selalu table
+	-- yang kitaa hold) -> hook dipasang di KEDUA sink: menu.Open & control.Open.
+	local function lazyOpen(control, fillFn)
+		local menu = control.DropdownMenu or control
+		local function once()
+			if fillFn.done then return end
+			fillFn.done = true
+			pcall(fillFn)
+		end
+		local o1, o2 = menu.Open, control.Open
+		menu.Open = function(self, ...)
+			if o1 then pcall(o1, self, ...) end
+			once()
+		end
+		if control ~= menu and o2 then
+			control.Open = function(self, ...)
+				if o2 then pcall(o2, self, ...) end
+				once()
+			end
+		end
+	end
+
 	-- Single dropdown: opsi bisa string atau {name=, display=}; snapshot saat build
 	-- + refresh() buat dipanggil ulang (WindUI Dropdown punya :Refresh).
 	local function makeSingleW(parent, title, desc, getOptions, getv, setv, opts)
@@ -10633,9 +10669,8 @@ return function(ctx)
 		local control
 		local function fill()
 			local displays, selected = snapshot()
-			control.Values = displays
-			pcall(function() control:Select(selected) end) -- Select = Refresh internal (satu rebuild)
-			patchDropdown(control)
+			local n = dropdownFill(control, displays, selected)
+			if ctx.log then ctx.log(("dropdown '%s' terisi (%d opsi)"):format(title, n)) end
 		end
 		snapshot() -- isi mapping d2v/v2d buat Callback; rows-nya ditahan kosong
 		control = parent:Dropdown({
@@ -10649,18 +10684,10 @@ return function(ctx)
 				persist()
 			end),
 		})
-		-- LAZY: baris dibangun SAAT MENU PERTAMA DIBUKA, bukan saat load/post-load
-		-- fill (Refresh/Select dist rebuild seluruh baris sinkron = freeze scan).
-		-- Menu kebuka instan, baris menyusul di thread sendiri. ponytail: open
-		-- pertama list besar masih ngehitch — upgrade path = list virtualisasi.
-		local built, origOpen = false, control.Open
-		control.Open = function(self, ...)
-			if origOpen then pcall(origOpen, self, ...) end
-			if not built then
-				built = true
-				task.spawn(function() pcall(fill) end)
-			end
-		end
+		-- LAZY: baris dibangun SAAT MENU PERTAMA DIBUKA (menu kebuka instan,
+		-- baris menyusul di thread sendiri). ponytail: open pertama list besar
+		-- masih ngehitch — upgrade path = list virtualisasi.
+		lazyOpen(control, fill)
 		local function refresh()
 			task.spawn(function() pcall(fill) end)
 		end
@@ -10722,12 +10749,10 @@ return function(ctx)
 		})
 		-- Constraint menu + wrap Title opsi ditangani patchDropdown() (module level)
 		local function buildRows(p)
-			control.Values = p.ds
-			pcall(function() control:Select(p.sel2) end) -- Select = Refresh internal
-			patchDropdown(control)
+			local n = dropdownFill(control, p.ds, p.sel2)
 			if ctx.log then
 				ctx.log(("dropdown '%s' terisi: %d opsi%s")
-					:format(title, #p.ds, p.extra > 0 and (", +" .. p.extra .. " pet tak ditampilkan") or ""))
+					:format(title, n, p.extra > 0 and (", +" .. p.extra .. " pet tak ditampilkan") or ""))
 			end
 		end
 		-- LAZY: baris dibangun pas menu pertama dibuka. Snapshot datanya sendiri
@@ -10740,18 +10765,12 @@ return function(ctx)
 				pendingDone, pending = true, { ds = ds, sel2 = sel2, extra = extra }
 			end)
 		end)
-		local built, origOpen = false, control.Open
-		control.Open = function(self, ...)
-			if origOpen then pcall(origOpen, self, ...) end
-			if not built then
-				built = true
-				task.spawn(function()
-					local t0 = os.clock()
-					while not pendingDone and os.clock() - t0 < 15 do task.wait(0.1) end
-					if pending then pcall(buildRows, pending) end
-				end)
-			end
+		local function fill()
+			local t0 = os.clock()
+			while not pendingDone and os.clock() - t0 < 15 do task.wait(0.1) end
+			if pending then buildRows(pending) end
 		end
+		lazyOpen(control, fill)
 		local function refresh()
 			-- Tombol "Update Pet List": rebuild penuh (aksi eksplisit user);
 			-- cache TTL 5s bikin fetch-nya murah.
@@ -10800,22 +10819,12 @@ return function(ctx)
 		-- dibangun sinkron (ctor/fill) = freeze berdetik; menu kebuka instan,
 		-- baris menyusul. ponytail: open pertama list besar ngehitch sekali —
 		-- upgrade path = list virtualisasi buat dropdown dist.
-		local built, origOpen = false, control.Open
-		control.Open = function(self, ...)
-			if origOpen then pcall(origOpen, self, ...) end
-			if not built then
-				built = true
-				task.spawn(function()
-					local titles = savedTitles()
-					control.Values = options
-					pcall(function() control:Select(titles) end)
-					patchDropdown(control)
-					if ctx.log then
-						ctx.log(("dropdown '%s' terisi (%d opsi)"):format(title, #options))
-					end
-				end)
+		lazyOpen(control, function()
+			local n = dropdownFill(control, options, savedTitles())
+			if ctx.log then
+				ctx.log(("dropdown '%s' terisi (%d opsi)"):format(title, n))
 			end
-		end
+		end)
 		return control
 	end
 
