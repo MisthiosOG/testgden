@@ -2,8 +2,8 @@
 -- Bypasses stale GAG_APP/router overrides; production diagnostic entrypoint.
 local compile = loadstring or load
 assert(compile, "No Luau compiler available")
-local BUILD = "pink-royale-2026-10-27"
-local REVISION = "6e5100e7ed6d598c74032f3392f67aa7b8566648"
+local BUILD = "pink-royale-2026-10-27b"
+local REVISION = "43d24e687d44a64ed85e6c53c3cf8d294338e19c"
 local BASE = "https://raw.githubusercontent.com/MisthiosOG/testgden/" .. REVISION .. "/tegalan/garden"
 print("[iStealth][DIRECT] build=" .. BUILD)
 
