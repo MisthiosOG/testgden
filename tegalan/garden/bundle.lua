@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 43 modul, di-generate 2026-10-27T13:08:33.239Z
+-- 43 modul, di-generate 2026-10-27T13:13:35.414Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua — init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -13880,624 +13880,624 @@ return function(ctx)
 end
 ]=],
 	["ui/window.lua"] = [=[
-��- - [ [   w i n d o w . l u a   �� �   j e n d e l a   u t a m a   g a r d e n   P I N K   R O Y A L E :  
-           S i d e b a r   m o d e r n ,   p l a y e r   p r o f i l e   c a r d ,   g l o w i n g   t i t l e   b a r ,   r e s p o n s i v e   a u t o - s c a l i n g ,  
-           m o d a l   k o n f i r m a s i   c l o s e ,   f l o a t i n g   m a x i m i z e   j e w e l .   ] ]  
- r e t u r n   f u n c t i o n ( c t x )  
- 	 l o c a l   P l a y e r s                     =   c t x . S e r v i c e s . P l a y e r s  
- 	 l o c a l   U s e r I n p u t S e r v i c e   =   c t x . S e r v i c e s . U s e r I n p u t S e r v i c e  
- 	 l o c a l   T S                               =   g a m e : G e t S e r v i c e ( " T w e e n S e r v i c e " )  
- 	 l o c a l   L P     =   c t x . L P  
- 	 l o c a l   C       =   c t x . C  
- 	 l o c a l   F       =   c t x . F  
- 	 l o c a l   m k ,   c o r n e r ,   s t r o k e ,   p a d ,   g r a d   =   c t x . m k ,   c t x . c o r n e r ,   c t x . s t r o k e ,   c t x . p a d ,   c t x . g r a d  
-  
- 	 c t x . u i . p a g e s       =   { }  
- 	 c t x . u i . t a b B t n s   =   { }  
-  
- 	 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -   b e r s i h k a n   G U I   l a m a  
- 	 p c a l l ( f u n c t i o n ( )  
- 	 	 l o c a l   h o s t   =   ( g e t h u i   a n d   g e t h u i ( ) )   o r   g a m e : G e t S e r v i c e ( " C o r e G u i " )  
- 	 	 f o r   _ ,   n m   i n   i p a i r s ( {   " G A G G a r d e n " ,   " C e s z P a r a d i s e G a r d e n " ,   " A l l e g i a a n G a r d e n "   } )   d o  
- 	 	 	 l o c a l   o l d   =   h o s t : F i n d F i r s t C h i l d ( n m ) ;   i f   o l d   t h e n   o l d : D e s t r o y ( )   e n d  
- 	 	 	 l o c a l   p g   =   L P : F i n d F i r s t C h i l d ( " P l a y e r G u i " )  
- 	 	 	 i f   p g   a n d   p g : F i n d F i r s t C h i l d ( n m )   t h e n   p g [ n m ] : D e s t r o y ( )   e n d  
- 	 	 e n d  
- 	 e n d )  
-  
- 	 l o c a l   g u i   =   I n s t a n c e . n e w ( " S c r e e n G u i " )  
- 	 g u i . N a m e   =   " C e s z P a r a d i s e G a r d e n "  
- 	 g u i . R e s e t O n S p a w n   =   f a l s e  
- 	 g u i . Z I n d e x B e h a v i o r   =   E n u m . Z I n d e x B e h a v i o r . S i b l i n g  
- 	 g u i . P a r e n t   =   L P : W a i t F o r C h i l d ( " P l a y e r G u i " )  
- 	 c t x . s t a t e . g u i   =   g u i  
- 	 c t x . s t a t e . i s A l i v e   =   t r u e  
- 	 g u i . D e s t r o y i n g : C o n n e c t ( f u n c t i o n ( )  
- 	 	 c t x . s t a t e . i s A l i v e   =   f a l s e  
- 	 e n d )  
-  
- 	 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -   F l o a t i n g   M a x i m i z e   J e w e l  
- 	 l o c a l   m a x I c o n   =   m k ( " T e x t B u t t o n " ,   {  
- 	 	 S i z e   =   U D i m 2 . f r o m O f f s e t ( 5 0 ,   5 0 ) ,  
- 	 	 P o s i t i o n   =   U D i m 2 . n e w ( 0 ,   1 6 ,   0 . 5 ,   - 2 5 ) ,  
- 	 	 B a c k g r o u n d C o l o r 3   =   C . p a n e l ,  
- 	 	 T e x t   =   " �� � " ,  
- 	 	 F o n t   =   F . b o l d ,  
- 	 	 T e x t S i z e   =   2 2 ,  
- 	 	 T e x t C o l o r 3   =   C . a c c ,  
- 	 	 V i s i b l e   =   f a l s e ,  
- 	 	 A c t i v e   =   t r u e ,  
- 	 	 Z I n d e x   =   1 0 0 ,  
- 	 } ,   g u i )  
- 	 c o r n e r ( m a x I c o n ,   2 5 )  
- 	 s t r o k e ( m a x I c o n ,   C . a c c ,   2 ,   0 . 1 )  
-  
- 	 - -   G l o w   r i n g   d i   b e l a k a n g   f l o a t i n g   b u t t o n  
- 	 l o c a l   m a x G l o w   =   m k ( " F r a m e " ,   {  
- 	 	 S i z e   =   U D i m 2 . n e w ( 1 ,   1 4 ,   1 ,   1 4 ) ,  
- 	 	 P o s i t i o n   =   U D i m 2 . n e w ( 0 ,   - 7 ,   0 ,   - 7 ) ,  
- 	 	 B a c k g r o u n d C o l o r 3   =   C . a c c ,  
- 	 	 B a c k g r o u n d T r a n s p a r e n c y   =   0 . 7 5 ,  
- 	 	 B o r d e r S i z e P i x e l   =   0 ,  
- 	 	 Z I n d e x   =   9 9 ,  
- 	 } ,   m a x I c o n )  
- 	 c o r n e r ( m a x G l o w ,   3 0 )  
-  
- 	 p c a l l ( f u n c t i o n ( )  
- 	 	 l o c a l   l o g o   =   c t x . g e t L o g o   a n d   c t x . g e t L o g o ( )  
- 	 	 i f   l o g o   t h e n  
- 	 	 	 m a x I c o n . T e x t   =   " "  
- 	 	 	 l o c a l   i m g   =   m k ( " I m a g e L a b e l " ,   {  
- 	 	 	 	 S i z e   =   U D i m 2 . f r o m S c a l e ( 1 ,   1 ) ,  
- 	 	 	 	 P o s i t i o n   =   U D i m 2 . f r o m S c a l e ( 0 ,   0 ) ,  
- 	 	 	 	 B a c k g r o u n d T r a n s p a r e n c y   =   1 ,  
- 	 	 	 	 I m a g e   =   l o g o ,  
- 	 	 	 	 S c a l e T y p e   =   E n u m . S c a l e T y p e . F i t ,  
- 	 	 	 	 Z I n d e x   =   1 0 1 ,  
- 	 	 	 } ,   m a x I c o n )  
- 	 	 	 c o r n e r ( i m g ,   2 5 )  
- 	 	 e n d  
- 	 e n d )  
-  
- 	 - -   D r a g g a b l e   m a x i m i z e   i c o n  
- 	 d o  
- 	 	 l o c a l   d r a g g i n g ,   d s ,   s p  
- 	 	 m a x I c o n . I n p u t B e g a n : C o n n e c t ( f u n c t i o n ( i )  
- 	 	 	 i f   i . U s e r I n p u t T y p e   = =   E n u m . U s e r I n p u t T y p e . M o u s e B u t t o n 1   o r   i . U s e r I n p u t T y p e   = =   E n u m . U s e r I n p u t T y p e . T o u c h   t h e n  
- 	 	 	 	 d r a g g i n g   =   t r u e ;   d s   =   i . P o s i t i o n ;   s p   =   m a x I c o n . P o s i t i o n  
- 	 	 	 e n d  
- 	 	 e n d )  
- 	 	 U s e r I n p u t S e r v i c e . I n p u t C h a n g e d : C o n n e c t ( f u n c t i o n ( i )  
- 	 	 	 i f   d r a g g i n g   a n d   ( i . U s e r I n p u t T y p e   = =   E n u m . U s e r I n p u t T y p e . M o u s e M o v e m e n t   o r   i . U s e r I n p u t T y p e   = =   E n u m . U s e r I n p u t T y p e . T o u c h )   t h e n  
- 	 	 	 	 l o c a l   d   =   i . P o s i t i o n   -   d s  
- 	 	 	 	 m a x I c o n . P o s i t i o n   =   U D i m 2 . n e w ( s p . X . S c a l e ,   s p . X . O f f s e t   +   d . X ,   s p . Y . S c a l e ,   s p . Y . O f f s e t   +   d . Y )  
- 	 	 	 e n d  
- 	 	 e n d )  
- 	 	 U s e r I n p u t S e r v i c e . I n p u t E n d e d : C o n n e c t ( f u n c t i o n ( i )  
- 	 	 	 i f   i . U s e r I n p u t T y p e   = =   E n u m . U s e r I n p u t T y p e . M o u s e B u t t o n 1   o r   i . U s e r I n p u t T y p e   = =   E n u m . U s e r I n p u t T y p e . T o u c h   t h e n  
- 	 	 	 	 d r a g g i n g   =   f a l s e  
- 	 	 	 e n d  
- 	 	 e n d )  
- 	 e n d  
-  
- 	 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -   M a i n   W i n d o w   ( C o m p a c t   &   U l t r a - L e g i b l e   f o r   M o b i l e / A n d r o i d )  
- 	 l o c a l   m a i n   =   m k ( " F r a m e " ,   {  
- 	 	 S i z e   =   U D i m 2 . f r o m O f f s e t ( 6 1 0 ,   3 7 5 ) ,  
- 	 	 A n c h o r P o i n t   =   V e c t o r 2 . n e w ( 0 . 5 ,   0 . 5 ) ,  
- 	 	 P o s i t i o n   =   U D i m 2 . f r o m S c a l e ( 0 . 5 ,   0 . 5 ) ,  
- 	 	 B a c k g r o u n d C o l o r 3   =   C . b g ,  
- 	 	 B a c k g r o u n d T r a n s p a r e n c y   =   0 . 0 3 ,  
- 	 	 B o r d e r S i z e P i x e l   =   0 ,  
- 	 	 A c t i v e   =   t r u e ,  
- 	 } ,   g u i )  
- 	 c o r n e r ( m a i n ,   1 4 )  
- 	 s t r o k e ( m a i n ,   C . s t r o k e ,   1 . 8 ,   0 . 2 5 )  
-  
- 	 - -   I n n e r   a m b i e n t   g l o w  
- 	 l o c a l   i n n e r A m b i e n t   =   m k ( " F r a m e " ,   {  
- 	 	 S i z e   =   U D i m 2 . n e w ( 1 ,   0 ,   1 ,   0 ) ,  
- 	 	 B a c k g r o u n d C o l o r 3   =   C . a c c ,  
- 	 	 B a c k g r o u n d T r a n s p a r e n c y   =   0 . 9 4 ,  
- 	 	 B o r d e r S i z e P i x e l   =   0 ,  
- 	 } ,   m a i n )  
- 	 c o r n e r ( i n n e r A m b i e n t ,   1 4 )  
-  
- 	 - -   A u t o - s c a l e   r e s p o n s i f   ( l a y a r   H P   A n d r o i d   1 0 / A r c e u s   X / t a b l e t / d e s k t o p )  
- 	 l o c a l   u i S c a l e   =   I n s t a n c e . n e w ( " U I S c a l e " ) ;   u i S c a l e . P a r e n t   =   m a i n  
- 	 l o c a l   f u n c t i o n   f i t S c a l e ( )  
- 	 	 l o c a l   c a m   =   w o r k s p a c e . C u r r e n t C a m e r a  
- 	 	 l o c a l   v p   =   c a m   a n d   c a m . V i e w p o r t S i z e   o r   V e c t o r 2 . n e w ( 1 2 8 0 ,   7 2 0 )  
- 	 	 l o c a l   w ,   h   =   m a i n . S i z e . X . O f f s e t ,   m a i n . S i z e . Y . O f f s e t  
- 	 	 - -   M a r g i n   h a n y a   1 6 p x   a g a r   d i   l a y a r   H P   m u a t   m a k s i m a l   t a n p a   m e n g e c i l   b e r l e b i h a n  
- 	 	 l o c a l   s   =   m a t h . m i n ( 1 ,   ( v p . X   -   1 6 )   /   w ,   ( v p . Y   -   1 6 )   /   h )  
- 	 	 u i S c a l e . S c a l e   =   m a t h . m a x ( 0 . 6 2 ,   s )  
- 	 e n d  
- 	 f i t S c a l e ( )  
- 	 p c a l l ( f u n c t i o n ( )  
- 	 	 l o c a l   c a m   =   w o r k s p a c e . C u r r e n t C a m e r a  
- 	 	 i f   c a m   t h e n   c a m : G e t P r o p e r t y C h a n g e d S i g n a l ( " V i e w p o r t S i z e " ) : C o n n e c t ( f i t S c a l e )   e n d  
- 	 e n d )  
-  
- 	 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -   M o d e r n   T i t l e   B a r  
- 	 l o c a l   t i t l e B a r   =   m k ( " F r a m e " ,   {  
- 	 	 S i z e   =   U D i m 2 . n e w ( 1 ,   0 ,   0 ,   4 8 ) ,  
- 	 	 B a c k g r o u n d C o l o r 3   =   C . p a n e l ,  
- 	 	 B o r d e r S i z e P i x e l   =   0 ,  
- 	 	 Z I n d e x   =   5 ,  
- 	 } ,   m a i n )  
- 	 c o r n e r ( t i t l e B a r ,   1 6 )  
-  
- 	 - -   S u b t l e   g r a d i e n t   o v e r l a y   o n   t i t l e   b a r  
- 	 l o c a l   t i t l e G r a d   =   m k ( " F r a m e " ,   {  
- 	 	 S i z e   =   U D i m 2 . n e w ( 1 ,   0 ,   1 ,   0 ) ,  
- 	 	 B a c k g r o u n d C o l o r 3   =   C . a c c ,  
- 	 	 B a c k g r o u n d T r a n s p a r e n c y   =   0 . 8 5 ,  
- 	 	 B o r d e r S i z e P i x e l   =   0 ,  
- 	 	 Z I n d e x   =   6 ,  
- 	 } ,   t i t l e B a r )  
- 	 c o r n e r ( t i t l e G r a d ,   1 6 )  
- 	 g r a d ( t i t l e G r a d ,   0 )  
-  
- 	 - -   B o t t o m   b o r d e r   a c c e n t   l i n e   u n d e r   t i t l e   b a r  
- 	 l o c a l   t i t l e L i n e   =   m k ( " F r a m e " ,   {  
- 	 	 S i z e   =   U D i m 2 . n e w ( 1 ,   0 ,   0 ,   2 ) ,  
- 	 	 P o s i t i o n   =   U D i m 2 . n e w ( 0 ,   0 ,   1 ,   - 2 ) ,  
- 	 	 B a c k g r o u n d C o l o r 3   =   C . a c c ,  
- 	 	 B o r d e r S i z e P i x e l   =   0 ,  
- 	 	 Z I n d e x   =   7 ,  
- 	 } ,   t i t l e B a r )  
- 	 g r a d ( t i t l e L i n e ,   0 ,   C . a c c ,   C . a c c 2 )  
-  
- 	 - -   E m b l e m   &   T i t l e   L a b e l  
- 	 l o c a l   t i t l e I c o n   =   m k ( " T e x t L a b e l " ,   {  
- 	 	 S i z e   =   U D i m 2 . f r o m O f f s e t ( 3 0 ,   4 8 ) ,  
- 	 	 P o s i t i o n   =   U D i m 2 . f r o m O f f s e t ( 1 6 ,   0 ) ,  
- 	 	 B a c k g r o u n d T r a n s p a r e n c y   =   1 ,  
- 	 	 T e x t   =   " �� � " ,  
- 	 	 F o n t   =   F . t i t l e ,  
- 	 	 T e x t S i z e   =   2 0 ,  
- 	 	 T e x t C o l o r 3   =   C . a c c ,  
- 	 	 Z I n d e x   =   8 ,  
- 	 } ,   t i t l e B a r )  
-  
- 	 p c a l l ( f u n c t i o n ( )  
- 	 	 l o c a l   l o g o   =   c t x . g e t L o g o   a n d   c t x . g e t L o g o ( )  
- 	 	 i f   l o g o   t h e n  
- 	 	 	 t i t l e I c o n . T e x t   =   " "  
- 	 	 	 l o c a l   t I m g   =   m k ( " I m a g e L a b e l " ,   {  
- 	 	 	 	 S i z e   =   U D i m 2 . f r o m O f f s e t ( 2 6 ,   2 6 ) ,  
- 	 	 	 	 P o s i t i o n   =   U D i m 2 . f r o m O f f s e t ( 2 ,   1 1 ) ,  
- 	 	 	 	 B a c k g r o u n d T r a n s p a r e n c y   =   1 ,  
- 	 	 	 	 I m a g e   =   l o g o ,  
- 	 	 	 	 S c a l e T y p e   =   E n u m . S c a l e T y p e . F i t ,  
- 	 	 	 	 Z I n d e x   =   9 ,  
- 	 	 	 } ,   t i t l e I c o n )  
- 	 	 	 c o r n e r ( t I m g ,   1 3 )  
- 	 	 e n d  
- 	 e n d )  
-  
- 	 l o c a l   t i t l e L a b e l   =   m k ( " T e x t L a b e l " ,   {  
- 	 	 S i z e   =   U D i m 2 . n e w ( 0 ,   1 2 0 ,   1 ,   0 ) ,  
- 	 	 P o s i t i o n   =   U D i m 2 . f r o m O f f s e t ( 4 6 ,   0 ) ,  
- 	 	 B a c k g r o u n d T r a n s p a r e n c y   =   1 ,  
- 	 	 T e x t   =   " C e s z P a r a d i s e " ,  
- 	 	 F o n t   =   F . t i t l e ,  
- 	 	 T e x t S i z e   =   1 5 ,  
- 	 	 T e x t C o l o r 3   =   C . t x t ,  
- 	 	 T e x t X A l i g n m e n t   =   E n u m . T e x t X A l i g n m e n t . L e f t ,  
- 	 	 Z I n d e x   =   8 ,  
- 	 } ,   t i t l e B a r )  
-  
- 	 - -   S u b t i t l e   P i l l  
- 	 l o c a l   s u b P i l l   =   m k ( " F r a m e " ,   {  
- 	 	 S i z e   =   U D i m 2 . f r o m O f f s e t ( 1 1 6 ,   2 4 ) ,  
- 	 	 P o s i t i o n   =   U D i m 2 . f r o m O f f s e t ( 1 6 8 ,   1 2 ) ,  
- 	 	 B a c k g r o u n d C o l o r 3   =   C . r o w ,  
- 	 	 B o r d e r S i z e P i x e l   =   0 ,  
- 	 	 Z I n d e x   =   8 ,  
- 	 } ,   t i t l e B a r )  
- 	 c o r n e r ( s u b P i l l ,   1 2 )  
- 	 s t r o k e ( s u b P i l l ,   C . a c c ,   1 ,   0 . 5 )  
- 	 p a d ( s u b P i l l ,   6 ,   6 ,   0 ,   0 )  
-  
- 	 l o c a l   s u b L a b e l   =   m k ( " T e x t L a b e l " ,   {  
- 	 	 S i z e   =   U D i m 2 . n e w ( 1 ,   0 ,   1 ,   0 ) ,  
- 	 	 B a c k g r o u n d T r a n s p a r e n c y   =   1 ,  
- 	 	 T e x t   =   " �� �   G r o w   a   G a r d e n " ,  
- 	 	 F o n t   =   F . b o l d ,  
- 	 	 T e x t S i z e   =   1 0 . 5 ,  
- 	 	 T e x t C o l o r 3   =   C . a c c S o f t ,  
- 	 	 T e x t X A l i g n m e n t   =   E n u m . T e x t X A l i g n m e n t . C e n t e r ,  
- 	 	 Z I n d e x   =   9 ,  
- 	 } ,   s u b P i l l )  
-  
- 	 - -   D r a g g a b l e   T i t l e   B a r  
- 	 d o  
- 	 	 l o c a l   d r a g g i n g ,   d s ,   s p  
- 	 	 t i t l e B a r . I n p u t B e g a n : C o n n e c t ( f u n c t i o n ( i )  
- 	 	 	 i f   i . U s e r I n p u t T y p e   = =   E n u m . U s e r I n p u t T y p e . M o u s e B u t t o n 1   o r   i . U s e r I n p u t T y p e   = =   E n u m . U s e r I n p u t T y p e . T o u c h   t h e n  
- 	 	 	 	 d r a g g i n g   =   t r u e ;   d s   =   i . P o s i t i o n ;   s p   =   m a i n . P o s i t i o n  
- 	 	 	 e n d  
- 	 	 e n d )  
- 	 	 U s e r I n p u t S e r v i c e . I n p u t C h a n g e d : C o n n e c t ( f u n c t i o n ( i )  
- 	 	 	 i f   d r a g g i n g   a n d   ( i . U s e r I n p u t T y p e   = =   E n u m . U s e r I n p u t T y p e . M o u s e M o v e m e n t   o r   i . U s e r I n p u t T y p e   = =   E n u m . U s e r I n p u t T y p e . T o u c h )   t h e n  
- 	 	 	 	 l o c a l   d   =   i . P o s i t i o n   -   d s  
- 	 	 	 	 m a i n . P o s i t i o n   =   U D i m 2 . n e w ( s p . X . S c a l e ,   s p . X . O f f s e t   +   d . X ,   s p . Y . S c a l e ,   s p . Y . O f f s e t   +   d . Y )  
- 	 	 	 e n d  
- 	 	 e n d )  
- 	 	 U s e r I n p u t S e r v i c e . I n p u t E n d e d : C o n n e c t ( f u n c t i o n ( i )  
- 	 	 	 i f   i . U s e r I n p u t T y p e   = =   E n u m . U s e r I n p u t T y p e . M o u s e B u t t o n 1   o r   i . U s e r I n p u t T y p e   = =   E n u m . U s e r I n p u t T y p e . T o u c h   t h e n  
- 	 	 	 	 d r a g g i n g   =   f a l s e  
- 	 	 	 e n d  
- 	 	 e n d )  
- 	 e n d  
-  
- 	 - -   T i t l e   B a r   B u t t o n s   ( M i n i m i z e   &   C l o s e )  
- 	 l o c a l   f u n c t i o n   m a k e T i t l e B t n ( l a b e l ,   p o s X ,   i s C l o s e )  
- 	 	 l o c a l   b t n   =   m k ( " T e x t B u t t o n " ,   {  
- 	 	 	 S i z e   =   U D i m 2 . f r o m O f f s e t ( 3 0 ,   3 0 ) ,  
- 	 	 	 P o s i t i o n   =   U D i m 2 . n e w ( 1 ,   p o s X ,   0 ,   9 ) ,  
- 	 	 	 B a c k g r o u n d C o l o r 3   =   C . r o w ,  
- 	 	 	 T e x t   =   l a b e l ,  
- 	 	 	 F o n t   =   F . b o l d ,  
- 	 	 	 T e x t S i z e   =   1 3 ,  
- 	 	 	 T e x t C o l o r 3   =   C . t x t ,  
- 	 	 	 Z I n d e x   =   1 0 ,  
- 	 	 	 A u t o B u t t o n C o l o r   =   f a l s e ,  
- 	 	 } ,   t i t l e B a r )  
- 	 	 c o r n e r ( b t n ,   8 )  
- 	 	 s t r o k e ( b t n ,   i s C l o s e   a n d   C . r e d   o r   C . s t r o k e S u b ,   1 ,   0 . 4 )  
-  
- 	 	 b t n . M o u s e E n t e r : C o n n e c t ( f u n c t i o n ( )  
- 	 	 	 T S : C r e a t e ( b t n ,   T w e e n I n f o . n e w ( 0 . 1 5 ) ,   {  
- 	 	 	 	 B a c k g r o u n d C o l o r 3   =   i s C l o s e   a n d   C . r e d   o r   C . a c c ,  
- 	 	 	 	 T e x t C o l o r 3   =   C o l o r 3 . n e w ( 1 ,   1 ,   1 ) ,  
- 	 	 	 } ) : P l a y ( )  
- 	 	 e n d )  
- 	 	 b t n . M o u s e L e a v e : C o n n e c t ( f u n c t i o n ( )  
- 	 	 	 T S : C r e a t e ( b t n ,   T w e e n I n f o . n e w ( 0 . 1 5 ) ,   {  
- 	 	 	 	 B a c k g r o u n d C o l o r 3   =   C . r o w ,  
- 	 	 	 	 T e x t C o l o r 3   =   C . t x t ,  
- 	 	 	 } ) : P l a y ( )  
- 	 	 e n d )  
- 	 	 r e t u r n   b t n  
- 	 e n d  
-  
- 	 l o c a l   m i n B t n       =   m a k e T i t l e B t n ( " �� � " ,   - 7 6 ,   f a l s e )  
- 	 l o c a l   c l o s e B t n   =   m a k e T i t l e B t n ( " �� � " ,   - 3 8 ,   t r u e )  
-  
- 	 m i n B t n . M o u s e B u t t o n 1 C l i c k : C o n n e c t ( f u n c t i o n ( )  
- 	 	 T S : C r e a t e ( m a i n ,   T w e e n I n f o . n e w ( 0 . 2 ,   E n u m . E a s i n g S t y l e . B a c k ,   E n u m . E a s i n g D i r e c t i o n . I n ) ,   {  
- 	 	 	 S i z e   =   U D i m 2 . f r o m O f f s e t ( 0 ,   0 ) ,  
- 	 	 	 B a c k g r o u n d T r a n s p a r e n c y   =   1 ,  
- 	 	 } ) : P l a y ( )  
- 	 	 t a s k . d e l a y ( 0 . 2 ,   f u n c t i o n ( )  
- 	 	 	 m a i n . V i s i b l e   =   f a l s e  
- 	 	 	 m a x I c o n . V i s i b l e   =   t r u e  
- 	 	 e n d )  
- 	 e n d )  
-  
- 	 m a x I c o n . M o u s e B u t t o n 1 C l i c k : C o n n e c t ( f u n c t i o n ( )  
- 	 	 m a x I c o n . V i s i b l e   =   f a l s e  
- 	 	 m a i n . V i s i b l e   =   t r u e  
- 	 	 m a i n . S i z e   =   U D i m 2 . f r o m O f f s e t ( 0 ,   0 )  
- 	 	 f i t S c a l e ( )  
- 	 	 T S : C r e a t e ( m a i n ,   T w e e n I n f o . n e w ( 0 . 2 5 ,   E n u m . E a s i n g S t y l e . B a c k ,   E n u m . E a s i n g D i r e c t i o n . O u t ) ,   {  
- 	 	 	 S i z e   =   U D i m 2 . f r o m O f f s e t ( 6 1 0 ,   3 7 5 ) ,  
- 	 	 	 B a c k g r o u n d T r a n s p a r e n c y   =   0 . 0 4 ,  
- 	 	 } ) : P l a y ( )  
- 	 e n d )  
-  
- 	 - -   F l o a t i n g   F P S   P i l l  
- 	 l o c a l   f p s P i l l   =   m k ( " F r a m e " ,   {  
- 	 	 S i z e   =   U D i m 2 . f r o m O f f s e t ( 7 2 ,   2 4 ) ,  
- 	 	 P o s i t i o n   =   U D i m 2 . n e w ( 1 ,   - 1 5 6 ,   0 ,   1 2 ) ,  
- 	 	 B a c k g r o u n d C o l o r 3   =   C . r o w ,  
- 	 	 B o r d e r S i z e P i x e l   =   0 ,  
- 	 	 Z I n d e x   =   1 0 ,  
- 	 } ,   t i t l e B a r )  
- 	 c o r n e r ( f p s P i l l ,   1 2 )  
- 	 s t r o k e ( f p s P i l l ,   C . s t r o k e S u b ,   1 ,   0 . 6 )  
-  
- 	 l o c a l   f p s D o t   =   m k ( " F r a m e " ,   {  
- 	 	 S i z e   =   U D i m 2 . f r o m O f f s e t ( 6 ,   6 ) ,  
- 	 	 P o s i t i o n   =   U D i m 2 . f r o m O f f s e t ( 8 ,   9 ) ,  
- 	 	 B a c k g r o u n d C o l o r 3   =   C . g r e e n ,  
- 	 	 B o r d e r S i z e P i x e l   =   0 ,  
- 	 	 Z I n d e x   =   1 1 ,  
- 	 } ,   f p s P i l l )  
- 	 c o r n e r ( f p s D o t ,   4 )  
-  
- 	 l o c a l   f p s L a b e l   =   m k ( " T e x t L a b e l " ,   {  
- 	 	 S i z e   =   U D i m 2 . n e w ( 1 ,   - 2 2 ,   1 ,   0 ) ,  
- 	 	 P o s i t i o n   =   U D i m 2 . f r o m O f f s e t ( 2 0 ,   0 ) ,  
- 	 	 B a c k g r o u n d T r a n s p a r e n c y   =   1 ,  
- 	 	 T e x t   =   " 6 0   F P S " ,  
- 	 	 F o n t   =   F . b o l d ,  
- 	 	 T e x t S i z e   =   1 1 ,  
- 	 	 T e x t C o l o r 3   =   C . t x t ,  
- 	 	 T e x t X A l i g n m e n t   =   E n u m . T e x t X A l i g n m e n t . C e n t e r ,  
- 	 	 Z I n d e x   =   1 1 ,  
- 	 } ,   f p s P i l l )  
-  
- 	 d o  
- 	 	 l o c a l   R u n S e r v i c e   =   g a m e : G e t S e r v i c e ( " R u n S e r v i c e " )  
- 	 	 l o c a l   f r a m e C o u n t   =   0  
- 	 	 l o c a l   l a s t U p d a t e   =   t i c k ( )  
- 	 	 R u n S e r v i c e . R e n d e r S t e p p e d : C o n n e c t ( f u n c t i o n ( )  
- 	 	 	 f r a m e C o u n t   + =   1  
- 	 	 	 l o c a l   n o w   =   t i c k ( )  
- 	 	 	 i f   n o w   -   l a s t U p d a t e   > =   1   t h e n  
- 	 	 	 	 l o c a l   f p s   =   m a t h . r o u n d ( f r a m e C o u n t   /   ( n o w   -   l a s t U p d a t e ) )  
- 	 	 	 	 f p s L a b e l . T e x t   =   f p s   . .   "   F P S "  
- 	 	 	 	 i f   f p s   > =   4 5   t h e n  
- 	 	 	 	 	 f p s D o t . B a c k g r o u n d C o l o r 3   =   C . g r e e n  
- 	 	 	 	 	 f p s L a b e l . T e x t C o l o r 3   =   C . t x t  
- 	 	 	 	 e l s e i f   f p s   > =   2 5   t h e n  
- 	 	 	 	 	 f p s D o t . B a c k g r o u n d C o l o r 3   =   C o l o r 3 . f r o m R G B ( 2 5 5 ,   2 0 0 ,   8 0 )  
- 	 	 	 	 	 f p s L a b e l . T e x t C o l o r 3   =   C o l o r 3 . f r o m R G B ( 2 5 5 ,   2 0 0 ,   8 0 )  
- 	 	 	 	 e l s e  
- 	 	 	 	 	 f p s D o t . B a c k g r o u n d C o l o r 3   =   C . r e d  
- 	 	 	 	 	 f p s L a b e l . T e x t C o l o r 3   =   C . r e d  
- 	 	 	 	 e n d  
- 	 	 	 	 f r a m e C o u n t   =   0  
- 	 	 	 	 l a s t U p d a t e   =   n o w  
- 	 	 	 e n d  
- 	 	 e n d )  
- 	 e n d  
-  
- 	 - -   C o n f i r m   C l o s e   D i a l o g   ( M o d a l )  
- 	 l o c a l   f u n c t i o n   c o n f i r m C l o s e ( )  
- 	 	 l o c a l   o v e r l a y   =   m k ( " T e x t B u t t o n " ,   {  
- 	 	 	 S i z e   =   U D i m 2 . n e w ( 1 ,   0 ,   1 ,   0 ) ,  
- 	 	 	 B a c k g r o u n d C o l o r 3   =   C o l o r 3 . f r o m R G B ( 0 ,   0 ,   0 ) ,  
- 	 	 	 B a c k g r o u n d T r a n s p a r e n c y   =   0 . 5 ,  
- 	 	 	 B o r d e r S i z e P i x e l   =   0 ,  
- 	 	 	 T e x t   =   " " ,  
- 	 	 	 A u t o B u t t o n C o l o r   =   f a l s e ,  
- 	 	 	 Z I n d e x   =   5 0 ,  
- 	 	 } ,   g u i )  
-  
- 	 	 l o c a l   b o x   =   m k ( " F r a m e " ,   {  
- 	 	 	 S i z e   =   U D i m 2 . f r o m O f f s e t ( 3 2 0 ,   1 6 0 ) ,  
- 	 	 	 A n c h o r P o i n t   =   V e c t o r 2 . n e w ( 0 . 5 ,   0 . 5 ) ,  
- 	 	 	 P o s i t i o n   =   U D i m 2 . f r o m S c a l e ( 0 . 5 ,   0 . 5 ) ,  
- 	 	 	 B a c k g r o u n d C o l o r 3   =   C . p a n e l ,  
- 	 	 	 B o r d e r S i z e P i x e l   =   0 ,  
- 	 	 	 Z I n d e x   =   5 1 ,  
- 	 	 } ,   o v e r l a y )  
- 	 	 c o r n e r ( b o x ,   1 4 )  
- 	 	 s t r o k e ( b o x ,   C . a c c ,   1 . 5 ,   0 . 3 )  
-  
- 	 	 l o c a l   b o x S h i n e   =   m k ( " F r a m e " ,   {  
- 	 	 	 S i z e   =   U D i m 2 . n e w ( 1 ,   0 ,   0 ,   3 ) ,  
- 	 	 	 B a c k g r o u n d C o l o r 3   =   C . a c c ,  
- 	 	 	 B o r d e r S i z e P i x e l   =   0 ,  
- 	 	 	 Z I n d e x   =   5 2 ,  
- 	 	 } ,   b o x )  
- 	 	 c o r n e r ( b o x S h i n e ,   1 4 )  
- 	 	 g r a d ( b o x S h i n e ,   0 ,   C . a c c ,   C . a c c 2 )  
-  
- 	 	 m k ( " T e x t L a b e l " ,   {  
- 	 	 	 S i z e   =   U D i m 2 . n e w ( 1 ,   - 2 4 ,   0 ,   3 6 ) ,  
- 	 	 	 P o s i t i o n   =   U D i m 2 . f r o m O f f s e t ( 1 2 ,   1 8 ) ,  
- 	 	 	 B a c k g r o u n d T r a n s p a r e n c y   =   1 ,  
- 	 	 	 T e x t   =   " �� �   C l o s e   C e s z P a r a d i s e H u b ? " ,  
- 	 	 	 F o n t   =   F . t i t l e ,  
- 	 	 	 T e x t S i z e   =   1 7 ,  
- 	 	 	 T e x t C o l o r 3   =   C . a c c S o f t ,  
- 	 	 	 Z I n d e x   =   5 2 ,  
- 	 	 } ,   b o x )  
-  
- 	 	 m k ( " T e x t L a b e l " ,   {  
- 	 	 	 S i z e   =   U D i m 2 . n e w ( 1 ,   - 2 4 ,   0 ,   2 4 ) ,  
- 	 	 	 P o s i t i o n   =   U D i m 2 . f r o m O f f s e t ( 1 2 ,   5 4 ) ,  
- 	 	 	 B a c k g r o u n d T r a n s p a r e n c y   =   1 ,  
- 	 	 	 T e x t   =   " A p a k a h   k a m u   y a k i n   i n g i n   m e n u t u p   h u b   i n i ? " ,  
- 	 	 	 F o n t   =   F . r e g ,  
- 	 	 	 T e x t S i z e   =   1 3 ,  
- 	 	 	 T e x t C o l o r 3   =   C . s u b ,  
- 	 	 	 Z I n d e x   =   5 2 ,  
- 	 	 } ,   b o x )  
-  
- 	 	 l o c a l   n o B t n   =   m k ( " T e x t B u t t o n " ,   {  
- 	 	 	 S i z e   =   U D i m 2 . f r o m O f f s e t ( 1 3 0 ,   4 0 ) ,  
- 	 	 	 P o s i t i o n   =   U D i m 2 . n e w ( 0 ,   2 0 ,   1 ,   - 5 2 ) ,  
- 	 	 	 B a c k g r o u n d C o l o r 3   =   C . r o w ,  
- 	 	 	 T e x t   =   " B a t a l " ,  
- 	 	 	 F o n t   =   F . b o l d ,  
- 	 	 	 T e x t S i z e   =   1 4 ,  
- 	 	 	 T e x t C o l o r 3   =   C . t x t ,  
- 	 	 	 Z I n d e x   =   5 2 ,  
- 	 	 	 A u t o B u t t o n C o l o r   =   f a l s e ,  
- 	 	 } ,   b o x )  
- 	 	 c o r n e r ( n o B t n ,   1 0 )  
- 	 	 s t r o k e ( n o B t n ,   C . s t r o k e S u b ,   1 ,   0 . 5 )  
-  
- 	 	 l o c a l   y e s B t n   =   m k ( " T e x t B u t t o n " ,   {  
- 	 	 	 S i z e   =   U D i m 2 . f r o m O f f s e t ( 1 3 0 ,   4 0 ) ,  
- 	 	 	 P o s i t i o n   =   U D i m 2 . n e w ( 1 ,   - 1 5 0 ,   1 ,   - 5 2 ) ,  
- 	 	 	 B a c k g r o u n d C o l o r 3   =   C . r e d ,  
- 	 	 	 T e x t   =   " Y a ,   T u t u p " ,  
- 	 	 	 F o n t   =   F . b o l d ,  
- 	 	 	 T e x t S i z e   =   1 4 ,  
- 	 	 	 T e x t C o l o r 3   =   C o l o r 3 . n e w ( 1 ,   1 ,   1 ) ,  
- 	 	 	 Z I n d e x   =   5 2 ,  
- 	 	 	 A u t o B u t t o n C o l o r   =   f a l s e ,  
- 	 	 } ,   b o x )  
- 	 	 c o r n e r ( y e s B t n ,   1 0 )  
- 	 	 s t r o k e ( y e s B t n ,   C . r e d ,   1 . 2 ,   0 . 2 )  
-  
- 	 	 n o B t n . M o u s e E n t e r : C o n n e c t ( f u n c t i o n ( )   n o B t n . B a c k g r o u n d C o l o r 3   =   C . r o w H o v e r   e n d )  
- 	 	 n o B t n . M o u s e L e a v e : C o n n e c t ( f u n c t i o n ( )   n o B t n . B a c k g r o u n d C o l o r 3   =   C . r o w   e n d )  
- 	 	 n o B t n . M o u s e B u t t o n 1 C l i c k : C o n n e c t ( f u n c t i o n ( )   o v e r l a y : D e s t r o y ( )   e n d )  
- 	 	 y e s B t n . M o u s e B u t t o n 1 C l i c k : C o n n e c t ( f u n c t i o n ( )   g u i : D e s t r o y ( )   e n d )  
- 	 e n d  
- 	 c l o s e B t n . M o u s e B u t t o n 1 C l i c k : C o n n e c t ( c o n f i r m C l o s e )  
-  
- 	 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -   L e f t   S i d e b a r  
- 	 l o c a l   s i d e b a r   =   m k ( " F r a m e " ,   {  
- 	 	 S i z e   =   U D i m 2 . n e w ( 0 ,   1 5 4 ,   1 ,   - 5 4 ) ,  
- 	 	 P o s i t i o n   =   U D i m 2 . f r o m O f f s e t ( 8 ,   4 8 ) ,  
- 	 	 B a c k g r o u n d C o l o r 3   =   C . p a n e l ,  
- 	 	 B o r d e r S i z e P i x e l   =   0 ,  
- 	 	 Z I n d e x   =   2 ,  
- 	 } ,   m a i n )  
- 	 c o r n e r ( s i d e b a r ,   1 2 )  
- 	 s t r o k e ( s i d e b a r ,   C . s t r o k e S u b ,   1 ,   0 . 5 )  
- 	 p a d ( s i d e b a r ,   6 ,   6 ,   6 ,   6 )  
-  
- 	 - -   S i d e b a r   H e a d e r   T a g  
- 	 l o c a l   m e n u T a g   =   m k ( " T e x t L a b e l " ,   {  
- 	 	 S i z e   =   U D i m 2 . n e w ( 1 ,   0 ,   0 ,   1 8 ) ,  
- 	 	 B a c k g r o u n d T r a n s p a r e n c y   =   1 ,  
- 	 	 T e x t   =   " M   E   N   U " ,  
- 	 	 F o n t   =   F . b o l d ,  
- 	 	 T e x t S i z e   =   1 1 ,  
- 	 	 T e x t C o l o r 3   =   C . a c c ,  
- 	 	 T e x t X A l i g n m e n t   =   E n u m . T e x t X A l i g n m e n t . L e f t ,  
- 	 	 L a y o u t O r d e r   =   0 ,  
- 	 } ,   s i d e b a r )  
-  
- 	 - -   T a b   B u t t o n s   S c r o l l i n g   L i s t  
- 	 l o c a l   t a b B u t t o n s F r a m e   =   m k ( " S c r o l l i n g F r a m e " ,   {  
- 	 	 S i z e   =   U D i m 2 . n e w ( 1 ,   0 ,   1 ,   - 6 8 ) ,  
- 	 	 P o s i t i o n   =   U D i m 2 . f r o m O f f s e t ( 0 ,   2 0 ) ,  
- 	 	 B a c k g r o u n d T r a n s p a r e n c y   =   1 ,  
- 	 	 B o r d e r S i z e P i x e l   =   0 ,  
- 	 	 S c r o l l B a r T h i c k n e s s   =   3 ,  
- 	 	 S c r o l l B a r I m a g e C o l o r 3   =   C . a c c ,  
- 	 	 S c r o l l B a r I m a g e T r a n s p a r e n c y   =   0 . 4 ,  
- 	 	 S c r o l l i n g D i r e c t i o n   =   E n u m . S c r o l l i n g D i r e c t i o n . Y ,  
- 	 	 C a n v a s S i z e   =   U D i m 2 . n e w ( ) ,  
- 	 	 A u t o m a t i c C a n v a s S i z e   =   E n u m . A u t o m a t i c S i z e . Y ,  
- 	 	 S c r o l l i n g E n a b l e d   =   t r u e ,  
- 	 } ,   s i d e b a r )  
- 	 m k ( " U I L i s t L a y o u t " ,   {   P a d d i n g   =   U D i m . n e w ( 0 ,   4 ) ,   S o r t O r d e r   =   E n u m . S o r t O r d e r . L a y o u t O r d e r   } ,   t a b B u t t o n s F r a m e )  
-  
- 	 - -   P l a y e r   P r o f i l e   L u x u r y   C a r d  
- 	 l o c a l   p r o f i l e C a r d   =   m k ( " F r a m e " ,   {  
- 	 	 S i z e   =   U D i m 2 . n e w ( 1 ,   0 ,   0 ,   4 6 ) ,  
- 	 	 P o s i t i o n   =   U D i m 2 . n e w ( 0 ,   0 ,   1 ,   - 4 6 ) ,  
- 	 	 B a c k g r o u n d C o l o r 3   =   C . r o w ,  
- 	 	 B o r d e r S i z e P i x e l   =   0 ,  
- 	 } ,   s i d e b a r )  
- 	 c o r n e r ( p r o f i l e C a r d ,   1 0 )  
- 	 s t r o k e ( p r o f i l e C a r d ,   C . s t r o k e ,   1 . 2 ,   0 . 4 )  
- 	 p a d ( p r o f i l e C a r d ,   6 ,   6 ,   4 ,   4 )  
-  
- 	 l o c a l   a v a t a r   =   m k ( " I m a g e L a b e l " ,   {  
- 	 	 S i z e   =   U D i m 2 . f r o m O f f s e t ( 3 4 ,   3 4 ) ,  
- 	 	 B a c k g r o u n d C o l o r 3   =   C . p a n e l ,  
- 	 	 B o r d e r S i z e P i x e l   =   0 ,  
- 	 } ,   p r o f i l e C a r d )  
- 	 c o r n e r ( a v a t a r ,   1 7 )  
- 	 s t r o k e ( a v a t a r ,   C . a c c ,   1 . 5 ,   0 . 2 )  
- 	 p c a l l ( f u n c t i o n ( )  
- 	 	 a v a t a r . I m a g e   =   P l a y e r s : G e t U s e r T h u m b n a i l A s y n c ( L P . U s e r I d ,   E n u m . T h u m b n a i l T y p e . H e a d S h o t ,   E n u m . T h u m b n a i l S i z e . S i z e 4 8 x 4 8 )  
- 	 e n d )  
-  
- 	 l o c a l   n a m e L a b e l   =   m k ( " T e x t L a b e l " ,   {  
- 	 	 S i z e   =   U D i m 2 . n e w ( 1 ,   - 4 2 ,   0 ,   1 8 ) ,  
- 	 	 P o s i t i o n   =   U D i m 2 . f r o m O f f s e t ( 4 2 ,   2 ) ,  
- 	 	 B a c k g r o u n d T r a n s p a r e n c y   =   1 ,  
- 	 	 T e x t   =   L P . D i s p l a y N a m e ,  
- 	 	 F o n t   =   F . b o l d ,  
- 	 	 T e x t S i z e   =   1 2 ,  
- 	 	 T e x t C o l o r 3   =   C . t x t ,  
- 	 	 T e x t X A l i g n m e n t   =   E n u m . T e x t X A l i g n m e n t . L e f t ,  
- 	 	 T e x t T r u n c a t e   =   E n u m . T e x t T r u n c a t e . A t E n d ,  
- 	 } ,   p r o f i l e C a r d )  
-  
- 	 l o c a l   s t a t u s P i l l   =   m k ( " T e x t L a b e l " ,   {  
- 	 	 S i z e   =   U D i m 2 . n e w ( 1 ,   - 4 2 ,   0 ,   1 6 ) ,  
- 	 	 P o s i t i o n   =   U D i m 2 . f r o m O f f s e t ( 4 2 ,   1 8 ) ,  
- 	 	 B a c k g r o u n d T r a n s p a r e n c y   =   1 ,  
- 	 	 T e x t   =   " O n l i n e   �� � " ,  
- 	 	 F o n t   =   F . b o l d ,  
- 	 	 T e x t S i z e   =   1 0 ,  
- 	 	 T e x t C o l o r 3   =   C . a c c S o f t ,  
- 	 	 T e x t X A l i g n m e n t   =   E n u m . T e x t X A l i g n m e n t . L e f t ,  
- 	 } ,   p r o f i l e C a r d )  
-  
- 	 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -   R i g h t   C o n t e n t   F r a m e  
- 	 l o c a l   c o n t e n t   =   m k ( " F r a m e " ,   {  
- 	 	 S i z e   =   U D i m 2 . n e w ( 1 ,   - 1 7 4 ,   1 ,   - 5 6 ) ,  
- 	 	 P o s i t i o n   =   U D i m 2 . f r o m O f f s e t ( 1 6 6 ,   4 9 ) ,  
- 	 	 B a c k g r o u n d T r a n s p a r e n c y   =   1 ,  
- 	 } ,   m a i n )  
-  
- 	 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -   R e s i z e   G r i p   ( S m o o t h   &   S u b t l e )  
- 	 l o c a l   g r i p   =   m k ( " T e x t B u t t o n " ,   {  
- 	 	 S i z e   =   U D i m 2 . f r o m O f f s e t ( 2 2 ,   2 2 ) ,  
- 	 	 P o s i t i o n   =   U D i m 2 . n e w ( 1 ,   - 2 4 ,   1 ,   - 2 4 ) ,  
- 	 	 B a c k g r o u n d T r a n s p a r e n c y   =   1 ,  
- 	 	 T e x t   =   " �� � " ,  
- 	 	 F o n t   =   F . b o l d ,  
- 	 	 T e x t S i z e   =   1 4 ,  
- 	 	 T e x t C o l o r 3   =   C . s t r o k e S u b ,  
- 	 	 A u t o B u t t o n C o l o r   =   f a l s e ,  
- 	 	 A c t i v e   =   t r u e ,  
- 	 	 Z I n d e x   =   2 0 ,  
- 	 } ,   m a i n )  
- 	 g r i p . M o u s e E n t e r : C o n n e c t ( f u n c t i o n ( )   g r i p . T e x t C o l o r 3   =   C . a c c   e n d )  
- 	 g r i p . M o u s e L e a v e : C o n n e c t ( f u n c t i o n ( )   g r i p . T e x t C o l o r 3   =   C . s t r o k e S u b   e n d )  
- 	 d o  
- 	 	 l o c a l   r z ,   d s ,   s s  
- 	 	 g r i p . I n p u t B e g a n : C o n n e c t ( f u n c t i o n ( i )  
- 	 	 	 i f   i . U s e r I n p u t T y p e   = =   E n u m . U s e r I n p u t T y p e . M o u s e B u t t o n 1   o r   i . U s e r I n p u t T y p e   = =   E n u m . U s e r I n p u t T y p e . T o u c h   t h e n  
- 	 	 	 	 r z   =   t r u e ;   d s   =   i . P o s i t i o n ;   s s   =   V e c t o r 2 . n e w ( m a i n . S i z e . X . O f f s e t ,   m a i n . S i z e . Y . O f f s e t )  
- 	 	 	 e n d  
- 	 	 e n d )  
- 	 	 U s e r I n p u t S e r v i c e . I n p u t C h a n g e d : C o n n e c t ( f u n c t i o n ( i )  
- 	 	 	 i f   r z   a n d   ( i . U s e r I n p u t T y p e   = =   E n u m . U s e r I n p u t T y p e . M o u s e M o v e m e n t   o r   i . U s e r I n p u t T y p e   = =   E n u m . U s e r I n p u t T y p e . T o u c h )   t h e n  
- 	 	 	 	 l o c a l   s c a l e   =   u i S c a l e . S c a l e   >   0   a n d   u i S c a l e . S c a l e   o r   1  
- 	 	 	 	 l o c a l   d   =   i . P o s i t i o n   -   d s  
- 	 	 	 	 l o c a l   w   =   m a t h . c l a m p ( s s . X   +   d . X   /   s c a l e ,   4 8 0 ,   1 6 0 0 )  
- 	 	 	 	 l o c a l   h   =   m a t h . c l a m p ( s s . Y   +   d . Y   /   s c a l e ,   3 2 0 ,   1 1 0 0 )  
- 	 	 	 	 m a i n . S i z e   =   U D i m 2 . f r o m O f f s e t ( w ,   h )  
- 	 	 	 	 f i t S c a l e ( )  
- 	 	 	 e n d  
- 	 	 e n d )  
- 	 	 U s e r I n p u t S e r v i c e . I n p u t E n d e d : C o n n e c t ( f u n c t i o n ( i )  
- 	 	 	 i f   i . U s e r I n p u t T y p e   = =   E n u m . U s e r I n p u t T y p e . M o u s e B u t t o n 1   o r   i . U s e r I n p u t T y p e   = =   E n u m . U s e r I n p u t T y p e . T o u c h   t h e n  
- 	 	 	 	 r z   =   f a l s e  
- 	 	 	 e n d  
- 	 	 e n d )  
- 	 e n d  
-  
- 	 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -   S t a t u s   F o o t e r   P i l l  
- 	 l o c a l   s t a t u s T e x t   =   m k ( " T e x t L a b e l " ,   {  
- 	 	 S i z e   =   U D i m 2 . n e w ( 1 ,   - 2 1 4 ,   0 ,   2 0 ) ,  
- 	 	 P o s i t i o n   =   U D i m 2 . n e w ( 0 ,   2 0 2 ,   1 ,   - 2 4 ) ,  
- 	 	 B a c k g r o u n d T r a n s p a r e n c y   =   1 ,  
- 	 	 T e x t   =   " �� �   S t a t u s :   I d l e " ,  
- 	 	 F o n t   =   F . b o l d ,  
- 	 	 T e x t S i z e   =   1 1 ,  
- 	 	 T e x t C o l o r 3   =   C . s u b ,  
- 	 	 T e x t X A l i g n m e n t   =   E n u m . T e x t X A l i g n m e n t . L e f t ,  
- 	 	 V i s i b l e   =   f a l s e ,  
- 	 } ,   m a i n )  
-  
- 	 f u n c t i o n   c t x . s e t S t a t u s ( s )  
- 	 	 l o c a l   i s A c t i v e   =   t o s t r i n g ( s ) : l o w e r ( ) : f i n d ( " a c t i v e " )   ~ =   n i l   o r   t o s t r i n g ( s ) : l o w e r ( ) : f i n d ( " j a l a n " )   ~ =   n i l  
- 	 	 s t a t u s T e x t . T e x t   =   ( i s A c t i v e   a n d   " �� �   "   o r   " �� �   " )   . .   " S t a t u s :   "   . .   t o s t r i n g ( s )  
- 	 	 s t a t u s T e x t . T e x t C o l o r 3   =   i s A c t i v e   a n d   C . g r e e n   o r   C . s u b  
- 	 e n d  
-  
- 	 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -   L o g g e r  
- 	 l o c a l   l o g L i n e s   =   c t x . s t a t e . l o g L i n e s  
- 	 f u n c t i o n   c t x . l o g ( m s g )  
- 	 	 t a b l e . i n s e r t ( l o g L i n e s ,   o s . d a t e ( " % H : % M : % S   " )   . .   m s g )  
- 	 	 w h i l e   # l o g L i n e s   >   1 2   d o   t a b l e . r e m o v e ( l o g L i n e s ,   1 )   e n d  
- 	 	 i f   c t x . u i . l o g B o x   t h e n   c t x . u i . l o g B o x . T e x t   =   t a b l e . c o n c a t ( l o g L i n e s ,   " \ n " )   e n d  
- 	 e n d  
-  
- 	 c t x . u i . m a i n                         =   m a i n  
- 	 c t x . u i . m a x I c o n                   =   m a x I c o n  
- 	 c t x . u i . c o n t e n t                   =   c o n t e n t  
- 	 c t x . u i . t a b B u t t o n s F r a m e   =   t a b B u t t o n s F r a m e  
- 	 c t x . u i . s t a t u s T e x t             =   s t a t u s T e x t  
- e n d  
- ]=],
+--[[ window.lua — jendela utama garden PINK ROYALE:
+     Sidebar modern, player profile card, glowing title bar, responsive auto-scaling,
+     modal konfirmasi close, floating maximize jewel. ]]
+return function(ctx)
+	local Players          = ctx.Services.Players
+	local UserInputService = ctx.Services.UserInputService
+	local TS               = game:GetService("TweenService")
+	local LP  = ctx.LP
+	local C   = ctx.C
+	local F   = ctx.F
+	local mk, corner, stroke, pad, grad = ctx.mk, ctx.corner, ctx.stroke, ctx.pad, ctx.grad
+
+	ctx.ui.pages   = {}
+	ctx.ui.tabBtns = {}
+
+	----------------------------------------------------------------- bersihkan GUI lama
+	pcall(function()
+		local host = (gethui and gethui()) or game:GetService("CoreGui")
+		for _, nm in ipairs({ "GAGGarden", "CeszParadiseGarden", "AllegiaanGarden" }) do
+			local old = host:FindFirstChild(nm); if old then old:Destroy() end
+			local pg = LP:FindFirstChild("PlayerGui")
+			if pg and pg:FindFirstChild(nm) then pg[nm]:Destroy() end
+		end
+	end)
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "CeszParadiseGarden"
+	gui.ResetOnSpawn = false
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	gui.Parent = LP:WaitForChild("PlayerGui")
+	ctx.state.gui = gui
+	ctx.state.isAlive = true
+	gui.Destroying:Connect(function()
+		ctx.state.isAlive = false
+	end)
+
+	----------------------------------------------------------------- Floating Maximize Jewel
+	local maxIcon = mk("TextButton", {
+		Size = UDim2.fromOffset(50, 50),
+		Position = UDim2.new(0, 16, 0.5, -25),
+		BackgroundColor3 = C.panel,
+		Text = "✦",
+		Font = F.bold,
+		TextSize = 22,
+		TextColor3 = C.acc,
+		Visible = false,
+		Active = true,
+		ZIndex = 100,
+	}, gui)
+	corner(maxIcon, 25)
+	stroke(maxIcon, C.acc, 2, 0.1)
+
+	-- Glow ring di belakang floating button
+	local maxGlow = mk("Frame", {
+		Size = UDim2.new(1, 14, 1, 14),
+		Position = UDim2.new(0, -7, 0, -7),
+		BackgroundColor3 = C.acc,
+		BackgroundTransparency = 0.75,
+		BorderSizePixel = 0,
+		ZIndex = 99,
+	}, maxIcon)
+	corner(maxGlow, 30)
+
+	pcall(function()
+		local logo = ctx.getLogo and ctx.getLogo()
+		if logo then
+			maxIcon.Text = ""
+			local img = mk("ImageLabel", {
+				Size = UDim2.fromScale(1, 1),
+				Position = UDim2.fromScale(0, 0),
+				BackgroundTransparency = 1,
+				Image = logo,
+				ScaleType = Enum.ScaleType.Fit,
+				ZIndex = 101,
+			}, maxIcon)
+			corner(img, 25)
+		end
+	end)
+
+	-- Draggable maximize icon
+	do
+		local dragging, ds, sp
+		maxIcon.InputBegan:Connect(function(i)
+			if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+				dragging = true; ds = i.Position; sp = maxIcon.Position
+			end
+		end)
+		UserInputService.InputChanged:Connect(function(i)
+			if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+				local d = i.Position - ds
+				maxIcon.Position = UDim2.new(sp.X.Scale, sp.X.Offset + d.X, sp.Y.Scale, sp.Y.Offset + d.Y)
+			end
+		end)
+		UserInputService.InputEnded:Connect(function(i)
+			if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+				dragging = false
+			end
+		end)
+	end
+
+	----------------------------------------------------------------- Main Window (Compact & Ultra-Legible for Mobile/Android)
+	local main = mk("Frame", {
+		Size = UDim2.fromOffset(610, 375),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		BackgroundColor3 = C.bg,
+		BackgroundTransparency = 0.03,
+		BorderSizePixel = 0,
+		Active = true,
+	}, gui)
+	corner(main, 14)
+	stroke(main, C.stroke, 1.8, 0.25)
+
+	-- Inner ambient glow
+	local innerAmbient = mk("Frame", {
+		Size = UDim2.new(1, 0, 1, 0),
+		BackgroundColor3 = C.acc,
+		BackgroundTransparency = 0.94,
+		BorderSizePixel = 0,
+	}, main)
+	corner(innerAmbient, 14)
+
+	-- Auto-scale responsif (layar HP Android 10/Arceus X/tablet/desktop)
+	local uiScale = Instance.new("UIScale"); uiScale.Parent = main
+	local function fitScale()
+		local cam = workspace.CurrentCamera
+		local vp = cam and cam.ViewportSize or Vector2.new(1280, 720)
+		local w, h = main.Size.X.Offset, main.Size.Y.Offset
+		-- Margin hanya 16px agar di layar HP muat maksimal tanpa mengecil berlebihan
+		local s = math.min(1, (vp.X - 16) / w, (vp.Y - 16) / h)
+		uiScale.Scale = math.max(0.62, s)
+	end
+	fitScale()
+	pcall(function()
+		local cam = workspace.CurrentCamera
+		if cam then cam:GetPropertyChangedSignal("ViewportSize"):Connect(fitScale) end
+	end)
+
+	----------------------------------------------------------------- Modern Title Bar
+	local titleBar = mk("Frame", {
+		Size = UDim2.new(1, 0, 0, 48),
+		BackgroundColor3 = C.panel,
+		BorderSizePixel = 0,
+		ZIndex = 5,
+	}, main)
+	corner(titleBar, 16)
+
+	-- Subtle gradient overlay on title bar
+	local titleGrad = mk("Frame", {
+		Size = UDim2.new(1, 0, 1, 0),
+		BackgroundColor3 = C.acc,
+		BackgroundTransparency = 0.85,
+		BorderSizePixel = 0,
+		ZIndex = 6,
+	}, titleBar)
+	corner(titleGrad, 16)
+	grad(titleGrad, 0)
+
+	-- Bottom border accent line under title bar
+	local titleLine = mk("Frame", {
+		Size = UDim2.new(1, 0, 0, 2),
+		Position = UDim2.new(0, 0, 1, -2),
+		BackgroundColor3 = C.acc,
+		BorderSizePixel = 0,
+		ZIndex = 7,
+	}, titleBar)
+	grad(titleLine, 0, C.acc, C.acc2)
+
+	-- Emblem & Title Label
+	local titleIcon = mk("TextLabel", {
+		Size = UDim2.fromOffset(30, 48),
+		Position = UDim2.fromOffset(16, 0),
+		BackgroundTransparency = 1,
+		Text = "✦",
+		Font = F.title,
+		TextSize = 20,
+		TextColor3 = C.acc,
+		ZIndex = 8,
+	}, titleBar)
+
+	pcall(function()
+		local logo = ctx.getLogo and ctx.getLogo()
+		if logo then
+			titleIcon.Text = ""
+			local tImg = mk("ImageLabel", {
+				Size = UDim2.fromOffset(26, 26),
+				Position = UDim2.fromOffset(2, 11),
+				BackgroundTransparency = 1,
+				Image = logo,
+				ScaleType = Enum.ScaleType.Fit,
+				ZIndex = 9,
+			}, titleIcon)
+			corner(tImg, 13)
+		end
+	end)
+
+	local titleLabel = mk("TextLabel", {
+		Size = UDim2.new(0, 120, 1, 0),
+		Position = UDim2.fromOffset(46, 0),
+		BackgroundTransparency = 1,
+		Text = "CeszParadise",
+		Font = F.title,
+		TextSize = 15,
+		TextColor3 = C.txt,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 8,
+	}, titleBar)
+
+	-- Subtitle Pill
+	local subPill = mk("Frame", {
+		Size = UDim2.fromOffset(116, 24),
+		Position = UDim2.fromOffset(168, 12),
+		BackgroundColor3 = C.row,
+		BorderSizePixel = 0,
+		ZIndex = 8,
+	}, titleBar)
+	corner(subPill, 12)
+	stroke(subPill, C.acc, 1, 0.5)
+	pad(subPill, 6, 6, 0, 0)
+
+	local subLabel = mk("TextLabel", {
+		Size = UDim2.new(1, 0, 1, 0),
+		BackgroundTransparency = 1,
+		Text = "❖ Grow a Garden",
+		Font = F.bold,
+		TextSize = 10.5,
+		TextColor3 = C.accSoft,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		ZIndex = 9,
+	}, subPill)
+
+	-- Draggable Title Bar
+	do
+		local dragging, ds, sp
+		titleBar.InputBegan:Connect(function(i)
+			if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+				dragging = true; ds = i.Position; sp = main.Position
+			end
+		end)
+		UserInputService.InputChanged:Connect(function(i)
+			if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+				local d = i.Position - ds
+				main.Position = UDim2.new(sp.X.Scale, sp.X.Offset + d.X, sp.Y.Scale, sp.Y.Offset + d.Y)
+			end
+		end)
+		UserInputService.InputEnded:Connect(function(i)
+			if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+				dragging = false
+			end
+		end)
+	end
+
+	-- Title Bar Buttons (Minimize & Close)
+	local function makeTitleBtn(label, posX, isClose)
+		local btn = mk("TextButton", {
+			Size = UDim2.fromOffset(30, 30),
+			Position = UDim2.new(1, posX, 0, 9),
+			BackgroundColor3 = C.row,
+			Text = label,
+			Font = F.bold,
+			TextSize = 13,
+			TextColor3 = C.txt,
+			ZIndex = 10,
+			AutoButtonColor = false,
+		}, titleBar)
+		corner(btn, 8)
+		stroke(btn, isClose and C.red or C.strokeSub, 1, 0.4)
+
+		btn.MouseEnter:Connect(function()
+			TS:Create(btn, TweenInfo.new(0.15), {
+				BackgroundColor3 = isClose and C.red or C.acc,
+				TextColor3 = Color3.new(1, 1, 1),
+			}):Play()
+		end)
+		btn.MouseLeave:Connect(function()
+			TS:Create(btn, TweenInfo.new(0.15), {
+				BackgroundColor3 = C.row,
+				TextColor3 = C.txt,
+			}):Play()
+		end)
+		return btn
+	end
+
+	local minBtn   = makeTitleBtn("—", -76, false)
+	local closeBtn = makeTitleBtn("✕", -38, true)
+
+	minBtn.MouseButton1Click:Connect(function()
+		TS:Create(main, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+			Size = UDim2.fromOffset(0, 0),
+			BackgroundTransparency = 1,
+		}):Play()
+		task.delay(0.2, function()
+			main.Visible = false
+			maxIcon.Visible = true
+		end)
+	end)
+
+	maxIcon.MouseButton1Click:Connect(function()
+		maxIcon.Visible = false
+		main.Visible = true
+		main.Size = UDim2.fromOffset(0, 0)
+		fitScale()
+		TS:Create(main, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Size = UDim2.fromOffset(610, 375),
+			BackgroundTransparency = 0.04,
+		}):Play()
+	end)
+
+	-- Floating FPS Pill
+	local fpsPill = mk("Frame", {
+		Size = UDim2.fromOffset(72, 24),
+		Position = UDim2.new(1, -156, 0, 12),
+		BackgroundColor3 = C.row,
+		BorderSizePixel = 0,
+		ZIndex = 10,
+	}, titleBar)
+	corner(fpsPill, 12)
+	stroke(fpsPill, C.strokeSub, 1, 0.6)
+
+	local fpsDot = mk("Frame", {
+		Size = UDim2.fromOffset(6, 6),
+		Position = UDim2.fromOffset(8, 9),
+		BackgroundColor3 = C.green,
+		BorderSizePixel = 0,
+		ZIndex = 11,
+	}, fpsPill)
+	corner(fpsDot, 4)
+
+	local fpsLabel = mk("TextLabel", {
+		Size = UDim2.new(1, -22, 1, 0),
+		Position = UDim2.fromOffset(20, 0),
+		BackgroundTransparency = 1,
+		Text = "60 FPS",
+		Font = F.bold,
+		TextSize = 11,
+		TextColor3 = C.txt,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		ZIndex = 11,
+	}, fpsPill)
+
+	do
+		local RunService = game:GetService("RunService")
+		local frameCount = 0
+		local lastUpdate = tick()
+		RunService.RenderStepped:Connect(function()
+			frameCount += 1
+			local now = tick()
+			if now - lastUpdate >= 1 then
+				local fps = math.round(frameCount / (now - lastUpdate))
+				fpsLabel.Text = fps .. " FPS"
+				if fps >= 45 then
+					fpsDot.BackgroundColor3 = C.green
+					fpsLabel.TextColor3 = C.txt
+				elseif fps >= 25 then
+					fpsDot.BackgroundColor3 = Color3.fromRGB(255, 200, 80)
+					fpsLabel.TextColor3 = Color3.fromRGB(255, 200, 80)
+				else
+					fpsDot.BackgroundColor3 = C.red
+					fpsLabel.TextColor3 = C.red
+				end
+				frameCount = 0
+				lastUpdate = now
+			end
+		end)
+	end
+
+	-- Confirm Close Dialog (Modal)
+	local function confirmClose()
+		local overlay = mk("TextButton", {
+			Size = UDim2.new(1, 0, 1, 0),
+			BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+			BackgroundTransparency = 0.5,
+			BorderSizePixel = 0,
+			Text = "",
+			AutoButtonColor = false,
+			ZIndex = 50,
+		}, gui)
+
+		local box = mk("Frame", {
+			Size = UDim2.fromOffset(320, 160),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			BackgroundColor3 = C.panel,
+			BorderSizePixel = 0,
+			ZIndex = 51,
+		}, overlay)
+		corner(box, 14)
+		stroke(box, C.acc, 1.5, 0.3)
+
+		local boxShine = mk("Frame", {
+			Size = UDim2.new(1, 0, 0, 3),
+			BackgroundColor3 = C.acc,
+			BorderSizePixel = 0,
+			ZIndex = 52,
+		}, box)
+		corner(boxShine, 14)
+		grad(boxShine, 0, C.acc, C.acc2)
+
+		mk("TextLabel", {
+			Size = UDim2.new(1, -24, 0, 36),
+			Position = UDim2.fromOffset(12, 18),
+			BackgroundTransparency = 1,
+			Text = "✦ Close CeszParadiseHub?",
+			Font = F.title,
+			TextSize = 17,
+			TextColor3 = C.accSoft,
+			ZIndex = 52,
+		}, box)
+
+		mk("TextLabel", {
+			Size = UDim2.new(1, -24, 0, 24),
+			Position = UDim2.fromOffset(12, 54),
+			BackgroundTransparency = 1,
+			Text = "Apakah kamu yakin ingin menutup hub ini?",
+			Font = F.reg,
+			TextSize = 13,
+			TextColor3 = C.sub,
+			ZIndex = 52,
+		}, box)
+
+		local noBtn = mk("TextButton", {
+			Size = UDim2.fromOffset(130, 40),
+			Position = UDim2.new(0, 20, 1, -52),
+			BackgroundColor3 = C.row,
+			Text = "Batal",
+			Font = F.bold,
+			TextSize = 14,
+			TextColor3 = C.txt,
+			ZIndex = 52,
+			AutoButtonColor = false,
+		}, box)
+		corner(noBtn, 10)
+		stroke(noBtn, C.strokeSub, 1, 0.5)
+
+		local yesBtn = mk("TextButton", {
+			Size = UDim2.fromOffset(130, 40),
+			Position = UDim2.new(1, -150, 1, -52),
+			BackgroundColor3 = C.red,
+			Text = "Ya, Tutup",
+			Font = F.bold,
+			TextSize = 14,
+			TextColor3 = Color3.new(1, 1, 1),
+			ZIndex = 52,
+			AutoButtonColor = false,
+		}, box)
+		corner(yesBtn, 10)
+		stroke(yesBtn, C.red, 1.2, 0.2)
+
+		noBtn.MouseEnter:Connect(function() noBtn.BackgroundColor3 = C.rowHover end)
+		noBtn.MouseLeave:Connect(function() noBtn.BackgroundColor3 = C.row end)
+		noBtn.MouseButton1Click:Connect(function() overlay:Destroy() end)
+		yesBtn.MouseButton1Click:Connect(function() gui:Destroy() end)
+	end
+	closeBtn.MouseButton1Click:Connect(confirmClose)
+
+	----------------------------------------------------------------- Left Sidebar
+	local sidebar = mk("Frame", {
+		Size = UDim2.new(0, 154, 1, -54),
+		Position = UDim2.fromOffset(8, 48),
+		BackgroundColor3 = C.panel,
+		BorderSizePixel = 0,
+		ZIndex = 2,
+	}, main)
+	corner(sidebar, 12)
+	stroke(sidebar, C.strokeSub, 1, 0.5)
+	pad(sidebar, 6, 6, 6, 6)
+
+	-- Sidebar Header Tag
+	local menuTag = mk("TextLabel", {
+		Size = UDim2.new(1, 0, 0, 18),
+		BackgroundTransparency = 1,
+		Text = "M E N U",
+		Font = F.bold,
+		TextSize = 11,
+		TextColor3 = C.acc,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		LayoutOrder = 0,
+	}, sidebar)
+
+	-- Tab Buttons Scrolling List
+	local tabButtonsFrame = mk("ScrollingFrame", {
+		Size = UDim2.new(1, 0, 1, -68),
+		Position = UDim2.fromOffset(0, 20),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ScrollBarThickness = 3,
+		ScrollBarImageColor3 = C.acc,
+		ScrollBarImageTransparency = 0.4,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		CanvasSize = UDim2.new(),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollingEnabled = true,
+	}, sidebar)
+	mk("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }, tabButtonsFrame)
+
+	-- Player Profile Luxury Card
+	local profileCard = mk("Frame", {
+		Size = UDim2.new(1, 0, 0, 46),
+		Position = UDim2.new(0, 0, 1, -46),
+		BackgroundColor3 = C.row,
+		BorderSizePixel = 0,
+	}, sidebar)
+	corner(profileCard, 10)
+	stroke(profileCard, C.stroke, 1.2, 0.4)
+	pad(profileCard, 6, 6, 4, 4)
+
+	local avatar = mk("ImageLabel", {
+		Size = UDim2.fromOffset(34, 34),
+		BackgroundColor3 = C.panel,
+		BorderSizePixel = 0,
+	}, profileCard)
+	corner(avatar, 17)
+	stroke(avatar, C.acc, 1.5, 0.2)
+	pcall(function()
+		avatar.Image = Players:GetUserThumbnailAsync(LP.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+	end)
+
+	local nameLabel = mk("TextLabel", {
+		Size = UDim2.new(1, -42, 0, 18),
+		Position = UDim2.fromOffset(42, 2),
+		BackgroundTransparency = 1,
+		Text = LP.DisplayName,
+		Font = F.bold,
+		TextSize = 12,
+		TextColor3 = C.txt,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+	}, profileCard)
+
+	local statusPill = mk("TextLabel", {
+		Size = UDim2.new(1, -42, 0, 16),
+		Position = UDim2.fromOffset(42, 18),
+		BackgroundTransparency = 1,
+		Text = "Online ✦",
+		Font = F.bold,
+		TextSize = 10,
+		TextColor3 = C.accSoft,
+		TextXAlignment = Enum.TextXAlignment.Left,
+	}, profileCard)
+
+	----------------------------------------------------------------- Right Content Frame
+	local content = mk("Frame", {
+		Size = UDim2.new(1, -174, 1, -56),
+		Position = UDim2.fromOffset(166, 49),
+		BackgroundTransparency = 1,
+	}, main)
+
+	----------------------------------------------------------------- Resize Grip (Smooth & Subtle)
+	local grip = mk("TextButton", {
+		Size = UDim2.fromOffset(22, 22),
+		Position = UDim2.new(1, -24, 1, -24),
+		BackgroundTransparency = 1,
+		Text = "◢",
+		Font = F.bold,
+		TextSize = 14,
+		TextColor3 = C.strokeSub,
+		AutoButtonColor = false,
+		Active = true,
+		ZIndex = 20,
+	}, main)
+	grip.MouseEnter:Connect(function() grip.TextColor3 = C.acc end)
+	grip.MouseLeave:Connect(function() grip.TextColor3 = C.strokeSub end)
+	do
+		local rz, ds, ss
+		grip.InputBegan:Connect(function(i)
+			if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+				rz = true; ds = i.Position; ss = Vector2.new(main.Size.X.Offset, main.Size.Y.Offset)
+			end
+		end)
+		UserInputService.InputChanged:Connect(function(i)
+			if rz and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+				local scale = uiScale.Scale > 0 and uiScale.Scale or 1
+				local d = i.Position - ds
+				local w = math.clamp(ss.X + d.X / scale, 480, 1600)
+				local h = math.clamp(ss.Y + d.Y / scale, 320, 1100)
+				main.Size = UDim2.fromOffset(w, h)
+				fitScale()
+			end
+		end)
+		UserInputService.InputEnded:Connect(function(i)
+			if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+				rz = false
+			end
+		end)
+	end
+
+	----------------------------------------------------------------- Status Footer Pill
+	local statusText = mk("TextLabel", {
+		Size = UDim2.new(1, -214, 0, 20),
+		Position = UDim2.new(0, 202, 1, -24),
+		BackgroundTransparency = 1,
+		Text = "● Status: Idle",
+		Font = F.bold,
+		TextSize = 11,
+		TextColor3 = C.sub,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Visible = false,
+	}, main)
+
+	function ctx.setStatus(s)
+		local isActive = tostring(s):lower():find("active") ~= nil or tostring(s):lower():find("jalan") ~= nil
+		statusText.Text = (isActive and "● " or "○ ") .. "Status: " .. tostring(s)
+		statusText.TextColor3 = isActive and C.green or C.sub
+	end
+
+	----------------------------------------------------------------- Logger
+	local logLines = ctx.state.logLines
+	function ctx.log(msg)
+		table.insert(logLines, os.date("%H:%M:%S ") .. msg)
+		while #logLines > 12 do table.remove(logLines, 1) end
+		if ctx.ui.logBox then ctx.ui.logBox.Text = table.concat(logLines, "\n") end
+	end
+
+	ctx.ui.main            = main
+	ctx.ui.maxIcon         = maxIcon
+	ctx.ui.content         = content
+	ctx.ui.tabButtonsFrame = tabButtonsFrame
+	ctx.ui.statusText      = statusText
+end
+]=],
 }
