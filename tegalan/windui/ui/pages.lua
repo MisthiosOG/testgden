@@ -791,8 +791,8 @@ end
 				function() return ctx.getPlantSeedOptions() end,
 				CFG.plantSeedNames, function() persist() end,
 				{ register = true, cacheKey = "inv_seeds", fillDelay = 0.3 })
-			makeSingleW(sec, "Select Position", "Lokasi tanam di farm.",
-				function() return { "Random", "Player Position" } end,
+			makeSingleW(sec, "Select Position", "Lokasi tanam. God Position = baris rapih otomatis.",
+				function() return { "Random", "Player Position", "God Position" } end,
 				function() return CFG.plantPosition end,
 				function(v) CFG.plantPosition = v end, { fillDelay = 0.5 })
 			makeInputW(sec, "Delay To Plants", "Extra delay (detik) tiap tanam seed.",

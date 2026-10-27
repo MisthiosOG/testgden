@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T16:25:57.117Z
+-- 42 modul, di-generate 2026-10-27T16:32:00.555Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -821,7 +821,7 @@ return function(ctx)
 			CFG.reclaimEnabled    = st.reclaimEnabled or false
 			CFG.reclaimSpeed      = tonumber(st.reclaimSpeed) or 0.15
 			CFG.plantSeedNames   = (type(st.plantSeedNames) == "table") and st.plantSeedNames or {}
-			CFG.plantPosition    = (st.plantPosition == "Player Position") and "Player Position" or "Random"
+			CFG.plantPosition    = (st.plantPosition == "Player Position" or st.plantPosition == "God Position") and st.plantPosition or "Random"
 			CFG.plantDelay       = tonumber(st.plantDelay) or 0
 			CFG.plantSeedEnabled = st.plantSeedEnabled or false
 			CFG.sprinklerNames        = (type(st.sprinklerNames) == "table") and st.sprinklerNames or {}
@@ -3254,6 +3254,30 @@ return function(ctx)
 		return Vector3.new(hrp.Position.X, y, hrp.Position.Z)
 	end
 
+	-- God Position: grid baris rapih. Cursor maju sel demi sel (kiri->kanan,
+	-- lalu turun baris) di part Can_Plant pertama dan DIPERTAHANKAN antar siklus
+	-- -> tanaman berbaris rapih berurutan, bukan acak. SPACING 3 stud.
+	local GOD_SPACING = 3
+	local godCursor = { part = nil, ix = 0, iz = 0 }
+	local function godPos()
+		local parts = canPlantParts()
+		if #parts == 0 then godCursor = { part = nil, ix = 0, iz = 0 }; return nil end
+		local p = parts[1]
+		if godCursor.part ~= p then godCursor = { part = p, ix = 0, iz = 0 } end
+		local hx, hz = p.Size.X / 2 - 1, p.Size.Z / 2 - 1
+		local cols = math.max(1, math.floor((hx * 2) / GOD_SPACING) + 1)
+		local rows = math.max(1, math.floor((hz * 2) / GOD_SPACING) + 1)
+		local x = p.Position.X - hx + math.min(godCursor.ix, cols - 1) * GOD_SPACING
+		local z = p.Position.Z - hz + math.min(godCursor.iz, rows - 1) * GOD_SPACING
+		godCursor.ix = godCursor.ix + 1
+		if godCursor.ix >= cols then
+			godCursor.ix = 0
+			godCursor.iz = godCursor.iz + 1
+			if godCursor.iz >= rows then godCursor.iz = 0 end -- penuh -> mulai lagi dari atas
+		end
+		return Vector3.new(x, p.Position.Y, z)
+	end
+
 	----------------------------------------------------------------- equip seed
 	-- Tool seed namanya "<Nama> Seed [Xjumlah]". Server WAJIB kamu megang tool-nya
 	-- pas Plant_RE, jadi equip ulang tiap mau tanam (walau user pindah manual).
@@ -3284,7 +3308,9 @@ return function(ctx)
 			local sel = CFG.plantSeedNames or {}
 			if next(sel) then
 				local inv = seedInventory()
-				local mode = CFG.plantPosition == "Player Position" and "Player Position" or "Random"
+				local mode = (CFG.plantPosition == "Player Position" and "Player Position")
+					or (CFG.plantPosition == "God Position" and "God Position")
+					or "Random"
 				-- Kecepatan sepenuhnya ikut Delay input (0 = secepat mungkin).
 				local planted, anySeed = 0, false
 				for name in pairs(sel) do
@@ -3294,7 +3320,9 @@ return function(ctx)
 						for _ = 1, qty do
 							if not CFG.plantSeedEnabled or ctx.state.plantId ~= myId then break end
 							if equipSeed(name) then -- equip seed tiap mau tanam
-								local pos = (mode == "Player Position") and playerPos() or randomPos()
+								local pos = (mode == "Player Position" and playerPos())
+									or (mode == "God Position" and godPos())
+									or randomPos()
 								if pos then
 									pcall(function() Plant_RE:FireServer(pos, name) end)
 									planted = planted + 1
@@ -11295,8 +11323,8 @@ end
 				function() return ctx.getPlantSeedOptions() end,
 				CFG.plantSeedNames, function() persist() end,
 				{ register = true, cacheKey = "inv_seeds", fillDelay = 0.3 })
-			makeSingleW(sec, "Select Position", "Lokasi tanam di farm.",
-				function() return { "Random", "Player Position" } end,
+			makeSingleW(sec, "Select Position", "Lokasi tanam. God Position = baris rapih otomatis.",
+				function() return { "Random", "Player Position", "God Position" } end,
 				function() return CFG.plantPosition end,
 				function(v) CFG.plantPosition = v end, { fillDelay = 0.5 })
 			makeInputW(sec, "Delay To Plants", "Extra delay (detik) tiap tanam seed.",

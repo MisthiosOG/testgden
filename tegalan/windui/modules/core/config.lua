@@ -539,7 +539,7 @@ return function(ctx)
 			CFG.reclaimEnabled    = st.reclaimEnabled or false
 			CFG.reclaimSpeed      = tonumber(st.reclaimSpeed) or 0.15
 			CFG.plantSeedNames   = (type(st.plantSeedNames) == "table") and st.plantSeedNames or {}
-			CFG.plantPosition    = (st.plantPosition == "Player Position") and "Player Position" or "Random"
+			CFG.plantPosition    = (st.plantPosition == "Player Position" or st.plantPosition == "God Position") and st.plantPosition or "Random"
 			CFG.plantDelay       = tonumber(st.plantDelay) or 0
 			CFG.plantSeedEnabled = st.plantSeedEnabled or false
 			CFG.sprinklerNames        = (type(st.sprinklerNames) == "table") and st.sprinklerNames or {}
