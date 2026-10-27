@@ -120,16 +120,23 @@ return function(ctx)
 			listSg.Parent = (gethui and gethui()) or game:GetService("CoreGui")
 
 			listLbl = Instance.new("TextLabel")
-			listLbl.AnchorPoint = Vector2.new(1, 0)
-			listLbl.Position = UDim2.new(1, -14, 0, 70)
+			listLbl.AnchorPoint = Vector2.new(0, 0.5)
+			listLbl.Position = UDim2.new(0, 14, 0.5, 0)
 			listLbl.Size = UDim2.new(0, 480, 0, 0)
 			listLbl.AutomaticSize = Enum.AutomaticSize.Y
 			listLbl.BackgroundTransparency = 1
-			listLbl.Font = Enum.Font.Gotham
+			listLbl.Font = Enum.Font.GothamBold
 			listLbl.RichText = true
-			listLbl.TextXAlignment = Enum.TextXAlignment.Right
+			listLbl.TextXAlignment = Enum.TextXAlignment.Left
 			listLbl.TextYAlignment = Enum.TextYAlignment.Top
 			listLbl.TextColor3 = Color3.new(1, 1, 1)
+			-- Outline tebal biar teks tetap kebaca di background terang (sky).
+			local listStroke = Instance.new("UIStroke")
+			listStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+			listStroke.Color = Color3.new(0, 0, 0)
+			listStroke.Thickness = 1.6
+			listStroke.Transparency = 0.1
+			listStroke.Parent = listLbl
 			listLbl.Text = ""
 			listLbl.Parent = listSg
 		end
@@ -163,14 +170,14 @@ return function(ctx)
 	-- Palet screen list: TANPA background → teks harus cerah biar kebaca.
 	-- Nama pet: warna tetap per nama (hash) — beda-beda tapi konsisten.
 	local NAME_COLORS = {
-		"#5FC3FF", "#FF8AD8", "#7CE8A4", "#B08CFF", "#5FE3D0", "#FF8A6B", "#D6FF6B",
+		"#33C1FF", "#FF5EC8", "#4DF08A", "#B06CFF", "#2CE8CC", "#FF7A3C", "#C6FF33", "#FFD21E",
 	}
-	local C_S_WEIGHT = "#FFC24D"
-	local C_S_LV = "#7FE3A0"
+	local C_S_WEIGHT = "#FFAA00"
+	local C_S_LV = "#33FF77"
 	local MUT_SCREEN = {
-		Golden = "#FFD700", Rainbow = "#FF6EC7", Frozen = "#7FDBFF", Wet = "#4FC3F7",
-		Shocked = "#FFF176", Moonlit = "#B39DFF", Shiny = "#FFB300", Huge = "#FF5C5C",
-		Mega = "#FF3B3B", Tiny = "#8AE6FF", Windstruck = "#CFFFE8", Tempered = "#FF9E80",
+		Golden = "#FFD700", Rainbow = "#FF4FD8", Frozen = "#33CFFF", Wet = "#00B0FF",
+		Shocked = "#FFEE33", Moonlit = "#9D66FF", Shiny = "#FFB300", Huge = "#FF3D3D",
+		Mega = "#E60000", Tiny = "#4DD2FF", Windstruck = "#66FFCC", Tempered = "#FF7043",
 	}
 	local function nameColor(s)
 		local h = 0
