@@ -124,7 +124,7 @@ return function(ctx)
 	-- ===== Screen mode: panel list di sisi kanan layar =====
 	-- ponytail: panel builder didup dari esp_label.lua (~45 baris) — abstraksi
 	-- modul bersama gak worth wiring-nya saat ini; naikin kalau ESP ketiga muncul.
-	local ACCENT = Color3.fromRGB(255, 212, 0)
+	local ACCENT = Color3.fromRGB(235, 235, 235) -- dark-white, sesuai tema menu
 
 	local function ensurePanel(title)
 		if panel and panel.Parent then return panel end
@@ -297,10 +297,12 @@ return function(ctx)
 	function ctx.startEspEgg()
 		loopId = loopId + 1
 		local my = loopId
+		-- Generation guard: loop dari eksekusi loader sebelumnya mati saat gen naik.
+		local gen = (getgenv().GAG_ESP_GEN or 0)
 		task.spawn(function()
 			updateEggPets()
 			buildBW()
-			while ctx.alive() and ctx.CFG.espEggEnabled and loopId == my do
+			while ctx.alive() and ctx.CFG.espEggEnabled and loopId == my and (getgenv().GAG_ESP_GEN or 0) == gen do
 				local mode = (ctx.CFG.espEggMode == "screen") and "screen" or "target"
 				if mode ~= lastMode then
 					lastMode = mode

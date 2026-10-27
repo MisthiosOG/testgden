@@ -23,13 +23,15 @@ pcall(function()
         for _, child in ipairs(container:GetChildren()) do
             local n = child.Name:lower()
             if n:find("cesz", 1, true) or n:find("gag", 1, true)
-                or n:find("allegiaan", 1, true) then
+                or n:find("allegiaan", 1, true) or n:find("cesp", 1, true) then
                 child:Destroy()
             end
         end
     end
     clear(host)
     if player and player:FindFirstChild("PlayerGui") then clear(player.PlayerGui) end
+    -- Generation bump: loop ESP dari eksekusi sebelumnya mati total saat loader jalan lagi.
+    getgenv().GAG_ESP_GEN = (getgenv().GAG_ESP_GEN or 0) + 1
 end)
 print("[CeszParadiseHub][WINDUI] windui loader selected")
 

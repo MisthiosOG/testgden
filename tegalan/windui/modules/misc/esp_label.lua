@@ -44,18 +44,18 @@ return function(ctx)
 		bb.ClipsDescendants = false
 		bb.Parent = ensureFolder()
 
-		-- Background card (translucent dark pink)
+		-- Background card (dark,According to menu theme)
 		local bg = Instance.new("Frame")
 		bg.Size = UDim2.new(1, 0, 1, 0)
-		bg.BackgroundColor3 = Color3.fromRGB(18, 6, 26)
+		bg.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
 		bg.BackgroundTransparency = 0.22
 		bg.BorderSizePixel = 0
 		bg.Parent = bb
 		Instance.new("UICorner", bg).CornerRadius = UDim.new(0, 10)
 		local bgStroke = Instance.new("UIStroke", bg)
-		bgStroke.Color = Color3.fromRGB(255, 55, 145)
-		bgStroke.Thickness = 1.4
-		bgStroke.Transparency = 0.3
+		bgStroke.Color = Color3.fromRGB(235, 235, 235)
+		bgStroke.Thickness = 1.2
+		bgStroke.Transparency = 0.4
 		bgStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 
 		local lbl = Instance.new("TextLabel")
@@ -67,7 +67,7 @@ return function(ctx)
 		lbl.RichText = true
 		lbl.TextColor3 = Color3.new(1, 1, 1)
 		lbl.TextStrokeTransparency = 0.5
-		lbl.TextStrokeColor3 = Color3.fromRGB(120, 0, 60)
+		lbl.TextStrokeColor3 = Color3.new(0, 0, 0)
 		lbl.TextYAlignment = Enum.TextYAlignment.Center
 		lbl.ZIndex = 4
 		lbl.Parent = bg
@@ -95,7 +95,12 @@ return function(ctx)
 	-- ===== Screen mode: panel list di sisi kanan layar =====
 	-- ponytail: panel builder didup di esp_egg.lua (~45 baris) — abstraksi
 	-- modul bersama gak worth wiring-nya saat ini; naikin kalau ESP ketiga muncul.
-	local ACCENT = Color3.fromRGB(255, 95, 160)
+	local ACCENT = Color3.fromRGB(235, 235, 235)
+	-- Palet teks monokrom (sesuai menu): putih / abu.
+	local C_NAME = "#FFFFFF"
+	local C_WEIGHT = "#D6D6D6"
+	local C_LV = "#969696"
+	local C_MUT = "#B4B4B4"
 
 	local function ensurePanel(title)
 		if panel and panel.Parent then return panel end
@@ -200,9 +205,9 @@ return function(ctx)
 
 							if mode == "screen" then
 								local w = bw and string.format("%.2fkg", bw * WEIGHT_MULT) or "-"
-								local t = ("<font color='#FF5FA0'>%s</font> <font color='#FFD7F0'>%s</font> <font color='#FF87CD'>Lv.%d</font>")
-									:format(tostring(pt), w, lv)
-								if mutTxt then t = t .. (" <font color='#6EF5B9'>%s</font>"):format(mutTxt) end
+								local t = ("<font color='%s'><b>%s</b></font> <font color='%s'>%s</font> <font color='%s'>Lv.%d</font>")
+									:format(C_NAME, tostring(pt), C_WEIGHT, w, C_LV, lv)
+								if mutTxt then t = t .. (" <font color='%s'>%s</font>"):format(C_MUT, mutTxt) end
 								rows[#rows + 1] = t
 								if #rows >= 40 then break end
 							else
@@ -211,12 +216,12 @@ return function(ctx)
 									local key = "pet_" .. tostring(uuid)
 									seen[key] = true
 									local rec = acquire(key, adornee, 2.5)
-									local lines = { ("<font color='#FF5FA0'><b>🐾 %s</b></font>"):format(tostring(pt)) }
+									local lines = { ("<font color='%s'><b>🐾 %s</b></font>"):format(C_NAME, tostring(pt)) }
 									if bw then
-										lines[#lines + 1] = ("<font color='#FFD7F0'>%.2f KG</font> <font color='#FF87CD'>[Lv.%d]</font>"):format(bw * WEIGHT_MULT, lv)
+										lines[#lines + 1] = ("<font color='%s'>%.2f KG</font> <font color='%s'>[Lv.%d]</font>"):format(C_WEIGHT, bw * WEIGHT_MULT, C_LV, lv)
 									end
 									if mutTxt then
-										lines[#lines + 1] = ("<font color='#6EF5B9'>✨ %s</font>"):format(mutTxt)
+										lines[#lines + 1] = ("<font color='%s'>✨ %s</font>"):format(C_MUT, mutTxt)
 									end
 									rec.lbl.Text = table.concat(lines, "\n")
 								end
@@ -247,8 +252,11 @@ return function(ctx)
 	function ctx.startEsp()
 		loopId = loopId + 1
 		local my = loopId
+		-- Generation guard: loop dari eksekusi loader sebelumnya mati saat gen naik,
+		-- jadi panel nggak jadi zombie pasesp re-exec / toggle off.
+		local gen = (getgenv().GAG_ESP_GEN or 0)
 		task.spawn(function()
-			while ctx.alive() and ctx.CFG.espEnabled and loopId == my do
+			while ctx.alive() and ctx.CFG.espEnabled and loopId == my and (getgenv().GAG_ESP_GEN or 0) == gen do
 				local mode = (ctx.CFG.espMode == "screen") and "screen" or "target"
 				if mode ~= lastMode then
 					lastMode = mode
