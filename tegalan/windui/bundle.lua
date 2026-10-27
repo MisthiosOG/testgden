@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T14:44:26.542Z
+-- 42 modul, di-generate 2026-10-27T14:55:53.275Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -10522,12 +10522,9 @@ return function(ctx)
 		end
 	end
 
-	-- pcall+yield guard: kontrol banyak dibangun berurutan; melonggarkan tiap 8 elemen
-	local buildCounter = 0
-	local function breathe()
-		buildCounter += 1
-		if buildCounter % 8 == 0 then task.wait() end
-	end
+	-- Build ATOMIK: tanpa task.wait() di tengah build. Dist pin ukuran Section
+	-- dari snapshot Top+Content (10751+) — yield bikin layout jalan pas konten
+	-- belum lengkap -> pin stale -> panel kepotong (kasus V2).
 
 	local function makeToggleW(parent, title, desc, getv, setv, notifyTitle)
 		local control
@@ -10548,7 +10545,6 @@ return function(ctx)
 				end
 			end),
 		})
-		breathe()
 		return control
 	end
 
@@ -10563,7 +10559,6 @@ return function(ctx)
 				persist()
 			end),
 		})
-		breathe()
 	end
 
 	-- Single dropdown: opsi bisa string atau {name=, display=}; snapshot saat build
@@ -10598,7 +10593,6 @@ return function(ctx)
 				persist()
 			end),
 		})
-		breathe()
 		return control, function()
 			task.spawn(function()
 				local ds, sel2 = snapshot()
@@ -10642,7 +10636,7 @@ return function(ctx)
 			Multi = true,
 			AllowNone = true,
 			SearchBarEnabled = true,
-			MenuWidth = 300,
+			MenuWidth = 240,
 			Value = selected,
 			Callback = safe(function(sel)
 				if type(sel) == "string" then sel = { sel } end
@@ -10655,20 +10649,33 @@ return function(ctx)
 				if onChange then onChange() end
 			end),
 		})
-		breathe()
-		-- Constraint menu bawaan dist 300x400 -> dilonggarkan pas dengan rumus
-		-- MenuCanvas Size dist (MenuWidth + 6+6+5+5+18+6+6 = +52) dan refresh tidak
-		-- menimpanya (constraint bukan anak ScrollingFrame).
+		-- Constraint menu bawaan dist 300x400 -> pas dengan rumus MenuCanvas dist
+		-- (MenuWidth + 6+6+5+5+18+6+6 = +52). Refresh tidak menimpanya (constraint
+		-- bukan anak ScrollingFrame).
 		task.spawn(function()
 			local mc = control and control.UIElements and control.UIElements.MenuCanvas
 			local c = mc and mc:FindFirstChildOfClass("UISizeConstraint")
-			if c then c.MaxSize = Vector2.new(352, 520) end
+			if c then c.MaxSize = Vector2.new(292, 440) end
 		end)
+		-- Dist tidak set TextWrapped di Title opsi (overflow -> kepotong). Nama
+		-- panjang dibikin wrap 2 baris; baris opsi sendiri AutomaticSize=Y (dist).
+		local function wrapTitles()
+			local sf = control and control.UIElements and control.UIElements.Menu
+				and control.UIElements.Menu:FindFirstChild("Frame")
+				and control.UIElements.Menu.Frame:FindFirstChild("ScrollingFrame")
+			for _, opt in ipairs(sf and sf:GetChildren() or {}) do
+				local tf = opt:FindFirstChild("Title", true)
+				local tl = tf and tf:FindFirstChildOfClass("TextLabel")
+				if tl then tl.TextWrapped = true end
+			end
+		end
+		wrapTitles()
 		local function refresh()
 			task.spawn(function()
 				local ds, sel2 = snapshot()
 				pcall(function() control:Refresh(ds) end)
 				pcall(function() control:Select(sel2) end)
+				wrapTitles()
 			end)
 		end
 		if opts.register then
@@ -10700,7 +10707,6 @@ return function(ctx)
 				if onChange then onChange() end
 			end),
 		})
-		breathe()
 		return control
 	end
 
@@ -10747,7 +10753,6 @@ return function(ctx)
 		local sec = section(tab, DEFS[id].name)
 		buildFn(sec)
 		secs[id] = sec
-		breathe()
 	end
 
 		local function addRefresh(sec)
@@ -10922,6 +10927,19 @@ return function(ctx)
 			btns[id].Activated:Connect(function() selectPanel(id) end)
 		end
 
+		-- Re-pin ukuran section: pin dist bisa ke-frozen dari snapshot konten
+		-- belum lengkap (kotak panel kepotong pas di tengah). Open(true) =
+		-- pin ulang instan ke Top.Y+Content.Y+10, tanpa tween. Defer+delay biar
+		-- jalan SETELAH minimal satu pass layout/render.
+		local function repin()
+			for _, id in ipairs(ORDER) do
+				local s = secs[id]
+				if s and s.Open then pcall(function() s:Open(true) end) end
+			end
+		end
+		task.defer(repin)
+		task.delay(0.15, repin)
+
 		selectPanel("v1")
 	end
 
@@ -10985,7 +11003,6 @@ return function(ctx)
 				Desc = "Logika fitur TETAP LOADED (CFG, persistence, auto-resume). Cuma panel kontrol-nya yang belum pindah.",
 			})
 		end
-		breathe()
 	end
 
 	----------------------------------------------------------------- default tab (pilot)
