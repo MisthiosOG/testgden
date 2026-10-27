@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T15:53:16.266Z
+-- 42 modul, di-generate 2026-10-27T15:59:00.156Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -10588,6 +10588,27 @@ return function(ctx)
 		return list
 	end
 
+	-- Patch dropdown dist: constraint menu (bawaan 300x400 -> kapasitas rumus
+	-- MenuWidth+52) + TextWrapped di Title opsi (dist gak set -> nama panjang
+	-- kepotong). Harus dipanggil ulang tiap kali rows dibangun ulang (Refresh).
+	local function patchDropdown(control)
+		pcall(function()
+			local mc = control.UIElements and control.UIElements.MenuCanvas
+			local c = mc and mc:FindFirstChildOfClass("UISizeConstraint")
+			if c then c.MaxSize = Vector2.new(292, 440) end
+		end)
+		pcall(function()
+			local sf = control.UIElements and control.UIElements.Menu
+				and control.UIElements.Menu:FindFirstChild("Frame")
+				and control.UIElements.Menu.Frame:FindFirstChild("ScrollingFrame")
+			for _, opt in ipairs(sf and sf:GetChildren() or {}) do
+				local tf = opt:FindFirstChild("Title", true)
+				local tl = tf and tf:FindFirstChildOfClass("TextLabel")
+				if tl then tl.TextWrapped = true end
+			end
+		end)
+	end
+
 	-- Single dropdown: opsi bisa string atau {name=, display=}; snapshot saat build
 	-- + refresh() buat dipanggil ulang (WindUI Dropdown punya :Refresh).
 	local function makeSingleW(parent, title, desc, getOptions, getv, setv, opts)
@@ -10609,24 +10630,30 @@ return function(ctx)
 			end
 			return displays, selected
 		end
-		local displays, selected = snapshot()
-		local control = parent:Dropdown({
+		local control
+		local function fill(delayed)
+			local displays, selected = snapshot()
+			pcall(function() control:Refresh(displays) end)
+			if delayed then pcall(function() control:Select(selected) end) end
+			patchDropdown(control)
+		end
+		snapshot() -- isi mapping d2v/v2d buat Callback; rows-nya ditahan kosong
+		control = parent:Dropdown({
 			Title = title,
 			Desc = desc,
-			Values = displays,
-			Value = selected,
+			Values = {},
+			Value = "",
 			AllowNone = true,
 			Callback = safe(function(d)
 				setv(d2v[d] or d)
 				persist()
 			end),
 		})
+		-- Rows dibangun belakangan: ctor dropdown dgn Values penuh = bangun
+		-- baris menu sinkron = freeze (pola sama dgn dyn dropdown).
+		task.delay(opts.fillDelay or 0.6, function() pcall(fill, true) end)
 		local function refresh()
-			task.spawn(function()
-				local ds, sel2 = snapshot()
-				pcall(function() control:Refresh(ds) end)
-				pcall(function() control:Select(sel2) end)
-			end)
+			task.spawn(function() pcall(fill, true) end)
 		end
 		if opts.register and W.refreshers then
 			W.refreshers[#W.refreshers + 1] = refresh
@@ -10684,33 +10711,14 @@ return function(ctx)
 				if onChange then onChange() end
 			end),
 		})
-		-- Constraint menu bawaan dist 300x400 -> pas dengan rumus MenuCanvas dist
-		-- (MenuWidth + 6+6+5+5+18+6+6 = +52). Refresh tidak menimpanya (constraint
-		-- bukan anak ScrollingFrame).
-		task.spawn(function()
-			local mc = control and control.UIElements and control.UIElements.MenuCanvas
-			local c = mc and mc:FindFirstChildOfClass("UISizeConstraint")
-			if c then c.MaxSize = Vector2.new(292, 440) end
-		end)
-		-- Dist tidak set TextWrapped di Title opsi (overflow -> kepotong). Nama
-		-- panjang dibikin wrap 2 baris; baris opsi sendiri AutomaticSize=Y (dist).
-		local function wrapTitles()
-			local sf = control and control.UIElements and control.UIElements.Menu
-				and control.UIElements.Menu:FindFirstChild("Frame")
-				and control.UIElements.Menu.Frame:FindFirstChild("ScrollingFrame")
-			for _, opt in ipairs(sf and sf:GetChildren() or {}) do
-				local tf = opt:FindFirstChild("Title", true)
-				local tl = tf and tf:FindFirstChildOfClass("TextLabel")
-				if tl then tl.TextWrapped = true end
-			end
-		end
+		-- Constraint menu + wrap Title opsi ditangani patchDropdown() (module level)
 		local function fill()
 			local t0 = os.clock()
 			local ds, sel2, extra = snapshot()
 			local t1 = os.clock()
 			pcall(function() control:Refresh(ds) end)
 			pcall(function() control:Select(sel2) end)
-			wrapTitles()
+			patchDropdown(control)
 			if ctx.log then
 				ctx.log(("dropdown '%s' terisi: fetch+snapshot %.2fs, refresh %.2fs (%d opsi%s)")
 					:format(title, t1 - t0, os.clock() - t1, #ds, extra > 0 and (", +" .. extra .. " pet tak ditampilkan") or ""))
@@ -10731,20 +10739,25 @@ return function(ctx)
 	end
 
 	-- Multi dropdown statis (reg.PET_OPTIONS dll): opsi string, selSet keyed string.
-	local function makeMultiW(parent, title, desc, options, selSet, onChange)
+	-- Rows di-defer: 4x dropdown dgn PET_OPTIONS penuh dibangun sinkron = freeze 53s.
+	local function makeMultiW(parent, title, desc, options, selSet, onChange, opts)
+		opts = opts or {}
+		local function savedTitles()
+			local out = {}
+			for _, o in ipairs(options) do
+				if selSet[o] then out[#out + 1] = o end
+			end
+			return out
+		end
 		local control = parent:Dropdown({
 			Title = title,
 			Desc = desc,
-			Values = options,
+			Values = {},
 			Multi = true,
 			AllowNone = true,
-			Value = (function()
-				local out = {}
-				for _, o in ipairs(options) do
-					if selSet[o] then out[#out + 1] = o end
-				end
-				return out
-			end)(),
+			SearchBarEnabled = true,
+			MenuWidth = 240,
+			Value = {},
 			Callback = safe(function(sel)
 				if type(sel) == "string" then sel = { sel } end
 				for k in pairs(selSet) do selSet[k] = nil end
@@ -10753,6 +10766,14 @@ return function(ctx)
 				if onChange then onChange() end
 			end),
 		})
+		task.delay(opts.fillDelay or 0.6, function()
+			pcall(function() control:Refresh(options) end)
+			pcall(function() control:Select(savedTitles()) end)
+			patchDropdown(control)
+			if ctx.log then
+				ctx.log(("dropdown '%s' terisi (%d opsi)"):format(title, #options))
+			end
+		end)
 		return control
 	end
 
@@ -11070,9 +11091,9 @@ end
 			makeSingleW(sec, "Target Player", "Pemain tujuan trade tiket",
 				playerOptions,
 				function() return CFG.targetPlayer end,
-				function(v) CFG.targetPlayer = v end, { register = true })
+				function(v) CFG.targetPlayer = v end, { register = true, fillDelay = 0.5 })
 			makeMultiW(sec, "Pet Types to Trade", "Filter pet by type (kosong = semua non-favorite)",
-				reg.PET_OPTIONS, CFG.petTypes, function() persist() end)
+				reg.PET_OPTIONS, CFG.petTypes, function() persist() end, { fillDelay = 1.1 })
 			makeInputW(sec, "Weight Filter (KG)", "Berat tampilan game | 0=off | +6 = min 6kg | -6 = max 6kg",
 				function() return CFG.weightFilter end,
 				function(t) CFG.weightFilter = tonumber(t) or 0 end)
@@ -11118,9 +11139,9 @@ end
 			makeSingleW(sec, "Target Player", "Pemain tujuan gift (defaults ke target ticket)",
 				playerOptions,
 				function() return (CFG.giftTargetPlayer ~= "" and CFG.giftTargetPlayer) or CFG.targetPlayer end,
-				function(v) CFG.giftTargetPlayer = v end, { register = true })
+				function(v) CFG.giftTargetPlayer = v end, { register = true, fillDelay = 0.8 })
 			makeMultiW(sec, "Pet Types to Gift", "Filter pet by type (kosong = semua non-favorite)",
-				reg.PET_OPTIONS, CFG.giftPetTypes, function() persist() end)
+				reg.PET_OPTIONS, CFG.giftPetTypes, function() persist() end, { fillDelay = 1.4 })
 			makeInputW(sec, "Weight Filter (KG)", "0=off | +6 = min 6kg | -6 = max 6kg",
 				function() return CFG.giftWeightFilter end,
 				function(t) CFG.giftWeightFilter = tonumber(t) or 0 end)
@@ -11183,7 +11204,7 @@ end
 					end
 				end)
 			makeMultiW(sec, "Favourite Pet Types", "Pet type yang difavoritkan",
-				reg.PET_OPTIONS, CFG.favoritePetTypes, function() persist() end)
+				reg.PET_OPTIONS, CFG.favoritePetTypes, function() persist() end, { fillDelay = 1.7 })
 			makeToggleW(sec, "Auto Unfavourite Pets", "Otomatis unfavorite pet type terpilih",
 				function() return CFG.autoUnfavoritePets end,
 				function(v)
@@ -11192,7 +11213,7 @@ end
 					elseif ctx.stopAutoUnfavorite then pcall(ctx.stopAutoUnfavorite) end
 				end)
 			makeMultiW(sec, "Unfavourite Pet Types", "Pet type yang di-unfavorite (kosong = semua pet)",
-				reg.PET_OPTIONS, CFG.unfavoritePetTypes, function() persist() end)
+				reg.PET_OPTIONS, CFG.unfavoritePetTypes, function() persist() end, { fillDelay = 2.0 })
 			addRefresh(sec)
 		end)
 
