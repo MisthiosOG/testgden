@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T15:16:11.109Z
+-- 42 modul, di-generate 2026-10-27T15:42:42.721Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -10986,13 +10986,17 @@ end
 			return out
 		end
 
-		-- Status trade live: Paragraph :SetDesc tiap 2s (RichText tag warna dist).
+		-- Status trade live: Paragraph :SetDesc (RichText tag warna dist).
+		-- Mulai 3s setelah load + update hanya saat teks berubah — jangan bersaing
+		-- dgn build window.
 		local function addStatus(sec, isGift)
 			local stat = sec:Paragraph({
 				Title = isGift and "Gift Trade Status" or "Ticket Trade Status",
 				Desc = "Completed: 0\nPet cocok filter: -\nStatus: IDLE",
 			})
 			task.spawn(function()
+				task.wait(3)
+				local last = ""
 				while ctx.alive() do
 					pcall(function()
 						local avail = ctx.countMatchingPets and ctx.countMatchingPets(isGift) or 0
@@ -11005,8 +11009,12 @@ end
 						local comp = methodRunning and (ctx.state.completed or 0) or 0
 						local total = isGift and (CFG.giftTotalGifts or 0) or (CFG.totalTrades or 0)
 						local unit = isGift and " gifts" or ""
-						stat:SetDesc(("Completed: %d / %d%s\nPet cocok filter: <font color=\"%s\"><b>%d</b></font>\nStatus: %s")
-							:format(comp, total, unit, availCol, avail, statusText))
+						local txt = ("Completed: %d / %d%s\nPet cocok filter: <font color=\"%s\"><b>%d</b></font>\nStatus: %s")
+							:format(comp, total, unit, availCol, avail, statusText)
+						if txt ~= last then
+							last = txt
+							stat:SetDesc(txt)
+						end
 					end)
 					task.wait(2)
 				end
@@ -11168,6 +11176,7 @@ end
 	}
 
 	local first
+	local buildT0 = os.clock()
 	for i, def in ipairs(TABS) do
 		local tab = window:Tab({
 			Title = def.title,
@@ -11187,7 +11196,9 @@ end
 		if i == 1 then first = tab end
 
 		if MIGRATED[def.id] then
+			local t0 = os.clock()
 			local ok, err = pcall(MIGRATED[def.id], tab)
+			ctx.log(("[pages] tab %s dibangun (%.0f ms)"):format(def.id, (os.clock() - t0) * 1000))
 			if not ok then
 				ctx.log("build tab " .. def.id .. " gagal: " .. tostring(err))
 				pcall(function()
@@ -11208,6 +11219,7 @@ end
 			})
 		end
 	end
+	ctx.log(("[pages] total build UI (%.0f ms)"):format((os.clock() - buildT0) * 1000))
 
 	----------------------------------------------------------------- default tab (pilot)
 	pcall(function() if first and first.Select then first:Select() end end)
