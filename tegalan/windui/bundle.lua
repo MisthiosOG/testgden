@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T18:39:32.355Z
+-- 42 modul, di-generate 2026-10-27T18:56:08.261Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -5123,13 +5123,17 @@ return function(ctx)
 
 	----------------------------------------------------------------- HATCH
 	-- Egg ready = timer habis (TimeToHatch <= 0). Egg yg timer-nya jalan = belum ready.
+	-- eggMode = fwd decl, dibind abis eggPending (predicate "egg sesuai config").
+	local eggMode
 	local function readyEggs()
 		local GetFarm = require(RS.Modules.GetFarm); local farm = GetFarm(LP)
 		local t = {}
 		if farm then for _, e in ipairs(farm:GetDescendants()) do
 			if e:IsA("Model") and e.Name == "PetEgg" and e:GetAttribute("OWNER") == LP.Name then
 				local tth = tonumber(e:GetAttribute("TimeToHatch")) or 0
-				if tth <= 0 then t[#t + 1] = e end
+				-- HANYA egg sesuai pilihan yang boleh di-hatch — egg tipe lain
+				-- (sisa config lama, mis. Paradise saat pilih Common) dibiarkan.
+				if tth <= 0 and (not eggMode or eggMode(e)) then t[#t + 1] = e end
 			end
 		end end
 		return t
@@ -5221,11 +5225,34 @@ return function(ctx)
 	end
 
 	----------------------------------------------------------------- PLACE EGG
+	-- Pending pet dari egg (dari SavedObjects): return petType, displayWeight (base*1.1)
+	local eggSlotKey
+	local function eggPending(egg)
+		local uuid = egg:GetAttribute("OBJECT_UUID"); if not uuid then return nil, 0 end
+		local d = getData(); local slots = d and d.SaveSlots and d.SaveSlots.AllSlots
+		if not slots then return nil, 0 end
+		local function fromSlot(s) local so = s and s.SavedObjects and s.SavedObjects[uuid]; return so and so.Data end
+		local dt = eggSlotKey and fromSlot(slots[eggSlotKey])
+		if not dt then for sn, slot in pairs(slots) do if type(slot) == "table" then local x = fromSlot(slot); if x then eggSlotKey = sn; dt = x; break end end end end
+		if not dt then return nil, 0 end
+		return dt.Type, (tonumber(dt.BaseWeight) or 0) * 1.1
+	end
+	-- Bind predicate tipe egg: cocok kalau label egg-nya mengandung CFG.hatchEggName
+	-- ("Dog - Common Egg" cocok "Common Egg"). Data belum ke-load -> fail-open.
+	eggMode = function(e)
+		local target = CFG.hatchEggName
+		if not target or target == "" then return true end
+		local pt = eggPending(e)
+		if not pt then return true end
+		return petEggLabel(pt):lower():find(target:lower(), 1, true) ~= nil
+	end
 	local function placedEggCount()
 		local GetFarm = require(RS.Modules.GetFarm); local farm = GetFarm(LP)
 		local n = 0
 		if farm then for _, e in ipairs(farm:GetDescendants()) do
-			if e:IsA("Model") and e.Name == "PetEgg" and e:GetAttribute("OWNER") == LP.Name then n = n + 1 end
+			-- Hitung CUMA egg sesuai config: egg tipe lain dibiarkan di farm
+			-- (gak di-hatch, gak ngitung slot) — nggak nyandera place target.
+			if e:IsA("Model") and e.Name == "PetEgg" and e:GetAttribute("OWNER") == LP.Name and eggMode(e) then n = n + 1 end
 		end end
 		return n
 	end
@@ -5364,19 +5391,6 @@ return function(ctx)
 		for k in pairs(a or {}) do u[k] = true end
 		for k in pairs(b or {}) do u[k] = true end
 		return u
-	end
-
-	-- Pending pet dari egg (dari SavedObjects): return petType, displayWeight (base*1.1)
-	local eggSlotKey
-	local function eggPending(egg)
-		local uuid = egg:GetAttribute("OBJECT_UUID"); if not uuid then return nil, 0 end
-		local d = getData(); local slots = d and d.SaveSlots and d.SaveSlots.AllSlots
-		if not slots then return nil, 0 end
-		local function fromSlot(s) local so = s and s.SavedObjects and s.SavedObjects[uuid]; return so and so.Data end
-		local dt = eggSlotKey and fromSlot(slots[eggSlotKey])
-		if not dt then for sn, slot in pairs(slots) do if type(slot) == "table" then local x = fromSlot(slot); if x then eggSlotKey = sn; dt = x; break end end end end
-		if not dt then return nil, 0 end
-		return dt.Type, (tonumber(dt.BaseWeight) or 0) * 1.1
 	end
 
 	-- Klasifikasi egg buat bronto: "skip" | "bronto" | "normal"
