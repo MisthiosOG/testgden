@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T14:08:20.840Z
+-- 42 modul, di-generate 2026-10-27T14:12:31.449Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -10708,9 +10708,9 @@ return function(ctx)
 		--------------------------------------------------- mini-tab bar: [Pickup V1][Pickup V2][Boost]
 		local bar = hrow(tab)
 		local DEFS = {
-			{ id = "v1",    name = "Pickup Pet V1" },
-			{ id = "v2",    name = "Pickup Pet V2" },
-			{ id = "boost", name = "Boost Pet" },
+			v1    = { name = "Pickup Pet V1" },
+			v2    = { name = "Pickup Pet V2" },
+			boost = { name = "Boost Pet" },
 		}
 		local secs, btns = {}, {}
 		local function selectPanel(id)

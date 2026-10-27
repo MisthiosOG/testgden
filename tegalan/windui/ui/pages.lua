@@ -204,9 +204,9 @@ return function(ctx)
 		--------------------------------------------------- mini-tab bar: [Pickup V1][Pickup V2][Boost]
 		local bar = hrow(tab)
 		local DEFS = {
-			{ id = "v1",    name = "Pickup Pet V1" },
-			{ id = "v2",    name = "Pickup Pet V2" },
-			{ id = "boost", name = "Boost Pet" },
+			v1    = { name = "Pickup Pet V1" },
+			v2    = { name = "Pickup Pet V2" },
+			boost = { name = "Boost Pet" },
 		}
 		local secs, btns = {}, {}
 		local function selectPanel(id)
