@@ -315,26 +315,12 @@ return function(ctx)
 	local STATE_CANDIDATES = {
 		STORAGE_DIR .. "/" .. baseName,
 		STORAGE_DIR .. "\\" .. baseName,
-		STORAGE_DIR .. "\\" .. baseName:gsub("%.", "_%.") .. ".json", -- netral buat VFS aneh
+		STORAGE_DIR .. "\\" .. baseName:gsub("%.", "_") .. ".json", -- netral buat VFS aneh
 		baseName,              -- root, format baru
 		legacyName,            -- root, format lama (kompat garden build)
 	}
-	-- API FS alias: sebagian runtime expose writefile sebagai write_of_file dll.
-	local FS = {}
-	for _, names in ipairs({
-		{ "writefile", "writefile" },
-		{ "readfile", "readfile" },
-		{ "isfile", "isfile" },
-		{ "delfile", "delfile" },
-	}) do
-		local primary, aliases = names[1], names[2]
-		FS[primary] = rawget(_G, primary)
-			or (getgenv and rawget(getgenv(), primary))
-		FS[primary] = FS[primary] or (aliases ~= primary and rawget(_G, aliases) or nil)
-	end
-	-- (writefile/readfile/isfile/delfile global standar selalu dicek pas dipakai
-	--  via type(FS.x)=="function"; enggak ada alias resmi lain, jadi cukup begini.)
-
+	-- FS helper: semua akses lewat pcall supaya executor yang nge-throw
+	-- di writefile/readfile gak bikin config module mati.
 	local function fsIsFile(p)
 		if type(isfile) == "function" then return pcall(isfile, p) and isfile(p) or false end
 		return false
