@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T20:13:08.919Z
+-- 42 modul, di-generate 2026-10-27T20:16:55.148Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -1043,25 +1043,34 @@ return function(ctx)
 	end)
 	pcall(function() game:BindToClose(autoSave) end)
 
-	-- Probe filesystem tiap kandidat: tulis 1 byte + baca balik. DANAKAN ini
-	-- biar nggak nebak-nebak lagi kalau config nggak nempel di executor tertentu.
-	pcall(function() ctx.CFG_STATE_PATH = STATE_CANDIDATES[1] end)
+	-- Probe filesystem tiap kandidat: tulis 1 byte + baca balik. JANGAN break
+	-- di kandidat pertama (executor bisa nolak slash tapi terima backslash).
+	pcall(function()
+		ctx.CFG_STATE_PATH = STATE_CANDIDATES[1]
+		ctx.CFG_STATE_CANDIDATES = STATE_CANDIDATES
+	end)
 	task.spawn(function()
-		local okPaths = {}
+		local okPaths, badPaths = {}, {}
 		if type(writefile) == "function" and type(readfile) == "function" then
 			for _, p in ipairs(STATE_CANDIDATES) do
-				local okPing = pcall(function()
+				pcall(function()
 					local pf = p .. ".probe"
 					writefile(pf, "1")
-					if readfile(pf) == "1" then okPaths[#okPaths + 1] = p end
+					if readfile(pf) == "1" then
+						okPaths[#okPaths + 1] = p
+					else
+						badPaths[#badPaths + 1] = p
+					end
 					pcall(delfile, pf)
 				end)
-				if not okPing then break end -- FS mati total, stop nulis
 			end
 		end
 		local summary
 		if #okPaths > 0 then
 			summary = "Config storage OK via: " .. table.concat(okPaths, ", ")
+			if #badPaths > 0 then
+				summary = summary .. "  |  rejected: " .. table.concat(badPaths, ", ")
+			end
 		else
 			summary = "Config storage MATI di executor ini (writefile/readfile gagal semua)"
 		end
@@ -12285,6 +12294,43 @@ end
 				:format(
 					tostring((getgenv and getgenv().GAG_REVISION) or ctx.BASE or "-"),
 					tostring(ctx.LP.UserId)),
+		})
+
+		-- Live FS diagnostic: test write+read tiap kandidat path config.
+		local fsDiag = sec:Paragraph({
+			Title = "Config Storage",
+			Desc = "Run Config Storage Test to check every path.",
+		})
+		sec:Button({
+			Title = "Config Storage Test",
+			Desc = "Test writefile + readfile on every candidate path, live.",
+			Callback = safe(function()
+				local cands = ctx.CFG_STATE_CANDIDATES or {}
+				local lines = {}
+				if type(writefile) ~= "function" or type(readfile) ~= "function" then
+					lines[1] = "Executor has NO writefile/readfile, config persistence impossible"
+				elseif #cands == 0 then
+					lines[1] = "No candidate paths registered"
+				else
+					for _, p in ipairs(cands) do
+						local errOut = nil
+						local okPing = pcall(function()
+							local pf = p .. ".probe"
+							writefile(pf, "1")
+							if readfile(pf) ~= "1" then errOut = "readback mismatch" end
+							pcall(delfile, pf)
+						end)
+						if not okPing then errOut = "executor rejected the path" end
+						if errOut then
+							lines[#lines + 1] = p .. "  FAIL (" .. errOut .. ")"
+						else
+							lines[#lines + 1] = p .. "  OK"
+						end
+					end
+				end
+				pcall(function() fsDiag:SetDesc(table.concat(lines, "\n")) end)
+				ctx.log("[config] storage test: " .. tostring(#lines) .. " path(s) checked")
+			end),
 		})
 
 		sec:Button({

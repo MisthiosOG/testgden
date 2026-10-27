@@ -761,25 +761,34 @@ return function(ctx)
 	end)
 	pcall(function() game:BindToClose(autoSave) end)
 
-	-- Probe filesystem tiap kandidat: tulis 1 byte + baca balik. DANAKAN ini
-	-- biar nggak nebak-nebak lagi kalau config nggak nempel di executor tertentu.
-	pcall(function() ctx.CFG_STATE_PATH = STATE_CANDIDATES[1] end)
+	-- Probe filesystem tiap kandidat: tulis 1 byte + baca balik. JANGAN break
+	-- di kandidat pertama (executor bisa nolak slash tapi terima backslash).
+	pcall(function()
+		ctx.CFG_STATE_PATH = STATE_CANDIDATES[1]
+		ctx.CFG_STATE_CANDIDATES = STATE_CANDIDATES
+	end)
 	task.spawn(function()
-		local okPaths = {}
+		local okPaths, badPaths = {}, {}
 		if type(writefile) == "function" and type(readfile) == "function" then
 			for _, p in ipairs(STATE_CANDIDATES) do
-				local okPing = pcall(function()
+				pcall(function()
 					local pf = p .. ".probe"
 					writefile(pf, "1")
-					if readfile(pf) == "1" then okPaths[#okPaths + 1] = p end
+					if readfile(pf) == "1" then
+						okPaths[#okPaths + 1] = p
+					else
+						badPaths[#badPaths + 1] = p
+					end
 					pcall(delfile, pf)
 				end)
-				if not okPing then break end -- FS mati total, stop nulis
 			end
 		end
 		local summary
 		if #okPaths > 0 then
 			summary = "Config storage OK via: " .. table.concat(okPaths, ", ")
+			if #badPaths > 0 then
+				summary = summary .. "  |  rejected: " .. table.concat(badPaths, ", ")
+			end
 		else
 			summary = "Config storage MATI di executor ini (writefile/readfile gagal semua)"
 		end

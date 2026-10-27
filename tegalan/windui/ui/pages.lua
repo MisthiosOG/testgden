@@ -1380,6 +1380,43 @@ end
 					tostring(ctx.LP.UserId)),
 		})
 
+		-- Live FS diagnostic: test write+read tiap kandidat path config.
+		local fsDiag = sec:Paragraph({
+			Title = "Config Storage",
+			Desc = "Run Config Storage Test to check every path.",
+		})
+		sec:Button({
+			Title = "Config Storage Test",
+			Desc = "Test writefile + readfile on every candidate path, live.",
+			Callback = safe(function()
+				local cands = ctx.CFG_STATE_CANDIDATES or {}
+				local lines = {}
+				if type(writefile) ~= "function" or type(readfile) ~= "function" then
+					lines[1] = "Executor has NO writefile/readfile, config persistence impossible"
+				elseif #cands == 0 then
+					lines[1] = "No candidate paths registered"
+				else
+					for _, p in ipairs(cands) do
+						local errOut = nil
+						local okPing = pcall(function()
+							local pf = p .. ".probe"
+							writefile(pf, "1")
+							if readfile(pf) ~= "1" then errOut = "readback mismatch" end
+							pcall(delfile, pf)
+						end)
+						if not okPing then errOut = "executor rejected the path" end
+						if errOut then
+							lines[#lines + 1] = p .. "  FAIL (" .. errOut .. ")"
+						else
+							lines[#lines + 1] = p .. "  OK"
+						end
+					end
+				end
+				pcall(function() fsDiag:SetDesc(table.concat(lines, "\n")) end)
+				ctx.log("[config] storage test: " .. tostring(#lines) .. " path(s) checked")
+			end),
+		})
+
 		sec:Button({
 			Title = "Save Config Now",
 			Desc = "Force-save all settings to the state file.",
