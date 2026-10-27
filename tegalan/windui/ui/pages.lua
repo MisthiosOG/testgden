@@ -767,12 +767,238 @@ end
 		miniBar(isecs, iorder, idefs, "ticket")
 	end
 
+	----------------------------------------------------------------- TAB: FARM (Plants/Care/Shovel/Harvest)
+	local function buildFarmTab(tab)
+		local fdefs = {
+			plants  = { name = "Plants" },
+			care    = { name = "Care" },
+			shovel  = { name = "Shovel" },
+			harvest = { name = "Harvest" },
+		}
+		local forder = { "plants", "care", "shovel", "harvest" }
+		local fsecs = {}
+
+		local function miniTab(id, buildFn)
+			local sec = section(tab, fdefs[id].name)
+			buildFn(sec)
+			fsecs[id] = sec
+		end
+
+		--------------------------------------------------- panel 1: Plants
+		miniTab("plants", function(sec)
+			makeMultiDynW(sec, "Select Seeds", "Pilih seed dari inventory (angka = jumlah).",
+				function() return ctx.getPlantSeedOptions() end,
+				CFG.plantSeedNames, function() persist() end,
+				{ register = true, cacheKey = "inv_seeds", fillDelay = 0.3 })
+			makeSingleW(sec, "Select Position", "Lokasi tanam di farm.",
+				function() return { "Random", "Player Position" } end,
+				function() return CFG.plantPosition end,
+				function(v) CFG.plantPosition = v end, { fillDelay = 0.5 })
+			makeInputW(sec, "Delay To Plants", "Extra delay (detik) tiap tanam seed.",
+				function() return tostring(CFG.plantDelay) end,
+				function(t) CFG.plantDelay = tonumber(t) or 0 end)
+			makeToggleW(sec, "Auto Plants Seed", "Tanam seed terpilih otomatis.",
+				function() return CFG.plantSeedEnabled end,
+				function(v)
+					CFG.plantSeedEnabled = v
+					if v and ctx.startPlant then pcall(function() ctx.startPlant() end) end
+				end)
+			addRefresh(sec)
+		end)
+
+		--------------------------------------------------- panel 2: Care (Sprinkler + Sprinkler Shovel + Water)
+		miniTab("care", function(sec)
+			makeMultiDynW(sec, "Select Sprinkler", "Sprinkler yg mau dipasang (angka = jumlah).",
+				function() return ctx.getSprinklerOptions() end,
+				CFG.sprinklerNames, function() persist() end, { register = true, fillDelay = 0.6 })
+			makeMultiDynW(sec, "Select Sprinkler Plants", "Pasang dekat plant ini. Kosong = pakai Position.",
+				function() return ctx.getSprinklerPlantOptions() end,
+				CFG.sprinklerPlantNames, function() persist() end, { register = true, fillDelay = 0.8 })
+			makeSingleW(sec, "Select Sprinkler Position", "Lokasi pasang kalau Plants kosong.",
+				function() return { "Random", "Player Position" } end,
+				function() return CFG.sprinklerPosition end,
+				function(v) CFG.sprinklerPosition = v end, { fillDelay = 1.0 })
+			makeInputW(sec, "Delay To Sprinkler", "Extra delay (detik) tiap pasang.",
+				function() return tostring(CFG.sprinklerDelay) end,
+				function(t) CFG.sprinklerDelay = tonumber(t) or 0 end)
+			makeToggleW(sec, "Auto Sprinkler", "Pasang sprinkler terpilih otomatis.",
+				function() return CFG.sprinklerEnabled end,
+				function(v)
+					CFG.sprinklerEnabled = v
+					if v and ctx.startSprinkler then pcall(function() ctx.startSprinkler() end) end
+				end)
+			makeMultiDynW(sec, "Select Shovel Sprinkler", "Sprinkler terpasang yg mau dicabut. 'All' = semua.",
+				function() return ctx.getShovelSprinklerOptions() end,
+				CFG.shovelSprinklerNames, function() persist() end, { register = true, fillDelay = 1.2 })
+			makeInputW(sec, "Delay To Shovel Sprinkler", "Extra delay (detik) tiap cabut.",
+				function() return tostring(CFG.shovelSprinklerDelay) end,
+				function(t) CFG.shovelSprinklerDelay = tonumber(t) or 0 end)
+			makeToggleW(sec, "Auto Shovel Sprinkler", "Cabut sprinkler terpilih otomatis (equip Shovel).",
+				function() return CFG.shovelSprinklerEnabled end,
+				function(v)
+					CFG.shovelSprinklerEnabled = v
+					if v and ctx.startShovelSprinkler then pcall(function() ctx.startShovelSprinkler() end) end
+				end)
+			makeMultiDynW(sec, "Select Water Fruits", "Pilih fruit/plant yang mau disiram. 'All' = semua.",
+				function() return ctx.getWaterFruitOptions() end,
+				CFG.waterFruitNames, function() persist() end, { register = true, fillDelay = 1.4 })
+			makeInputW(sec, "Delay to Water", "Extra delay (detik) tiap siklus siram.",
+				function() return tostring(CFG.waterDelay) end,
+				function(t) CFG.waterDelay = tonumber(t) or 1 end)
+			makeToggleW(sec, "Auto Water Fruits", "Siram fruit terpilih otomatis.",
+				function() return CFG.waterEnabled end,
+				function(v)
+					CFG.waterEnabled = v
+					if v and ctx.startWater then pcall(function() ctx.startWater() end) end
+				end)
+			addRefresh(sec)
+		end)
+
+		--------------------------------------------------- panel 3: Shovel (Tree + Fruits)
+		miniTab("shovel", function(sec)
+			makeMultiDynW(sec, "Select Tree", "Pilih tree/plant yang mau di-shovel. 'All' = semua.",
+				function() return ctx.getShovelTreeOptions() end,
+				CFG.shovelTreeNames, function() persist() end, { register = true, fillDelay = 1.6 })
+			makeInputW(sec, "Delay To Shovel Tree", "Extra delay (detik) tiap siklus shovel tree.",
+				function() return tostring(CFG.shovelTreeDelay) end,
+				function(t) CFG.shovelTreeDelay = tonumber(t) or 0 end)
+			makeToggleW(sec, "Auto Shovel Tree", "Shovel tree/plant terpilih otomatis.",
+				function() return CFG.shovelTreeEnabled end,
+				function(v)
+					CFG.shovelTreeEnabled = v
+					if v and ctx.startShovelTree then pcall(function() ctx.startShovelTree() end) end
+				end)
+			makeMultiDynW(sec, "Select Shovel Fruits", "Tipe fruit yang mau di-shovel. 'All' = semua.",
+				function() return ctx.getShovelFruitOptions() end,
+				CFG.shovelFruitNames, function() persist() end, { register = true, fillDelay = 1.8 })
+			makeMultiDynW(sec, "Select Shovel Mutation", "Filter mutasi. Kosong/'All' = abaikan.",
+				function() return ctx.getShovelMutationOptions() end,
+				CFG.shovelFruitMuts, function() persist() end, { register = true, fillDelay = 2.0 })
+			makeMultiDynW(sec, "Select Shovel Variant", "Filter variant (Gold/Rainbow/dll). Kosong/'All' = abaikan.",
+				function() return ctx.getShovelVariantOptions() end,
+				CFG.shovelFruitVariants, function() persist() end, { register = true, fillDelay = 2.2 })
+			makeSingleW(sec, "Select Shovel Threshold Mode", "Cara banding berat fruit.",
+				function() return ctx.getShovelModeOptions() end,
+				function() return CFG.shovelFruitMode end,
+				function(v) CFG.shovelFruitMode = v end, { fillDelay = 2.4 })
+			makeInputW(sec, "Shovel Weight Threshold", "Kalau ga mau pakai, isi '0'.",
+				function() return tostring(CFG.shovelFruitWeight) end,
+				function(t) CFG.shovelFruitWeight = tonumber(t) or 0 end)
+			makeInputW(sec, "Delay To Shovel Fruit", "Extra delay (detik) tiap siklus shovel fruit.",
+				function() return tostring(CFG.shovelFruitDelay) end,
+				function(t) CFG.shovelFruitDelay = tonumber(t) or 0 end)
+			makeToggleW(sec, "Auto Shovel Fruits", "Shovel plant yang fruit-nya cocok filter.",
+				function() return CFG.shovelFruitEnabled end,
+				function(v)
+					CFG.shovelFruitEnabled = v
+					if v and ctx.startShovelFruit then pcall(function() ctx.startShovelFruit() end) end
+				end)
+			addRefresh(sec)
+		end)
+
+		--------------------------------------------------- panel 4: Harvest (Collect + Favorite + Reclaimer)
+		miniTab("harvest", function(sec)
+			makeInputW(sec, "Delay To Collect", "Extra delay (detik) tiap siklus collect.",
+				function() return tostring(CFG.collectDelay) end,
+				function(t) CFG.collectDelay = tonumber(t) or 0 end)
+			makeToggleW(sec, "Stop Collect If Backpack Is Full Max", "Stop collect pas backpack penuh.",
+				function() return CFG.collectStopIfFull end,
+				function(v) CFG.collectStopIfFull = v end)
+			makeToggleW(sec, "Auto Sell Fruit If Backpack Full", "Jual semua fruit pas backpack penuh.",
+				function() return CFG.collectAutoSellIfFull end,
+				function(v) CFG.collectAutoSellIfFull = v end)
+			makeMultiDynW(sec, "Select Whitelist Fruit", "Pilih tipe fruit yang mau di-collect.",
+				function() return ctx.getCollectFruitOptions() end,
+				CFG.collectWlFruitNames, function() persist() end,
+				{ register = true, cacheKey = "collect_fruits", fillDelay = 2.6 })
+			makeToggleW(sec, "Auto Collect Whitelisted Fruits", "Collect cuma tipe fruit yang di-whitelist.",
+				function() return CFG.collectWlFruitEnabled end,
+				function(v)
+					CFG.collectWlFruitEnabled = v
+					if v and ctx.startCollect then pcall(function() ctx.startCollect() end) end
+				end)
+			makeMultiDynW(sec, "Select Whitelist Mutations", "Pilih mutasi yang mau di-collect.",
+				function() return ctx.getCollectMutationOptions() end,
+				CFG.collectWlMutNames, function() persist() end, { register = true, fillDelay = 2.8 })
+			makeToggleW(sec, "Auto Collect Whitelisted Mutations", "Collect cuma fruit dgn mutasi yang di-whitelist.",
+				function() return CFG.collectWlMutEnabled end,
+				function(v)
+					CFG.collectWlMutEnabled = v
+					if v and ctx.startCollect then pcall(function() ctx.startCollect() end) end
+				end)
+			makeMultiDynW(sec, "Select Combined Fruits", "Filter by fruit type.",
+				function() return ctx.getCollectFruitOptions() end,
+				CFG.collectCombFruitNames, function() persist() end,
+				{ register = true, cacheKey = "collect_fruits", fillDelay = 3.0 })
+			makeMultiDynW(sec, "Select Combined Mutation", "Filter by mutation type.",
+				function() return ctx.getCollectMutationOptions() end,
+				CFG.collectCombMutNames, function() persist() end, { register = true, fillDelay = 3.2 })
+			makeMultiDynW(sec, "Select Combined Variant", "Filter by variant type.",
+				function() return ctx.getCollectVariantOptions() end,
+				CFG.collectCombVariants, function() persist() end, { register = true, fillDelay = 3.4 })
+			makeSingleW(sec, "Whitelist Weight Mode", "Cara banding berat fruit.",
+				function() return ctx.getCollectModeOptions() end,
+				function() return CFG.collectCombMode end,
+				function(v) CFG.collectCombMode = v end, { fillDelay = 3.6 })
+			makeInputW(sec, "Whitelist Weight", "Kalau ga dipakai, isi '0'.",
+				function() return tostring(CFG.collectCombWeight) end,
+				function(t) CFG.collectCombWeight = tonumber(t) or 0 end)
+			makeToggleW(sec, "Auto Collect Fruits", "Collect fruit yang cocok SEMUA kriteria combined.",
+				function() return CFG.collectCombEnabled end,
+				function(v)
+					CFG.collectCombEnabled = v
+					if v and ctx.startCollect then pcall(function() ctx.startCollect() end) end
+				end)
+			makeMultiDynW(sec, "Select Fruits [Fav]", "Tipe fruit di garden buat di-favorite (kosong = any).",
+				function() return ctx.getFavFruitOptions() end,
+				CFG.favFruitNames, function() persist() end, { register = true, fillDelay = 3.8 })
+			makeMultiDynW(sec, "Filter Mutations [Fav]", "Mutasi yang diperluin (kosong = mutasi apapun OK).",
+				function() return ctx.getFavMutationOptions() end,
+				CFG.favMutNames, function() persist() end, { register = true, fillDelay = 4.0 })
+			makeSingleW(sec, "Weight Mode [Fav]", "Banding berat fruit (kosong = off).",
+				function() return ctx.getFavModeOptions() end,
+				function() return CFG.favMode end,
+				function(v) CFG.favMode = v end, { fillDelay = 4.2 })
+			makeInputW(sec, "Weight Value [Fav]", "Threshold berat (0 = off).",
+				function() return tostring(CFG.favWeight) end,
+				function(t) CFG.favWeight = tonumber(t) or 0 end)
+			makeInputW(sec, "Delay To Favorite", "Detik tiap siklus scan favorite.",
+				function() return tostring(CFG.favDelay) end,
+				function(t) CFG.favDelay = tonumber(t) or 1 end)
+			makeToggleW(sec, "Auto Favorite Fruits", "Favorite fruit garden yang cocok filter.",
+				function() return CFG.favEnabled end,
+				function(v)
+					CFG.favEnabled = v
+					if v and ctx.startFavorite then pcall(function() ctx.startFavorite() end) end
+				end)
+			makeToggleW(sec, "Auto Unfavorite Fruits", "Unfavorite fruit garden yang cocok filter.",
+				function() return CFG.unfavEnabled end,
+				function(v)
+					CFG.unfavEnabled = v
+					if v and ctx.startFavorite then pcall(function() ctx.startFavorite() end) end
+				end)
+			makeMultiDynW(sec, "Select Plants [Reclaim]", "Pilih plant yg mau di-reclaim. 'All' = semua.",
+				function() return ctx.getReclaimPlantOptions() end,
+				CFG.reclaimPlantNames, function() persist() end, { register = true, fillDelay = 4.4 })
+			makeToggleW(sec, "Auto Reclaimer Plants", "Auto reclaim plant terpilih pakai tool Reclaimer",
+				function() return CFG.reclaimEnabled end,
+				function(v)
+					CFG.reclaimEnabled = v
+					if v and ctx.startReclaim then pcall(function() ctx.startReclaim() end) end
+				end)
+			addRefresh(sec)
+		end)
+
+		miniBar(fsecs, forder, fdefs, "plants")
+	end
+
 	----------------------------------------------------------------- REGISTRY TAB
 	-- Urutan sesuai Pink Royale. build = nil -> placeholder (belum dimigrasi).
 	local MIGRATED = {
 		Pet = buildPetTab,
 		Inventory = buildInventoryTab,
-		-- berikutnya: Misc, Farm, Hatch, Elephant, ... (satu per satu)
+		Farm = buildFarmTab,
+		-- berikutnya: Misc, Hatch, Elephant, Flow, Leveling, Mutation, Shop (satu per satu)
 	}
 
 	local TABS = {
