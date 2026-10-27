@@ -996,13 +996,423 @@ end
 		miniBar(fsecs, forder, fdefs, "plants")
 	end
 
+	----------------------------------------------------------------- TAB: HATCH (Auto Hatch + Auto Sell)
+	local function buildHatchTab(tab)
+		local hdefs = {
+			core   = { name = "Main Team" },
+			bronto = { name = "Bronto Team" },
+			hatch  = { name = "Hatch Team" },
+			sell   = { name = "Sell Team" },
+			cfg    = { name = "Config" },
+		}
+		local horder = { "core", "bronto", "hatch", "sell", "cfg" }
+		local hsecs = {}
+		local function miniTab(id, buildFn)
+			local sec = section(tab, hdefs[id].name)
+			buildFn(sec)
+			hsecs[id] = sec
+		end
+
+		--------------------------------------------------- panel 1: Main Team
+		miniTab("core", function(sec)
+			-- Status live dari state loop hatch (murah: state fields + getHatchSummary per 2.5s).
+			local stat = sec:Paragraph({
+				Title = "Hatch Status",
+				Desc = "Phase: -\nStatus: Idle\nPet di backpack: -",
+			})
+			task.spawn(function()
+				task.wait(3)
+				local last = ""
+				while ctx.alive() do
+					pcall(function()
+						local s = ctx.getHatchSummary and ctx.getHatchSummary()
+						local txt = ("Phase: %s\nStatus: %s\nPet di backpack: %s"):format(
+							tostring(ctx.state.hatchPhase or "-"),
+							tostring(ctx.state.hatchStatus or "Idle"),
+							s and (tostring(s.backpack) .. "/" .. tostring(s.maxBackpack)) or "-")
+						if txt ~= last then last = txt; stat:SetDesc(txt) end
+					end)
+					task.wait(2.5)
+				end
+			end)
+
+			-- Master toggle = pengganti Start/Stop bar; handleInventoryFull
+			-- memanggil ctx.ui.rHatchToggle pas Auto Hatch distop (Invent Max).
+			local masterCtrl = makeToggleW(sec, "Enable Auto Hatch",
+				"Otomatis place egg, hatch (Main/Hatch/Bronto team), sell sesuai config.",
+				function() return CFG.hatchEnabled end,
+				function(v)
+					if v then
+						if ctx.startHatch then pcall(function() ctx.startHatch() end) end
+					else
+						if ctx.stopHatch then pcall(function() ctx.stopHatch() end) end
+						if not CFG.hatchRejoinMinusEnabled and not CFG.hatchRejoinPlusEnabled and ctx.stopEggMinusWatcher then
+							pcall(function() ctx.stopEggMinusWatcher() end)
+						end
+					end
+				end)
+			ctx.ui.rHatchToggle = function()
+				pcall(function() masterCtrl:Set(CFG.hatchEnabled) end)
+			end
+
+			makeInputW(sec, "Delay Equip — Main (sec)", "Jeda antar pet pas equip Main team",
+				function() return tostring(CFG.hatchCoreEquipDelay or 0) end,
+				function(t) CFG.hatchCoreEquipDelay = tonumber(t) or 0 end)
+			makeInputW(sec, "Delay Unequip — Main (sec)", "Jeda antar pet pas unequip Main team",
+				function() return tostring(CFG.hatchCoreUnequipDelay or 1) end,
+				function(t) CFG.hatchCoreUnequipDelay = tonumber(t) or 1 end)
+			makeMultiDynW(sec, "Main Team", "Percepat egg (incubation speed)",
+				function() return ctx.inventoryPetOptions(CFG.hatchCoreTeam) end,
+				CFG.hatchCoreTeam, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.2, max = 250 })
+			addRefresh(sec)
+		end)
+
+		--------------------------------------------------- panel 2: Bronto Team
+		miniTab("bronto", function(sec)
+			makeInputW(sec, "Delay Equip — Bronto (sec)", "Jeda antar pet pas equip Bronto team",
+				function() return tostring(CFG.hatchBrontoEquipDelay or 0) end,
+				function(t) CFG.hatchBrontoEquipDelay = tonumber(t) or 0 end)
+			makeInputW(sec, "Delay Unequip — Bronto (sec)", "Jeda antar pet pas unequip Bronto team",
+				function() return tostring(CFG.hatchBrontoUnequipDelay or 1) end,
+				function(t) CFG.hatchBrontoUnequipDelay = tonumber(t) or 1 end)
+			makeInputW(sec, "Bronto Team Delay (sec)", "Tunggu abis swap team sebelum hatch bronto",
+				function() return tostring(CFG.brontoTeamDelay or 5.5) end,
+				function(t) CFG.brontoTeamDelay = tonumber(t) or 5.5 end)
+			makeToggleW(sec, "Don't Hatch Bronto Pets",
+				"Skip pet yg memenuhi syarat Bronto (jangan di-hatch).",
+				function() return CFG.brontoSkipSpecial end,
+				function(v) CFG.brontoSkipSpecial = v end)
+			makeMultiDynW(sec, "Bronto Team", "+30% berat pet pas hatch (Brontosaurus)",
+				function() return ctx.inventoryPetOptions(CFG.hatchBrontoTeam) end,
+				CFG.hatchBrontoTeam, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.4, max = 250 })
+			addRefresh(sec)
+		end)
+
+		--------------------------------------------------- panel 3: Hatch Team
+		miniTab("hatch", function(sec)
+			makeInputW(sec, "Delay Equip — Hatch (sec)", "Jeda antar pet pas equip Hatch team",
+				function() return tostring(CFG.hatchTeamEquipDelay or 0) end,
+				function(t) CFG.hatchTeamEquipDelay = tonumber(t) or 0 end)
+			makeInputW(sec, "Delay Unequip — Hatch (sec)", "Jeda antar pet pas unequip Hatch team",
+				function() return tostring(CFG.hatchTeamUnequipDelay or 1) end,
+				function(t) CFG.hatchTeamUnequipDelay = tonumber(t) or 1 end)
+			makeInputW(sec, "Hatch Team Delay (sec)", "Tunggu abis swap team sebelum hatch",
+				function() return tostring(CFG.hatchTeamDelay or 5.5) end,
+				function(t) CFG.hatchTeamDelay = tonumber(t) or 5.5 end)
+			makeMultiDynW(sec, "Hatch Team", "Hatch egg ready (Koi = balikin egg)",
+				function() return ctx.inventoryPetOptions(CFG.hatchHatchTeam) end,
+				CFG.hatchHatchTeam, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.6, max = 250 })
+			addRefresh(sec)
+		end)
+
+		--------------------------------------------------- panel 4: Sell Team
+		miniTab("sell", function(sec)
+			makeInputW(sec, "Delay Equip — Sell (sec)", "Jeda antar pet pas equip Sell team",
+				function() return tostring(CFG.hatchSellEquipDelay or 0) end,
+				function(t) CFG.hatchSellEquipDelay = tonumber(t) or 0 end)
+			makeInputW(sec, "Delay Unequip — Sell (sec)", "Jeda antar pet pas unequip Sell team",
+				function() return tostring(CFG.hatchSellUnequipDelay or 1) end,
+				function(t) CFG.hatchSellUnequipDelay = tonumber(t) or 1 end)
+			makeInputW(sec, "Sell Team Delay (sec)", "Tunggu abis swap team sebelum jual",
+				function() return tostring(CFG.sellTeamDelay or 5.5) end,
+				function(t) CFG.sellTeamDelay = tonumber(t) or 5.5 end)
+			makeToggleW(sec, "Auto Boost Before Sell", "Boost pet aktif pakai toy sebelum jual",
+				function() return CFG.autoBoostBeforeSell end,
+				function(v) CFG.autoBoostBeforeSell = v end)
+			makeMultiDynW(sec, "Sell Team", "Jual + balikin pet jadi egg (Seal the Deal)",
+				function() return ctx.inventoryPetOptions(CFG.hatchSellTeam) end,
+				CFG.hatchSellTeam, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.8, max = 250 })
+			addRefresh(sec)
+		end)
+
+		--------------------------------------------------- panel 5: Config
+		miniTab("cfg", function(sec)
+			makeToggleW(sec, "Auto Sell Pets", "Jual otomatis pet di backpack sesuai pengaturan.",
+				function() return CFG.autoSellEnabled end,
+				function(v) CFG.autoSellEnabled = v end)
+			makeSingleW(sec, "Sell Trigger", "Cycle = jual tiap N cycle hatch. Total Pet (BP) = jual pas backpack penuh.",
+				function() return { "Cycle", "Backpack" } end,
+				function() return CFG.sellMode or "Cycle" end,
+				function(v) CFG.sellMode = (v == "Backpack") and "Backpack" or "Cycle" end, { fillDelay = 0.9 })
+			makeInputW(sec, "Sell Tiap Berapa Cycle", "Dipakai kalau Sell Trigger = Cycle.",
+				function() return tostring(CFG.sellEveryNCycles or 1) end,
+				function(t) CFG.sellEveryNCycles = math.max(1, tonumber(t) or 1) end)
+			makeInputW(sec, "Auto Sell Aktif Saat Total Pet", "Dipakai kalau Sell Trigger = Total Pet (BP).",
+				function() return tostring(CFG.sellWhenReach or 100) end,
+				function(t) CFG.sellWhenReach = tonumber(t) or 100 end)
+			makeSingleW(sec, "Sell Style", "One by One = jual yg cocok filter saja (aman). All at Once = jual semua non-favorit yg cocok.",
+				function() return { "One by One", "All at Once" } end,
+				function() return CFG.sellStyle or "All at Once" end,
+				function(v) CFG.sellStyle = (v == "One by One") and "One by One" or "All at Once" end, { fillDelay = 1.0 })
+
+			sec:Paragraph({
+				Title = "Sell & Bronto Rules",
+				Desc = "Weight < KG -> aksi (SELL/KEEP). Weight >= KG -> KEEP + BRONTO (hatch pakai Bronto team).",
+			})
+
+			-- Bulk editor (pengganti tabel per-pet build lama):
+			local bulkSel, bulkKg, bulkAction, bulkSpecial = {}, 0.8, "sell", false
+			makeMultiW(sec, "Select Pet Types (Bulk)", "Pilih beberapa jenis pet sekaligus",
+				reg.PET_OPTIONS, bulkSel, function() persist() end, { fillDelay = 1.2 })
+			makeInputW(sec, "KG (Bulk)", "Batas berat target pet",
+				function() return tostring(bulkKg) end,
+				function(t) bulkKg = tonumber(t) or 0.8 end)
+			makeSingleW(sec, "Below KG Action (Bulk)", "Aksi kalau berat di bawah batas",
+				function() return { "sell", "keep" } end,
+				function() return bulkAction end,
+				function(v) bulkAction = (v == "keep") and "keep" or "sell" end, { fillDelay = 1.4 })
+			makeToggleW(sec, "Special Pet (Bulk)", "Tandai pet terpilih sbg Special (★ alert & bronto).",
+				function() return bulkSpecial end,
+				function(v) bulkSpecial = v end)
+
+			local remVal, remRefresh = nil, nil
+			sec:Button({
+				Title = "APPLY BULK LIST",
+				Desc = "Terapkan aturan di atas ke semua pet terpilih (menimpa rule lama).",
+				Callback = safe(function()
+					CFG.hatchSellList = CFG.hatchSellList or {}
+					local n = 0
+					for name in pairs(bulkSel) do
+						CFG.hatchSellList[name] = {
+							kg = tonumber(bulkKg) or 0.8,
+							action = (bulkAction == "keep") and "KEEP" or "SELL",
+							special = bulkSpecial == true,
+						}
+						n = n + 1
+					end
+					if n > 0 then
+						persist()
+						ctx.log(("Hatch: bulk %d rule di-apply"):format(n))
+						if remRefresh then pcall(remRefresh) end
+						W.notify("Hatch", n .. " rule di-apply")
+					end
+				end),
+			})
+
+			remCtrl, remRefresh = makeSingleW(sec, "Pick Rule to Remove",
+				"Rule yg terdaftar di Sell & Bronto Config.",
+				function()
+					local list = {}
+					for k in pairs(CFG.hatchSellList or {}) do list[#list + 1] = k end
+					table.sort(list)
+					return list
+				end,
+				function() return remVal end,
+				function(v) remVal = v end, { register = true, fillDelay = 1.6 })
+
+			sec:Button({
+				Title = "Remove Selected Rule",
+				Desc = "Hapus rule pet yang dipilih di dropdown atas.",
+				Callback = safe(function()
+					if remVal and CFG.hatchSellList then
+						CFG.hatchSellList[remVal] = nil
+						remVal = nil
+						persist()
+						if remRefresh then pcall(remRefresh) end
+						ctx.log("Hatch: rule dihapus")
+					end
+				end),
+			})
+
+			sec:Button({
+				Title = "CLEAR ALL RULES",
+				Desc = "Hapus SEMUA aturan Sell & Bronto (filter kosong = sell dibatalin otomatis).",
+				Callback = safe(function()
+					CFG.hatchSellList = {}
+					persist()
+					if remRefresh then pcall(remRefresh) end
+					ctx.log("Hatch: semua rule dihapus")
+				end),
+			})
+
+			sec:Button({
+				Title = "Sell Now (manual)", Desc = "Jalankan proses sell sekali sekarang.",
+				Callback = safe(function()
+					if ctx.hatchDoSell then task.spawn(function() pcall(ctx.hatchDoSell) end) end
+				end),
+			})
+
+			sec:Paragraph({ Title = "Egg Configuration", Desc = "Egg yg di-place & di-hatch." })
+			makeSingleW(sec, "Egg to Hatch", "Egg dari backpack (angka = jumlah).",
+				function() return ctx.getEggBackpackOptions() end,
+				function() return tostring(CFG.hatchEggName or "") end,
+				function(v) if v ~= "" then CFG.hatchEggName = v end end,
+				{ register = true, fillDelay = 1.8 })
+			makeSingleW(sec, "Placement Pattern", "Grid = rapih, Random = sebar acak.",
+				function() return { "Grid", "Random" } end,
+				function() return CFG.hatchPlacePattern or "Grid" end,
+				function(v) CFG.hatchPlacePattern = (v == "Random") and "Random" or "Grid" end, { fillDelay = 2.0 })
+			makeInputW(sec, "Max Placed", "Maksimal egg ke-place di garden.",
+				function() return tostring(CFG.hatchMaxPlaced or 8) end,
+				function(t) CFG.hatchMaxPlaced = math.max(1, tonumber(t) or 8) end)
+
+			makeToggleW(sec, "Auto Rejoin on Egg Minus", "Rejoin server kalau jumlah egg minus mencapai batas.",
+				function() return CFG.hatchRejoinMinusEnabled end,
+				function(v)
+					CFG.hatchRejoinMinusEnabled = v
+					if v and ctx.startEggMinusWatcher then pcall(function() ctx.startEggMinusWatcher() end) end
+					if not v and not CFG.hatchRejoinPlusEnabled and ctx.stopEggMinusWatcher then
+						pcall(function() ctx.stopEggMinusWatcher() end)
+					end
+				end)
+			makeInputW(sec, "Egg Minus Threshold", "Batas minus trigger rejoin (misal 20).",
+				function() return tostring(CFG.hatchRejoinMinusThreshold or 20) end,
+				function(t) CFG.hatchRejoinMinusThreshold = tonumber(t) or 20 end)
+			makeToggleW(sec, "Auto Rejoin on Egg Plus", "Rejoin server kalau egg bertambah mencapai batas.",
+				function() return CFG.hatchRejoinPlusEnabled end,
+				function(v)
+					CFG.hatchRejoinPlusEnabled = v
+					if v and ctx.startEggMinusWatcher then pcall(function() ctx.startEggMinusWatcher() end) end
+					if not v and not CFG.hatchRejoinMinusEnabled and ctx.stopEggMinusWatcher then
+						pcall(function() ctx.stopEggMinusWatcher() end)
+					end
+				end)
+			makeInputW(sec, "Egg Plus Threshold", "Batas plus trigger rejoin (misal 20).",
+				function() return tostring(CFG.hatchRejoinPlusThreshold or 20) end,
+				function(t) CFG.hatchRejoinPlusThreshold = tonumber(t) or 20 end)
+			makeInputW(sec, "Hatch Webhook URL", "Webhook alert bronto/special egg (kosong = ga kirim).",
+				function() return tostring(CFG.hatchWebhookUrl or "") end,
+				function(t) CFG.hatchWebhookUrl = tostring(t or "") end)
+			addRefresh(sec)
+		end)
+
+		miniBar(hsecs, horder, hdefs, "core")
+	end
+
+	----------------------------------------------------------------- TAB: SETTINGS
+	local function buildSettingsTab(tab)
+		local sec = section(tab, "General")
+		local persist = ctx.persistState
+
+		sec:Paragraph({
+			Title = "CeszParadise WindUI",
+			Desc = ("Build: %s\nToggle UI: klik logo open-button / tekan K.\nConfig file: garden_state_%s.json (otomatis ke-save tiap ubah).")
+				:format(
+					tostring((getgenv and getgenv().GAG_REVISION) or ctx.BASE or "-"),
+					tostring(ctx.LP.UserId)),
+		})
+
+		sec:Button({
+			Title = "Save Config Now",
+			Desc = "Paksa simpan semua setting ke file state.",
+			Callback = safe(function()
+				persist()
+				W.notify("Settings", "Config tersimpan.")
+				ctx.log("Settings: config tersimpan manual.")
+			end),
+		})
+
+		-- STOP ALL: matiin SEMUA automation (sweep flag *Enabled) + player/perf
+		-- mods dibalikin ke default + stop function yg tersedia. Loop automation
+		-- semuanya nge-flag CFG tiap tick -> flag mati = loop berhenti sendiri.
+		local function doStopAll()
+			for k, v in pairs(CFG) do
+				if type(v) == "boolean" and tostring(k):find("Enabled", 1, true) then CFG[k] = false end
+			end
+			CFG.autoReconnect  = false
+			CFG.hideMyPlants   = false
+			CFG.hideOtherPlants= false
+			CFG.autoRemoveWebFx= false
+			CFG.disable3d      = false
+			for _, fn in ipairs({ "stopPnpV1", "stopPnpV2", "stopTrade", "stopHatch",
+				"stopAutoFavorite", "stopAutoUnfavorite", "stopEggMinusWatcher", "stopReclaim",
+				"stopGrowth", "stopLeveling", "stopLevelingV2", "stopElephant", "stopElephantV2",
+				"stopMutation", "stopCleanse", "stopBoostPet", "stopReconnect" }) do
+				if ctx[fn] then pcall(ctx[fn]) end
+			end
+			if ctx.setNoclip then pcall(function() ctx.setNoclip(false) end) end
+			if ctx.setWalkSpeed then pcall(function() ctx.setWalkSpeed(false) end) end
+			if ctx.setInfJump then pcall(function() ctx.setInfJump(false) end) end
+			if ctx.setHidePlants then
+				pcall(function() ctx.setHidePlants("mine", false) end)
+				pcall(function() ctx.setHidePlants("other", false) end)
+			end
+			if ctx.setAutoRemoveWeb then pcall(function() ctx.setAutoRemoveWeb(false) end) end
+			if ctx.setDisable3d then pcall(function() ctx.setDisable3d(false) end) end
+			if ctx.setPerfMode then pcall(function() ctx.setPerfMode("off") end) end
+			persist()
+			ctx.log("Settings: SEMUA automation dimatikan.")
+			W.notify("Settings", "Semua automation STOP.")
+		end
+
+		sec:Button({
+			Title = "STOP ALL Automation",
+			Desc = "Matikan semua automation + player/perf mods (konfirmasi dulu).",
+			Callback = safe(function()
+				local okd = pcall(function()
+					window:Dialog({
+						Title = "Stop All Automation?",
+						Content = "Semua automation, player mods, dan perf mode akan dimatikan.",
+						Buttons = {
+							{ Title = "Ya, Stop Semua", Variant = "Primary", Callback = doStopAll },
+							{ Title = "Batal", Variant = "Secondary", Callback = function() end },
+						},
+					})
+				end)
+				if not okd then doStopAll() end -- dist tanpa Dialog -> langsung eksekusi
+			end),
+		})
+
+		-- Log live: 8 baris terakhir ctx.state.logLines.
+		local logs = sec:Paragraph({ Title = "Logs", Desc = "-" })
+		task.spawn(function()
+			task.wait(3)
+			while ctx.alive() do
+				pcall(function()
+					local n = #ctx.state.logLines
+					local from = math.max(1, n - 7)
+					local t = {}
+					for i = from, n do t[#t + 1] = ctx.state.logLines[i] end
+					logs:SetDesc(table.concat(t, "\n"))
+				end)
+				task.wait(3)
+			end
+		end)
+
+		-- Theme WindUI (bawaan lib; ganti tanpa reload).
+		local themes = {}
+		pcall(function()
+			local th = W.windui.GetThemes and W.windui:GetThemes()
+			if th then for nm in pairs(th) do themes[#themes + 1] = tostring(nm) end end
+		end)
+		table.sort(themes)
+		if #themes == 0 then themes = { "Dark", "Light" } end
+		local curTheme = nil
+		pcall(function() curTheme = W.windui.GetCurrentTheme and W.windui:GetCurrentTheme() end)
+		makeSingleW(sec, "Theme WindUI", "Tema bawaan WindUI — langsung apply.",
+			function() return themes end,
+			function() return curTheme or themes[1] end,
+			function(v)
+				pcall(function() if W.windui.SetTheme then W.windui:SetTheme(v) end end)
+				W.notify("Settings", "Theme: " .. tostring(v))
+			end, { fillDelay = 2.2 })
+
+		sec:Button({
+			Title = "Reload Hub",
+			Desc = "Jalankan ulang loader (ambil build terbaru dari repo).",
+			Callback = safe(function()
+				local rev = (getgenv and getgenv().GAG_REVISION) or "main"
+				pcall(function()
+					loadstring(game:HttpGet("https://raw.githubusercontent.com/MisthiosOG/testgden/"
+						.. tostring(rev) .. "/tegalan/init.lua?t=" .. os.time()))()
+				end)
+			end),
+		})
+	end
+
 	----------------------------------------------------------------- REGISTRY TAB
 	-- Urutan sesuai Pink Royale. build = nil -> placeholder (belum dimigrasi).
 	local MIGRATED = {
 		Pet = buildPetTab,
 		Inventory = buildInventoryTab,
 		Farm = buildFarmTab,
-		-- berikutnya: Misc, Hatch, Elephant, Flow, Leveling, Mutation, Shop (satu per satu)
+		Hatch = buildHatchTab,
+		Settings = buildSettingsTab,
+		-- berikutnya: Misc, Elephant, Flow, Leveling, Mutation, Shop (satu per satu)
 	}
 
 	local TABS = {
@@ -1016,6 +1426,7 @@ end
 		{ id = "Inventory", title = "Inventory", icon = "solar:backpack-bold" },
 		{ id = "Shop",      title = "Shop",      icon = "solar:cart-bold" },
 		{ id = "Misc",      title = "Misc",      icon = "solar:settings-bold" },
+		{ id = "Settings",  title = "Settings",  icon = "solar:settings-minimalistic-bold" },
 	}
 
 	local first
@@ -1067,5 +1478,5 @@ end
 	----------------------------------------------------------------- default tab (pilot)
 	pcall(function() if first and first.Select then first:Select() end end)
 
-	ctx.log("WindUI pages dibangun: Pet (pilot) + 9 placeholder.")
+	ctx.log("WindUI pages dibangun: Pet, Inventory, Farm, Hatch, Settings + placeholder sisanya.")
 end
