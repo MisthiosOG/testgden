@@ -22,7 +22,6 @@ return function(ctx)
 	local eggPets = {}
 	-- Cache BaseWeight per uuid (scan data game — NEBULA buildBW).
 	local bwCache = {}
-	local panel -- { sg, scroll, rows[], layout } untuk mode screen
 	local lastMode
 
 	local function updateEggPets()
@@ -121,93 +120,53 @@ return function(ctx)
 		end
 	end
 
-	-- ===== Screen mode: panel list di sisi kanan layar =====
-	-- ponytail: panel builder didup dari esp_label.lua (~45 baris) — abstraksi
-	-- modul bersama gak worth wiring-nya saat ini; naikin kalau ESP ketiga muncul.
-	local ACCENT = Color3.fromRGB(235, 235, 235) -- dark-white, sesuai tema menu
+	-- ===== Screen mode: PLAIN TEXT list (tanpa background), lewat shared
+	-- renderer di esp_label (ctx.espScreenData / ctx.espScreenPaint).
+	-- Fallback: kalau renderer shared belum ada (label module gak ke-load),
+	-- bikin gui list sendiri yang gayanya sama.
+	local listSg, listLbl
 
-	local function ensurePanel(title)
-		if panel and panel.Parent then return panel end
-		local sg = Instance.new("ScreenGui")
-		sg.Name = "CespEggPanel"
-		sg.ResetOnSpawn = false
-		sg.DisplayOrder = 50
-		sg.Parent = (gethui and gethui()) or game:GetService("CoreGui")
-
-		local f = Instance.new("Frame")
-		f.AnchorPoint = Vector2.new(1, 0.5)
-		f.Position = UDim2.new(1, -10, 0.5, 0)
-		f.Size = UDim2.fromOffset(280, 300)
-		f.BackgroundColor3 = Color3.fromRGB(16, 12, 20)
-		f.BackgroundTransparency = 0.25
-		f.BorderSizePixel = 0
-		f.Parent = sg
-		Instance.new("UICorner", f).CornerRadius = UDim.new(0, 10)
-		local st = Instance.new("UIStroke", f)
-		st.Color = ACCENT
-		st.Thickness = 1.2
-		st.Transparency = 0.35
-
-		local hdr = Instance.new("TextLabel")
-		hdr.Size = UDim2.new(1, -12, 0, 26)
-		hdr.Position = UDim2.fromOffset(6, 0)
-		hdr.BackgroundTransparency = 1
-		hdr.Font = Enum.Font.GothamBold
-		hdr.TextSize = 13
-		hdr.RichText = true
-		hdr.TextXAlignment = Enum.TextXAlignment.Left
-		hdr.TextColor3 = ACCENT
-		hdr.Text = title
-		hdr.Parent = f
-
-		local scroll = Instance.new("ScrollingFrame")
-		scroll.Position = UDim2.fromOffset(6, 28)
-		scroll.Size = UDim2.new(1, -12, 1, -34)
-		scroll.BackgroundTransparency = 1
-		scroll.BorderSizePixel = 0
-		scroll.ScrollBarThickness = 3
-		scroll.ScrollingDirection = Enum.ScrollingDirection.Y
-		scroll.CanvasSize = UDim2.new()
-		scroll.Parent = f
-		local layout = Instance.new("UIListLayout", scroll)
-		layout.Padding = UDim.new(0, 2)
-		layout.SortOrder = Enum.SortOrder.LayoutOrder
-
-		panel = { sg = sg, scroll = scroll, rows = {}, layout = layout }
-		return panel
-	end
-
-	local function renderRows(rows)
-		local p = ensurePanel("<b>EGG ESP</b>  (screen)")
-		for i, txt in ipairs(rows) do
-			local r = p.rows[i]
-			if not r then
-				r = Instance.new("TextLabel")
-				r.BackgroundTransparency = 1
-				r.Size = UDim2.new(1, -4, 0, 18)
-				r.Font = Enum.Font.Gotham
-				r.TextSize = 13
-				r.RichText = true
-				r.TextXAlignment = Enum.TextXAlignment.Left
-				r.TextTruncate = Enum.TextTruncate.AtEnd
-				r.TextColor3 = Color3.new(1, 1, 1)
-				r.LayoutOrder = i
-				r.Parent = p.scroll
-				p.rows[i] = r
-			end
-			if r.Text ~= txt then r.Text = txt end
+	local function screenClaim(rows)
+		if ctx.espScreenPaint then
+			ctx.espScreenData.egg = (rows and #rows > 0) and rows or nil
+			ctx.espScreenPaint()
+			return
 		end
-		for i = #rows + 1, #p.rows do p.rows[i]:Destroy(); p.rows[i] = nil end
-		p.scroll.CanvasSize = UDim2.fromOffset(0, p.layout.AbsoluteContentSize.Y + 6)
-	end
+		local has = rows and #rows > 0
+		if not has then
+			if listSg then pcall(function() listSg:Destroy() end) end
+			listSg, listLbl = nil, nil
+			return
+		end
+		if not (listSg and listSg.Parent) then
+			listSg = Instance.new("ScreenGui")
+			listSg.Name = "CespEspListEggOnly"
+			listSg.ResetOnSpawn = false
+			listSg.DisplayOrder = 50
+			listSg.IgnoreGuiInset = true
+			listSg.Parent = (gethui and gethui()) or game:GetService("CoreGui")
 
-	local function clearPanel()
-		if panel then pcall(function() panel.sg:Destroy() end); panel = nil end
+			listLbl = Instance.new("TextLabel")
+			listLbl.AnchorPoint = Vector2.new(1, 0)
+			listLbl.Position = UDim2.new(1, -14, 0, 70)
+			listLbl.Size = UDim2.new(0, 480, 0, 0)
+			listLbl.AutomaticSize = Enum.AutomaticSize.Y
+			listLbl.BackgroundTransparency = 1
+			listLbl.Font = Enum.Font.Gotham
+			listLbl.RichText = true
+			listLbl.TextXAlignment = Enum.TextXAlignment.Right
+			listLbl.TextYAlignment = Enum.TextYAlignment.Top
+			listLbl.TextSize = 13
+			listLbl.TextColor3 = Color3.new(1, 1, 1)
+			listLbl.Text = ""
+			listLbl.Parent = listSg
+		end
+		listLbl.Text = table.concat(rows, "\n")
 	end
 
 	local function clearAll()
 		clearBillboards()
-		clearPanel()
+		screenClaim(nil)
 	end
 
 	local lastMeta = 0
@@ -246,26 +205,27 @@ return function(ctx)
 			return a.timeLeft < b.timeLeft
 		end)
 
-		if mode == "screen" then
-			local rows = {}
-			for i, e in ipairs(entries) do
-				if i > 40 then break end
-				local petName = eggPets[e.uuid] or "Pet"
-				local t
-				if not e.ready then
-					t = ("<font color='#FFD400'>%s</font> <font color='#FF5E00'>%s</font> <font size='11' color='#BBBBBB'>BW: %skg</font>")
-						:format(e.eggName, formatTime(e.timeLeft), tostring(e.bw))
-				else
-					local est = round(e.bw * WEIGHT_MULT, 2)
-					local size, color = getSizeInfo(est)
-					t = ("<font color='#FFD400'>%s</font> <font color='#FFFFFF'>%s (%skg)</font> <font color='%s'>[%s]</font>")
-						:format(e.eggName, petName, tostring(est), color, size)
-				end
-				rows[#rows + 1] = t
+		-- Baris screen (plain text, warna data NEBULA) — dibangun di sini
+		-- biar cabang screen & target make data yang sama.
+		local rows = {}
+		for i, e in ipairs(entries) do
+			if i > 40 then break end
+			local petName = eggPets[e.uuid] or "Pet"
+			if not e.ready then
+				rows[#rows + 1] = ("<font color='#FFD400'>%s</font> <font color='#FF5E00'>%s</font> <font size='9' color='#BBBBBB'>BW: %skg</font>")
+					:format(e.eggName, formatTime(e.timeLeft), tostring(e.bw))
+			else
+				local est = round(e.bw * WEIGHT_MULT, 2)
+				local size, color = getSizeInfo(est)
+				rows[#rows + 1] = ("<font color='#FFD400'>%s</font> <font color='#FFFFFF'>%s (%skg)</font> <font color='%s'>[%s]</font>")
+					:format(e.eggName, petName, tostring(est), color, size)
 			end
-			renderRows(rows)
+		end
+
+		if mode == "screen" then
+			screenClaim(rows)
 		else
-			clearPanel()
+			screenClaim(nil)
 			for _, e in ipairs(entries) do
 				local petName = eggPets[e.uuid] or "Pet"
 				local text
