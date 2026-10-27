@@ -183,9 +183,18 @@ return function(ctx)
 		return control
 	end
 
-	-- Section accordion (Box = collapsible, Opened = state awal)
+	-- Section header polos: Box=false -> selalu kebuka, NOL klik.
+	-- (Box=true bikin collapsible harus di-klik dulu — itu yang bikin kepanjangan.)
 	local function section(tab, title, opened)
-		return tab:Section({ Title = title, Box = true, BoxBorder = true, Opened = opened ~= false })
+		return tab:Section({ Title = title, TextSize = 19 })
+	end
+
+	-- Row nyamping: HStack = anak-anak auto split lebar sama (horizontal).
+	-- Fallback: kalau build WindUI ga punya HStack -> parent vertical biasa.
+	local function hrow(parent)
+		local ok, g = pcall(function() return parent:HStack({}) end)
+		if ok and g then return g end
+		return parent
 	end
 
 	----------------------------------------------------------------- TAB: PET (pilot — PnP V1/V2 + Boost)
@@ -198,10 +207,11 @@ return function(ctx)
 			"Pilih pet dari backpack (kosong = semua yg di garden)",
 			function() return ctx.inventoryPetOptions(CFG.pnpUuids) end,
 			CFG.pnpUuids, function() persist() end, { register = true })
-		makeInputW(secV1, "Pickup Delay (Seconds) [V1]", "Jeda tiap siklus (idealnya = saat skill ready)",
+		local r1 = hrow(secV1)
+		makeInputW(r1, "Pickup Delay", "Jeda tiap siklus (idealnya = saat skill ready)",
 			function() return CFG.pickupDelay end,
 			function(t) CFG.pickupDelay = tonumber(t) or 0.3 end)
-		makeInputW(secV1, "Equip Delay (Seconds) [V1]", "Jeda antara unequip -> equip (1E-20 = near-instant)",
+		makeInputW(r1, "Equip Delay", "Jeda unequip -> equip (1E-20 = near-instant)",
 			function()
 				if CFG.equipDelay == 1e-20 or CFG.equipDelay == 0 or not CFG.equipDelay then return "1E-20" end
 				return tostring(CFG.equipDelay)
@@ -213,7 +223,7 @@ return function(ctx)
 					CFG.equipDelay = tonumber(t) or 1e-20
 				end
 			end)
-		makeInputW(secV1, "Scan Interval (Seconds) [V1]", "Frekuensi cek cooldown (min 0.01)",
+		makeInputW(r1, "Scan Interval", "Frekuensi cek cooldown (min 0.01)",
 			function() return CFG.pnpScanInterval end,
 			function(t) CFG.pnpScanInterval = math.max(0.01, tonumber(t) or 0.05) end)
 		makeToggleW(secV1, "Enable Automation Pickup V1",
@@ -237,13 +247,14 @@ return function(ctx)
 			"Pilih pet dari backpack (kosong = semua yg di garden)",
 			function() return ctx.inventoryPetOptions(CFG.pnpV2Uuids) end,
 			CFG.pnpV2Uuids, function() persist() end, { register = true })
-		makeInputW(secV2, "Pickup Delay (Seconds) [V2]", "Jeda sebelum tiap pickup",
+		local r2 = hrow(secV2)
+		makeInputW(r2, "Pickup Delay", "Jeda sebelum tiap pickup",
 			function() return CFG.pnpV2PickupDelay end,
 			function(t) CFG.pnpV2PickupDelay = tonumber(t) or 0.05 end)
-		makeInputW(secV2, "Equip Delay (Seconds) [V2]", "Jeda antara unequip -> equip",
+		makeInputW(r2, "Equip Delay", "Jeda antara unequip -> equip",
 			function() return CFG.pnpV2EquipDelay end,
 			function(t) CFG.pnpV2EquipDelay = tonumber(t) or 0.03 end)
-		makeInputW(secV2, "Scan Interval (Seconds) [V2]", "Frekuensi cek cd dari cache event (min 0.02)",
+		makeInputW(r2, "Scan Interval", "Frekuensi cek cd dari cache event (min 0.02)",
 			function() return CFG.pnpV2ScanInterval end,
 			function(t) CFG.pnpV2ScanInterval = math.max(0.02, tonumber(t) or 0.05) end)
 		v2Ctrl = makeToggleW(secV2, "Enable Automation Pickup V2",
@@ -262,13 +273,15 @@ return function(ctx)
 
 		--------------------------------------------------- Boost Pet
 		local secBoost = section(tab, "Automation Boost Pet", true)
-		makeMultiDynW(secBoost, "Select Pets to Boost", "Pilih pet yang mau di-boost (aktif di garden)",
+		local rb = hrow(secBoost)
+		makeMultiDynW(rb, "Select Pets to Boost", "Pet yang mau di-boost (aktif di garden)",
 			function() return ctx.inventoryPetOptions(CFG.boostPetUuids) end,
 			CFG.boostPetUuids, function() persist() end, { register = true })
-		makeMultiDynW(secBoost, "Select Boost Items", "Pilih item boost (Pet Toy) yang dipakai",
+		makeMultiDynW(rb, "Select Boost Items", "Item boost (Pet Toy) yang dipakai",
 			function() return ctx.getBoostItemOptions(CFG.boostItemNames) end,
 			CFG.boostItemNames, function() persist() end, { register = true })
-		makeToggleW(secBoost, "Enable Automation Boost",
+		local rbToggle = hrow(secBoost)
+		makeToggleW(rbToggle, "Enable Automation Boost",
 			"Auto apply boost item ke pet, re-apply pas boost habis",
 			function() return CFG.boostEnabled end,
 			function(v)
@@ -278,7 +291,7 @@ return function(ctx)
 
 		--------------------------------------------------- tombol refresh list dinamis
 		secV1:Button({
-			Title = "Update Pet List (V1/Boost)",
+			Title = "Update Pet List (V1/V2/Boost)",
 			Desc = "Baca ulang inventory pet — refresh semua dropdown dinamis",
 			Callback = safe(function()
 				for _, fn in ipairs(W.refreshers) do
