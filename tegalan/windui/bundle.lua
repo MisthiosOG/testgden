@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T21:30:45.778Z
+-- 42 modul, di-generate 2026-10-27T21:46:12.646Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -11141,6 +11141,16 @@ return function(ctx)
 		end)
 	end
 
+	-- Anti-freeze klik: dropdown dgn list ratusan baris dibangunnya di background
+	-- SETELAH window jadi (dijadwal serial via queueRebuild), bukan pas klik
+	-- pertama pemain ("mencet pet target elephant freeze lama"). nextPrebuild()
+	-- kasih slot jadwal berurutan biar gak tabrak barengan.
+	local prebuildIdx = 0
+	local function nextPrebuild()
+		prebuildIdx = prebuildIdx + 1
+		return 2.5 + prebuildIdx * 0.7
+	end
+
 	-- Lazy open: dist ngebind klik ke <menuTabel>:Open() (bukan selalu table
 	-- yang kitaa hold) -> hook dipasang di KEDUA sink: menu.Open & control.Open.
 	local function lazyOpen(control, fillFn)
@@ -11226,6 +11236,12 @@ return function(ctx)
 		-- baris menyusul di thread sendiri). ponytail: open pertama list besar
 		-- masih ngehitch — upgrade path = list virtualisasi.
 		lazyOpen(control, fill)
+		-- Prebuild di background (lihat komentar nextPrebuild).
+		if opts.prebuild then
+			task.delay(opts.prebuild, function()
+				queueRebuild(fill)
+			end)
+		end
 		local function refresh()
 			queueRebuild(function() pcall(fill) end)
 		end
@@ -11364,6 +11380,12 @@ return function(ctx)
 			if pending then buildRows(pending) end
 		end
 		lazyOpen(control, fill)
+		-- Prebuild di background (lihat komentar nextPrebuild).
+		if opts.prebuild then
+			task.delay(math.max(opts.prebuild, 1.2), function()
+				queueRebuild(fill)
+			end)
+		end
 		local function refresh()
 			-- Tombol "Update Pet List": rebuild penuh (aksi eksplisit user);
 			-- via queueRebuild -> antar dropdown serial, gak freeze barengan.
@@ -11422,12 +11444,19 @@ return function(ctx)
 		-- dibangun sinkron (ctor/fill) = freeze berdetik; menu kebuka instan,
 		-- baris menyusul. ponytail: open pertama list besar ngehitch sekali —
 		-- upgrade path = list virtualisasi buat dropdown dist.
-		lazyOpen(control, function()
+		local function fill()
 			local n = dropdownFill(control, options, savedTitles())
 			if ctx.log then
 				ctx.log(("dropdown '%s' filled (%d options)"):format(title, n))
 			end
-		end)
+		end
+		lazyOpen(control, fill)
+		-- Prebuild di background (lihat komentar nextPrebuild).
+		if opts.prebuild then
+			task.delay(opts.prebuild, function()
+				queueRebuild(fill)
+			end)
+		end
 		return control
 	end
 
@@ -12495,10 +12524,10 @@ end
 			makeMultiDynW(sec, "V1 Pet Team", "Select elephant pet team (stays in the garden)",
 				function() return ctx.inventoryPetOptions(CFG.elephantTeamUuids) end,
 				CFG.elephantTeamUuids, function() persist() end,
-				{ register = true, cacheKey = "inv_pets", fillDelay = 0.4, max = 250 })
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.4, max = 250, prebuild = nextPrebuild() })
 			makeMultiW(sec, "V1 Target Pet Types", "Select pet types to auto-elephant (all pets in game)",
 				reg.PET_OPTIONS, CFG.elephantPetTypes, function() persist() end,
-				{ fillDelay = 0.8 })
+				{ fillDelay = 0.8, prebuild = nextPrebuild() })
 			makeInputW(sec, "Target Weight (KG)", "Max weight before being replaced (e.g. 5.5)",
 				function() return CFG.elephantTargetWeight end,
 				function(t) CFG.elephantTargetWeight = tonumber(t) or 5.5 end)
@@ -12540,20 +12569,20 @@ end
 			makeMultiDynW(sec, "V2 Elephant Team", "Team standing by in the garden (source of the Pet Switch choice)",
 				function() return ctx.inventoryPetOptions(CFG.elephantV2Team) end,
 				CFG.elephantV2Team, function() persist() end,
-				{ register = true, cacheKey = "inv_pets", fillDelay = 0.6, max = 250 })
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.6, max = 250, prebuild = nextPrebuild() })
 			makeMultiW(sec, "V2 Target Pet Types", "Select pet types to auto-level + elephant (all pets in game)",
 				reg.PET_OPTIONS, CFG.elephantV2Types, function() persist() end,
-				{ fillDelay = 1.0 })
+				{ fillDelay = 1.0, prebuild = nextPrebuild() })
 			makeSingleW(sec, "Elephant Pet (Slot 1)", "The elephant sent in when a target reaches the trigger level",
 				function() return ctx.elephantV2GajahOptions() end,
 				function() return CFG.elephantV2Gajah end,
 				function(uuid) CFG.elephantV2Gajah = uuid end,
-				{ fillDelay = 1.2 })
+				{ fillDelay = 1.2, prebuild = nextPrebuild() })
 			makeSingleW(sec, "Pet Switch (Slot 2)", "Pet from the Team that the Elephant replaces (usually Capy)",
 				function() return ctx.elephantV2SwitchOptions() end,
 				function() return CFG.elephantV2Switch end,
 				function(uuid) CFG.elephantV2Switch = uuid end,
-				{ fillDelay = 1.4 })
+				{ fillDelay = 1.4, prebuild = nextPrebuild() })
 			makeInputW(sec, "Target Weight (KG)", "Max weight of a target before being released (e.g. 5.5)",
 				function() return CFG.elephantV2Weight end,
 				function(t) CFG.elephantV2Weight = tonumber(t) or 5.5 end)
@@ -12826,6 +12855,504 @@ end
 		miniBar(lsecs, lorder, ldefs, "v1")
 	end
 
+	----------------------------------------------------------------- TAB: MUTATION (Machine + Aura Cleanse)
+	local function buildMutationTab(tab)
+		local mdefs = {
+			machine = { name = "Machine" },
+			cleanse = { name = "Aura Cleanse" },
+		}
+		local morder = { "machine", "cleanse" }
+		local msecs = {}
+
+		local function miniTab(id, buildFn)
+			local sec = section(tab, mdefs[id].name)
+			buildFn(sec)
+			msecs[id] = sec
+		end
+
+		-- panel 1: Mutation Machine
+		miniTab("machine", function(sec)
+			liveStatus(sec, "Mutation Machine Status", function()
+				local ok, s = pcall(function() return ctx.getMutationSummary() end)
+				if not ok or not s then return nil end
+				local col = s.status == "ACTIVE" and "#5acc78" or "#dc5050"
+				return ("Status: <font color=\"%s\"><b>%s</b></font>\n" ..
+					"Phase: <b>%s</b>\n\n" ..
+					"EXP Team: <font color=\"#8c929e\">%s pets</font>\n" ..
+					"Boost Team: <font color=\"#8c929e\">%s pets</font>\n" ..
+					"Phoenix Team: <font color=\"#8c929e\">%s pets</font>\n\n" ..
+					"Target Types: <font color=\"#f5c82d\">%s</font>\n" ..
+					"Keep Mutations: <font color=\"#f5c82d\">%s</font>\n" ..
+					"Target Age: <font color=\"#f5c82d\"><b>%s</b></font>\n\n" ..
+					"Machine: <font color=\"#85d0ff\"><b>%s</b></font>\n\n" ..
+					"Target Pets Ready: <font color=\"#8c929e\">%s pets</font>\n" ..
+					"Target Pets Done: <font color=\"#5acc78\"><b>%s pets</b></font>")
+					:format(col, s.status, tostring(s.phase), tostring(s.expCount), tostring(s.boostCount),
+						tostring(s.phoenixCount), tostring(s.types), tostring(s.mutations),
+						tostring(s.targetAge), tostring(s.machine), tostring(s.readyCount), tostring(s.doneCount))
+			end, 1.5)
+			makeMultiDynW(sec, "EXP Team (Leveling)", "Pets for leveling the target to age 50/500",
+				function() return ctx.inventoryPetOptions(CFG.mutationExpTeam) end,
+				CFG.mutationExpTeam, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.4, max = 250, prebuild = nextPrebuild() })
+			makeMultiDynW(sec, "Boost Team (Machine)", "Pets for boosting the mutation machine speed",
+				function() return ctx.inventoryPetOptions(CFG.mutationBoostTeam) end,
+				CFG.mutationBoostTeam, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.6, max = 250, prebuild = nextPrebuild() })
+			makeMultiDynW(sec, "Phoenix Team (Claim)", "Pets for claiming the mutated pet",
+				function() return ctx.inventoryPetOptions(CFG.mutationPhoenixTeam) end,
+				CFG.mutationPhoenixTeam, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.8, max = 250, prebuild = nextPrebuild() })
+			makeMultiW(sec, "Target Pet Types", "Pet types to mutate (all pets in game)",
+				reg.PET_OPTIONS, CFG.mutationTargetTypes, function() persist() end,
+				{ fillDelay = 1.0, prebuild = nextPrebuild() })
+			makeMultiW(sec, "Target Mutations (Machine)", "Stop when the pet gets these mutations (machine mutations only)",
+				reg.MACHINE_MUT_OPTIONS or reg.MUT_OPTIONS, CFG.mutationTargetMutations, function() persist() end,
+				{ fillDelay = 1.2, prebuild = nextPrebuild() })
+			makeInputW(sec, "Target Age", "Level to reach before submitting (e.g. 50 or 500)",
+				function() return CFG.mutationTargetAge end,
+				function(t) CFG.mutationTargetAge = math.floor(tonumber(t) or 50) end)
+			makeInputW(sec, "Delay Auto Claim (sec)", "Wait before claiming the mutated pet from the machine",
+				function() return CFG.mutationDelayAutoClaim end,
+				function(t) CFG.mutationDelayAutoClaim = tonumber(t) or 0.5 end)
+			makeToggleW(sec, "Enable Auto Mutation Machine", "Submits, starts, and claims mutated pets automatically.",
+				function() return CFG.mutationEnabled end,
+				function(v)
+					CFG.mutationEnabled = v; persist()
+					if v then
+						if ctx.startMutation then pcall(function() ctx.startMutation() end) end
+					else
+						if ctx.stopMutation then pcall(function() ctx.stopMutation() end) end
+					end
+				end)
+			addRefresh(sec)
+		end)
+
+		-- panel 2: Aura Cleanse (mutasi via aura + cleanse salah)
+		miniTab("cleanse", function(sec)
+			liveStatus(sec, "Aura Mutation Status", function()
+				local ok, s = pcall(function() return ctx.getCleanseSummary() end)
+				if not ok or not s then return nil end
+				local col = s.status == "ACTIVE" and "#5acc78" or "#dc5050"
+				local already = ""
+				if type(s.keepOrder) == "table" and type(s.already) == "table" then
+					for _, k in ipairs(s.keepOrder) do
+						already = already .. ("- Already %s: <font color=\"#8c929e\">%s pets</font>\n")
+							:format(tostring(k), tostring(s.already[k] or 0))
+					end
+				end
+				return ("Automation Status: <font color=\"%s\"><b>%s</b></font>\n\n" ..
+					"Mutation Team: <font color=\"#8c929e\">%s pets</font>\n" ..
+					"Target Types: <font color=\"#f5c82d\">%s</font>\n" ..
+					"Mutations to Keep: <font color=\"#f5c82d\">%s</font>\n\n" ..
+					"Pet Statistics:\n" ..
+					"- Pets Ready to Mutation: <font color=\"#8c929e\">%s pets</font>\n" ..
+					"%s\n" ..
+					"Max in Garden: <font color=\"#8c929e\">%s pets</font>\n\n" ..
+					"Status: <font color=\"#85d0ff\">%s</font>")
+					:format(col, s.status, tostring(s.team), tostring(s.types), tostring(s.keep),
+						tostring(s.ready), already, tostring(s.maxPets), tostring(s.phase))
+			end, 1.5)
+			makeMultiDynW(sec, "Pet Team for Mutation", "Mutation aura pets (stay in the garden)",
+				function() return ctx.inventoryPetOptions(CFG.cleanseTeamUuids) end,
+				CFG.cleanseTeamUuids, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.6, max = 250, prebuild = nextPrebuild() })
+			makeMultiW(sec, "Pet Types for Mutation", "Target pet types to mutate (all pets in game)",
+				reg.PET_OPTIONS, CFG.cleansePetTypes, function() persist() end,
+				{ fillDelay = 0.8, prebuild = nextPrebuild() })
+			makeMultiW(sec, "Mutations to Keep", "These mutations are kept (won't be cleansed)",
+				reg.MUT_OPTIONS, CFG.cleanseKeepMutations, function() persist() end,
+				{ fillDelay = 1.0, prebuild = nextPrebuild() })
+			makeInputW(sec, "Max Pets in Garden", "Max target pets in the garden at once",
+				function() return CFG.cleanseMaxPets end,
+				function(t) CFG.cleanseMaxPets = math.max(1, math.floor(tonumber(t) or 2)) end)
+			makeToggleW(sec, "Enable Auto Mutation", "Mutates targets via aura; cleanses wrong mutations, keeps the kept ones.",
+				function() return CFG.cleanseEnabled end,
+				function(v)
+					CFG.cleanseEnabled = v; persist()
+					if v then
+						if ctx.startCleanse then pcall(function() ctx.startCleanse() end) end
+					else
+						if ctx.stopCleanse then pcall(function() ctx.stopCleanse() end) end
+					end
+				end)
+			addRefresh(sec)
+		end)
+
+		miniBar(msecs, morder, mdefs, "machine")
+	end
+
+	----------------------------------------------------------------- TAB: SHOP (Seeds/Eggs/Gears/Merchant/Premium)
+	local function buildShopTab(tab)
+		local sdefs = {
+			seed     = { name = "Seeds" },
+			egg      = { name = "Eggs" },
+			gear     = { name = "Gears" },
+			merchant = { name = "Merchant" },
+			premium  = { name = "Premium" },
+		}
+		local sorder = { "seed", "egg", "gear", "merchant", "premium" }
+		local ssecs = {}
+
+		local function miniTab(id, buildFn)
+			local sec = section(tab, sdefs[id].name)
+			buildFn(sec)
+			ssecs[id] = sec
+		end
+
+		-- panel 1-3: Buy Seed / Egg / Gear (placement sama garden)
+		miniTab("seed", function(sec)
+			makeMultiDynW(sec, "Select Seeds to Buy", "Pick seeds to auto-buy (live stock)",
+				function() return ctx.getSeedShopOptions(CFG.buySeedNames) end,
+				CFG.buySeedNames, function() persist() end,
+				{ register = true, cacheKey = "shop_seed", fillDelay = 0.4, prebuild = nextPrebuild() })
+			makeToggleW(sec, "Enable Automation Buy Seed", "Auto-buys the selected seeds whenever they are in stock.",
+				function() return CFG.buySeedEnabled end,
+				function(v)
+					CFG.buySeedEnabled = v; persist()
+					if v and ctx.startBuySeed then pcall(function() ctx.startBuySeed() end) end
+				end)
+			addRefresh(sec)
+		end)
+		miniTab("egg", function(sec)
+			makeMultiDynW(sec, "Select Eggs to Buy", "Pick eggs to auto-buy (live stock)",
+				function() return ctx.getEggShopOptions(CFG.buyEggNames) end,
+				CFG.buyEggNames, function() persist() end,
+				{ register = true, cacheKey = "shop_egg", fillDelay = 0.6, prebuild = nextPrebuild() })
+			makeToggleW(sec, "Enable Automation Buy Egg", "Auto-buys the selected eggs whenever they are in stock.",
+				function() return CFG.buyEggEnabled end,
+				function(v)
+					CFG.buyEggEnabled = v; persist()
+					if v and ctx.startBuyEgg then pcall(function() ctx.startBuyEgg() end) end
+				end)
+			addRefresh(sec)
+		end)
+		miniTab("gear", function(sec)
+			makeMultiDynW(sec, "Select Gear to Buy", "Pick gear to auto-buy (live stock)",
+				function() return ctx.getGearShopOptions(CFG.buyGearNames) end,
+				CFG.buyGearNames, function() persist() end,
+				{ register = true, cacheKey = "shop_gear", fillDelay = 0.8, prebuild = nextPrebuild() })
+			makeToggleW(sec, "Enable Automation Buy Gear", "Auto-buys the selected gear whenever it is in stock.",
+				function() return CFG.buyGearEnabled end,
+				function(v)
+					CFG.buyGearEnabled = v; persist()
+					if v and ctx.startBuyGear then pcall(function() ctx.startBuyGear() end) end
+				end)
+			addRefresh(sec)
+		end)
+
+		-- panel 4: Merchant (item selection per merchant + toggles + Open Shop UI)
+		miniTab("merchant", function(sec)
+			liveStatus(sec, "Merchant Status", function()
+				local ok, s = pcall(function() return ctx.getMerchantSummary() end)
+				if not ok or not s then return nil end
+				local lines = {}
+				if s.activeMerchant then
+					lines[#lines + 1] = ("Active Traveling: <font color=\"#5acc78\"><b>%s</b></font>"):format(tostring(s.activeMerchant))
+				else
+					lines[#lines + 1] = "Active Traveling: <font color=\"#dc5050\">None</font>"
+				end
+				if s.mode == "all" then
+					lines[#lines + 1] = "Mode: <font color=\"#f5c82d\"><b>Buy ALL items (All)</b></font>"
+				elseif s.mode == "best" then
+					lines[#lines + 1] = "Mode: <font color=\"#f5c82d\"><b>Buy the MOST EXPENSIVE item (Best)</b></font>"
+				elseif type(s.picks) == "table" and #s.picks > 0 then
+					lines[#lines + 1] = "Selected items to buy:"
+					for _, p in ipairs(s.picks) do
+						local parts = {}
+						for _, it in ipairs(p.items or {}) do
+							if it.price then
+								local a = math.abs(it.price)
+								local num
+								if a >= 1e9 then num = ("%sb"):format(("%0.2f"):format(it.price / 1e9))
+								elseif a >= 1e6 then num = ("%sm"):format(("%0.2f"):format(it.price / 1e6))
+								elseif a >= 1e3 then num = ("%sk"):format(("%0.2f"):format(it.price / 1e3))
+								else num = tostring(it.price) end
+								parts[#parts + 1] = ("%s (%s)"):format(tostring(it.name), num)
+							else
+								parts[#parts + 1] = tostring(it.name)
+							end
+						end
+						lines[#lines + 1] = ("- <font color=\"#5acc78\"><b>%s</b></font>: <font color=\"#f5c82d\">%s</font>")
+							:format(tostring(p.title), table.concat(parts, ", "))
+					end
+				else
+					lines[#lines + 1] = "<font color=\"#dc5050\">No items selected yet.</font> Pick in 'Select Items per Merchant' or turn on Auto Buy All/Best."
+				end
+				return table.concat(lines, "\n")
+			end, 2)
+			-- Item selection per merchant (travel) & per event shop — placement
+			-- garden: dipilah dua grup, di sini jadi satu panel urut (travel dulu).
+			pcall(function()
+				for _, m in ipairs(ctx.getMerchantList()) do
+					local kind, id, mtitle = m.kind, m.id, m.title
+					local heading = (kind == "travel") and (mtitle .. " Merchant") or mtitle
+					makeMultiDynW(sec, "Select Items - " .. heading,
+						("Items from %s%s. 'All' = everything."):format(mtitle, (kind == "travel") and " merchant" or ""),
+						function() return ctx.getMerchantItemOptions(id) end,
+						ctx.merchantSelFor(id), function() persist() end,
+						{ register = true, cacheKey = "merch_" .. tostring(id), fillDelay = 0.5, prebuild = nextPrebuild() })
+				end
+			end)
+			makeToggleW(sec, "Auto Buy Merchant", "Buys the selected items (merchant & event shop) whenever they appear / restock",
+				function() return CFG.merchantBuyEnabled end,
+				function(v)
+					CFG.merchantBuyEnabled = v; persist()
+					if v and ctx.startBuyMerchant then pcall(function() ctx.startBuyMerchant() end) end
+				end)
+			makeToggleW(sec, "Auto Buy All Merchant", "Buys EVERY item that is in stock",
+				function() return CFG.merchantBuyAll end,
+				function(v)
+					CFG.merchantBuyAll = v; persist()
+					if v and ctx.startBuyMerchant then pcall(function() ctx.startBuyMerchant() end) end
+				end)
+			makeToggleW(sec, "Auto Buy Best Merchant", "Buys the 1 MOST EXPENSIVE item in stock",
+				function() return CFG.merchantBuyBest end,
+				function(v)
+					CFG.merchantBuyBest = v; persist()
+					if v and ctx.startBuyMerchant then pcall(function() ctx.startBuyMerchant() end) end
+				end)
+			makeSingleW(sec, "Merchant UI to Open", "Event shop whose UI should be opened (one shop at a time)",
+				function() return ctx.getEventShopOptions() end,
+				function() return CFG.merchantUiShop end,
+				function(code)
+					CFG.merchantUiShop = code; persist()
+					if ctx.openEventShopUI then pcall(function() ctx.openEventShopUI(code) end) end
+				end)
+			sec:Button({
+				Title = "Open Shop UI Now", Desc = "Opens the selected shop UI now (while the shop is active).",
+				Callback = safe(function()
+					if ctx.openEventShopUI then pcall(function() ctx.openEventShopUI() end) end
+				end),
+			})
+			makeToggleW(sec, "Auto Open UI", "Keeps the selected shop UI open (re-opens automatically, without the NPC)",
+				function() return CFG.merchantAutoOpenUI end,
+				function(v)
+					CFG.merchantAutoOpenUI = v; persist()
+					if v then
+						if ctx.startAutoOpenUI then pcall(function() ctx.startAutoOpenUI() end) end
+					elseif ctx.stopAutoOpenUI then
+						pcall(function() ctx.stopAutoOpenUI() end)
+					end
+				end)
+			addRefresh(sec)
+		end)
+
+		-- panel 5: Premium
+		miniTab("premium", function(sec)
+			makeSingleW(sec, "Select Item", "Select the gamepass/product to purchase",
+				function() return ctx.getPremiumItemOptions() end,
+				function() return CFG.premiumItem end,
+				function(code)
+					CFG.premiumItem = code; persist()
+					if ctx.premiumShowPrice then pcall(function() ctx.premiumShowPrice() end) end
+				end)
+			makeSingleW(sec, "Payment Method", "Pay with Robux / in-game Token",
+				function() return { { name = "robux", display = "Robux" }, { name = "token", display = "Token" } } end,
+				function() return CFG.premiumPay == "token" and "Token" or "Robux" end,
+				function(code) CFG.premiumPay = code; persist() end)
+			sec:Button({
+				Title = "Purchase Item", Desc = "Buys the selected item with the payment method above.",
+				Callback = safe(function()
+					if ctx.premiumBuy then pcall(function() ctx.premiumBuy() end) end
+				end),
+			})
+			sec:Button({
+				Title = "Gift to Player", Desc = "Buys the Gift variant of this item (if available).",
+				Callback = safe(function()
+					if ctx.premiumGift then pcall(function() ctx.premiumGift() end) end
+				end),
+			})
+			addRefresh(sec)
+		end)
+
+		miniBar(ssecs, sorder, sdefs, "seed", { { "seed", "egg", "gear" }, { "merchant", "premium" } })
+	end
+
+	----------------------------------------------------------------- TAB: MISC (Player & ESP / Rejoin / Webhook / Performance)
+	local function buildMiscTab(tab)
+		local xdefs = {
+			player  = { name = "Player & ESP" },
+			rejoin  = { name = "Rejoin" },
+			webhook = { name = "Webhook" },
+			perf    = { name = "Performance" },
+		}
+		local xorder = { "player", "rejoin", "webhook", "perf" }
+		local xsecs = {}
+
+		local function miniTab(id, buildFn)
+			local sec = section(tab, xdefs[id].name)
+			buildFn(sec)
+			xsecs[id] = sec
+		end
+
+		-- panel 1: Player (Noclip / Walk Speed / Infinity Jump) + ESP
+		miniTab("player", function(sec)
+			makeToggleW(sec, "Noclip", "Walk through walls and obstacles",
+				function() return CFG.noclipEnabled end,
+				function(v)
+					if ctx.setNoclip then pcall(function() ctx.setNoclip(v) end) end
+					persist()
+				end)
+			makeInputW(sec, "Walk Speed", "Player walk speed (default 16)",
+				function() return CFG.walkSpeed end,
+				function(t)
+					CFG.walkSpeed = tonumber(t) or 16
+					if ctx.applyWalkSpeed then pcall(function() ctx.applyWalkSpeed() end) end
+				end)
+			makeToggleW(sec, "Enable Walk Speed", "Applies the custom walk speed",
+				function() return CFG.walkSpeedEnabled end,
+				function(v)
+					if ctx.setWalkSpeed then pcall(function() ctx.setWalkSpeed(v) end) end
+					persist()
+				end)
+			makeToggleW(sec, "Infinity Jump", "Jump in mid-air infinitely",
+				function() return CFG.infJumpEnabled end,
+				function(v)
+					if ctx.setInfJump then pcall(function() ctx.setInfJump(v) end) end
+					persist()
+				end)
+			makeToggleW(sec, "Enable ESP Label", "Floating labels above pets (name+weight) & eggs (name+hatch time)",
+				function() return CFG.espEnabled end,
+				function(v)
+					CFG.espEnabled = v; persist()
+					if v then
+						if ctx.startEsp then pcall(function() ctx.startEsp() end) end
+					elseif ctx.stopEsp then
+						pcall(function() ctx.stopEsp() end)
+					end
+				end)
+			makeToggleW(sec, "Enable ESP Base Weight", "Shows the Base Weight on every pet slot when opening the inventory",
+				function() return CFG.espInvEnabled end,
+				function(v)
+					CFG.espInvEnabled = v; persist()
+					if v then
+						if ctx.startEspInv then pcall(function() ctx.startEspInv() end) end
+					elseif ctx.stopEspInv then
+						pcall(function() ctx.stopEspInv() end)
+					end
+				end)
+			makeSingleW(sec, "Base Weight Display", "Which data shows on the pet label",
+				function() return {
+					{ name = "base", display = "Base Weight Only" },
+					{ name = "age",  display = "Base + Age" },
+					{ name = "max",  display = "Base + Max" },
+				} end,
+				function() return CFG.espInvMode end,
+				function(code) CFG.espInvMode = code; persist() end)
+		end)
+
+		-- panel 2: Rejoin (auto reconnect + periodic)
+		miniTab("rejoin", function(sec)
+			makeToggleW(sec, "Auto Reconnect", "Rejoins automatically when kicked / disconnected",
+				function() return CFG.autoReconnect ~= false end,
+				function(v) CFG.autoReconnect = v; persist() end)
+			liveStatus(sec, "Periodic Rejoin", function()
+				if CFG.reconnectEnabled then
+					local rem = ctx.state.reconnectRemaining
+					if rem then
+						return ("Rejoin in: <font color=\"#5acc78\"><b>%d:%02d</b></font>")
+							:format(math.floor(rem / 60), rem % 60)
+					end
+					return "Rejoin: <font color=\"#5acc78\"><b>ON</b></font>"
+				end
+				return "Rejoin: OFF"
+			end, 1)
+			makeInputW(sec, "Interval (minutes)", "Rejoins the server periodically every N minutes (e.g. 1 = every minute).",
+				function() return CFG.reconnectInterval end,
+				function(t) CFG.reconnectInterval = tonumber(t) or 5; persist() end)
+			makeToggleW(sec, "Periodic Rejoin", "Rejoins the server periodically on the interval above",
+				function() return CFG.reconnectEnabled end,
+				function(v)
+					CFG.reconnectEnabled = v; persist()
+					if v and ctx.startReconnect then pcall(function() ctx.startReconnect() end) end
+				end)
+		end)
+
+		-- panel 3: Webhook (URL + test)
+		miniTab("webhook", function(sec)
+			makeInputW(sec, "Discord Webhook URL", "Webhook URL for automation updates (Leveling, Mutation & Elephant)",
+				function() return CFG.webhookUrl end,
+				function(t) CFG.webhookUrl = t; persist() end)
+			sec:Button({
+				Title = "Test Webhook Connection", Desc = "Sends a test notification to your Discord channel.",
+				Callback = safe(function()
+					if not CFG.webhookUrl or CFG.webhookUrl == "" then
+						if ctx.log then ctx.log("[Webhook Test] FAILED: webhook URL is empty!") end
+						return
+					end
+					if ctx.log then ctx.log("[Webhook Test] Sending test payload...") end
+					task.spawn(function()
+						local sendWebhook = ctx.sendWebhook
+						if sendWebhook then
+							pcall(function()
+								sendWebhook(CFG.webhookUrl, {
+									embeds = {
+										{
+											title = "Webhook Connection Test",
+											description = "Discord Webhook connected successfully to CeszParadise!",
+											color = 3066993,
+											fields = {
+												{
+													name = "Profile :",
+													value = string.format("> Username : ||%s||", ctx.LP.Name),
+													inline = false,
+												},
+											},
+											footer = {
+												text = os.date("%B %d | %I:%M %p"),
+												icon_url = "https://raw.githubusercontent.com/milmscr/opoki/main/tegalan/Logo/logo_icon.png",
+											},
+										},
+									},
+								}, ctx)
+							end)
+						elseif ctx.log then
+							ctx.log("[Webhook Test] FAILED to load the sender module.")
+						end
+					end)
+				end),
+			})
+		end)
+
+		-- panel 4: Performance (hide plants / FX / render)
+		miniTab("perf", function(sec)
+			makeToggleW(sec, "Hide My Garden Plants", "Hides plants on your own farm for better FPS",
+				function() return CFG.hideMyPlants end,
+				function(v)
+					if ctx.setHidePlants then pcall(function() ctx.setHidePlants("mine", v) end) end
+					persist()
+				end)
+			makeToggleW(sec, "Hide Other Gardens Plants", "Hides plants on other players' farms",
+				function() return CFG.hideOtherPlants end,
+				function(v)
+					if ctx.setHidePlants then pcall(function() ctx.setHidePlants("other", v) end) end
+					persist()
+				end)
+			makeToggleW(sec, "Auto Remove Spider Web FX", "Continuously removes spider web particle effects",
+				function() return CFG.autoRemoveWebFx end,
+				function(v)
+					if ctx.setAutoRemoveWeb then pcall(function() ctx.setAutoRemoveWeb(v) end) end
+					persist()
+				end)
+			makeSingleW(sec, "Performance Mode", "Off: normal. Low: shadows off. Extreme: all particle effects off.",
+				function() return ctx.getPerfModeOptions() end,
+				function() return CFG.perfMode or "off" end,
+				function(code)
+					if ctx.setPerfMode then pcall(function() ctx.setPerfMode(code) end) end
+					persist()
+				end)
+			makeToggleW(sec, "Disable 3D Rendering", "Stops rendering the 3D world (huge FPS gains, black screen)",
+				function() return CFG.disable3d end,
+				function(v)
+					if ctx.setDisable3d then pcall(function() ctx.setDisable3d(v) end) end
+					persist()
+				end)
+		end)
+
+		miniBar(xsecs, xorder, xdefs, "player", { { "player", "rejoin" }, { "webhook", "perf" } })
+	end
+
 	----------------------------------------------------------------- TAB: SETTINGS
 	local function buildSettingsTab(tab)
 		local sec = section(tab, "General")
@@ -13046,8 +13573,10 @@ end
 		Elephant = buildElephantTab,
 		Flow = buildFlowTab,
 		Leveling = buildLevelingTab,
+		Mutation = buildMutationTab,
+		Shop = buildShopTab,
+		Misc = buildMiscTab,
 		Settings = buildSettingsTab,
-		-- berikutnya: Misc, Mutation, Shop (satu per satu)
 	}
 
 	local TABS = {
@@ -13113,7 +13642,7 @@ end
 	----------------------------------------------------------------- default tab (pilot)
 	pcall(function() if first and first.Select then first:Select() end end)
 
-	ctx.log("WindUI pages dibangun: Pet, Inventory, Farm, Hatch, Elephant, Flow, Leveling, Settings + placeholder sisanya.")
+	ctx.log("WindUI pages dibangun: SEMUA TAB (Pet, Farm, Hatch, Elephant, Flow, Leveling, Mutation, Inventory, Shop, Misc, Settings).")
 end
 ]=],
 	["ui/theme.lua"] = [=[
