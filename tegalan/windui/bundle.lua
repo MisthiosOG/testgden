@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T19:58:08.697Z
+-- 42 modul, di-generate 2026-10-27T20:02:29.296Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -586,8 +586,23 @@ return function(ctx)
 		webhookEnabled = false,
 	}
 
-	-- Setiap clone punya file terpisah (contoh: garden_state_12345.json)
-	local STATE_FILE = "garden_state_" .. tostring(userId) .. ".json"
+	-- Setiap clone punya file terpisah di folder hub (contoh:
+	-- CeszParadiseWindUI/state_12345.json). PAKAI FOLDER, bukan root: sebagian
+	-- executor menolak writefile di root workspace secara diam-diam, sementara
+	-- write di dalam folder buatan makefolder selalu lolos.
+	local STORAGE_DIR = "CeszParadiseWindUI"
+	pcall(makefolder, STORAGE_DIR)
+	local STATE_FILE = STORAGE_DIR .. "/state_" .. tostring(userId) .. ".json"
+	-- Migrasi file lama yang pernah tersimpan di root (jangan hilangkan setting).
+	local LEGACY_FILE = "garden_state_" .. tostring(userId) .. ".json"
+	pcall(function()
+		if type(isfile) == "function" and type(readfile) == "function"
+			and type(writefile) == "function"
+			and isfile(LEGACY_FILE) and not isfile(STATE_FILE) then
+			writefile(STATE_FILE, readfile(LEGACY_FILE))
+			print("[GAGHub][WINDUI] config migrated: " .. LEGACY_FILE .. " -> " .. STATE_FILE)
+		end
+	end)
 
 	-- 1. Simpan langsung ke file akun ini saja
 	local function persistState()
@@ -889,15 +904,39 @@ return function(ctx)
 	------------------------------------------------------------------ Autosave
 	-- Safety net di atas save-on-change dari UI (toggle/input/dropdown sudah
 	-- persist instan): dirty-check tiap 10s nangkep perubahan CFG dari runtime
-	-- module (mis. bump sellWhenReach saat sell 0-match) + flush terakhir saat
-	-- client mati (BindToClose). Manual persistState = force flush.
+	-- module + flush terakhir saat client mati (BindToClose).
+	-- Error FS TIDAK di-swallow: catat 1x ke log biar ketahuan kenapa config
+	-- nggak nempel di executor tertentu (no writefile / write ditolak).
 	local lastSaved = nil
+	local fsWarned = false
+	-- config.lua jalan SEBELUM window.lua, jadi ctx.log belum ada -> log manual
+	-- via logLines biar statusnya cumul terlihat di Settings > Logs.
+	local earlyLog = ctx.log
+	if type(earlyLog) ~= "function" then
+		earlyLog = function(msg)
+			local L = ctx.state and ctx.state.logLines
+			if L then L[#L + 1] = os.date("%H:%M:%S ") .. tostring(msg) end
+			print("[WindUIHub] " .. tostring(msg))
+		end
+	end
 	local function autoSave()
 		if type(writefile) ~= "function" then return end
 		local ok, ser = pcall(function() return HttpService:JSONEncode(CFG) end)
-		if not ok then return end
+		if not ok then
+			if not fsWarned then
+				fsWarned = true
+				earlyLog("autosave FAIL (encode): " .. tostring(ser))
+			end
+			return
+		end
 		if lastSaved == ser then return end
-		if pcall(function() writefile(STATE_FILE, ser) end) then lastSaved = ser end
+		local okw, err = pcall(function() writefile(STATE_FILE, ser) end)
+		if okw then
+			lastSaved = ser
+		elseif not fsWarned then
+			fsWarned = true
+			earlyLog("autosave FAIL (write): " .. tostring(err))
+		end
 	end
 
 	ctx.persistState = function()
@@ -914,7 +953,11 @@ return function(ctx)
 	pcall(function() game:BindToClose(autoSave) end)
 
 	if type(writefile) ~= "function" then
-		warn("[GAGHub][WINDUI] executor has no writefile, config persistence disabled")
+		earlyLog("executor tanpa writefile, config tidak bisa disimpan")
+	elseif type(isfile) == "function" and isfile(STATE_FILE) then
+		earlyLog("config ditemukan: " .. STATE_FILE)
+	else
+		earlyLog("config baru: " .. STATE_FILE)
 	end
 end]=],
 	["modules/core/registry.lua"] = [=[
