@@ -56,6 +56,13 @@ end
 
 -- Ambil source modul: dari bundle (memori) kalau ada, else HttpGet (dev/fallback).
 local function fetch(relPath)
+	-- UI shell is fetched independently so a stale embedded bundle can never
+	-- resurrect the legacy window during a UI-only migration.
+	if not LOCAL_ROOT and relPath == "ui/window.lua" then
+		local fresh = BASE .. "/" .. relPath .. "?windui=" .. tostring(os.clock())
+		local ok, src = pcall(function() return game:HttpGet(fresh) end)
+		if ok and type(src) == "string" and #src > 0 then return src end
+	end
 	if FILES and FILES[relPath] then return FILES[relPath] end
 	local full = BASE .. "/" .. relPath .. "?t=" .. os.time()
 	local ok, src = pcall(function()
