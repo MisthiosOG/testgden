@@ -123,9 +123,10 @@ return function(ctx)
 	-- yang kitaa hold) -> hook dipasang di KEDUA sink: menu.Open & control.Open.
 	local function lazyOpen(control, fillFn)
 		local menu = control.DropdownMenu or control
+		local done = false
 		local function once()
-			if fillFn.done then return end
-			fillFn.done = true
+			if done then return end
+			done = true
 			pcall(fillFn)
 		end
 		local o1, o2 = menu.Open, control.Open

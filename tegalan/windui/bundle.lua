@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T16:20:14.384Z
+-- 42 modul, di-generate 2026-10-27T16:25:57.117Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -10627,9 +10627,10 @@ return function(ctx)
 	-- yang kitaa hold) -> hook dipasang di KEDUA sink: menu.Open & control.Open.
 	local function lazyOpen(control, fillFn)
 		local menu = control.DropdownMenu or control
+		local done = false
 		local function once()
-			if fillFn.done then return end
-			fillFn.done = true
+			if done then return end
+			done = true
 			pcall(fillFn)
 		end
 		local o1, o2 = menu.Open, control.Open
