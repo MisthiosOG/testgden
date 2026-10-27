@@ -176,7 +176,34 @@ return function(ctx)
 		return nil
 	end
 
-	----------------------------------------------------------------- ack tanam
+		-- Speed 0 vs speed 1 beda tata letak? Ini penyebabnya: ack yang lama
+	-- cuma nunggu "ADA plant baru" — pivot baru bisa datang dari plant LAMA
+	-- yang di-repivot server, jadi ack sering keluar duluan padahal plant
+	-- baru sendiri belum dicatet server -> fire berikutnya nabrak -> server
+	-- geser posisi -> hasil "ngacak" di delay 0. Good Position makanya
+	-- nggak pake ack generik, tapi nunggu plant beneran MUNCUL DI CELL yang
+	-- diminta (pivot deket pos_request). Layar nggak bisa bohong: kalau
+	-- cell-nya belum keisi, kita nggak jalan. Ini bikin barisan lurus di
+	-- SEMUA nilai delay (0 pun, kecepatan = secepat server nyatet).
+	local function waitCellOccupied(pos, timeout)
+		if not pos then return end
+		local t0 = os.clock()
+		while os.clock() - t0 < (timeout or 2.5) do
+			if not CFG.plantSeedEnabled then return end
+			local pf = plantsFolder()
+			if pf then
+				for _, m in ipairs(pf:GetChildren()) do
+					local ok, pv = pcall(function() return m:GetPivot().Position end)
+					if ok and pv and math.abs(pv.X - pos.X) < GOOD_TAKE_R and math.abs(pv.Z - pos.Z) < GOOD_TAKE_R then
+						return -- plant baru udah beneran duduk di cell-nya
+					end
+				end
+			end
+			task.wait(0.05)
+		end
+	end
+
+----------------------------------------------------------------- ack tanam
 	-- Server nyatet plant baru di Plants_Physical secara ASYNC. Kalau kita
 	-- ngebut (plantDelay 0), fire berikutnya nyamain server sebelum plant
 	-- sebelumnya terdaftar di occupancy -> server nabrak dan naruh plant di
@@ -255,9 +282,15 @@ return function(ctx)
 									-- snapshot SEBELUM fire, biar ack ga ketuker dgn plant lama
 									local pf = plantsFolder()
 									local before = pf and plantSet(pf) or nil
-									pcall(function() Plant_RE:FireServer(pos, name) end)
-									planted = planted + 1
-									plantAck(before, 2.5) -- tunggu server nyatet plantnya
+								pcall(function() Plant_RE:FireServer(pos, name) end)
+								planted = planted + 1
+								-- Good Position: nunggu plant duduk DI CELL-nya
+								-- (bukan cuma "ada plant baru") -> speed 0 tetap urut.
+								if mode == "Good Position" then
+									waitCellOccupied(pos, 2.5)
+								else
+									plantAck(before, 2.5)
+								end
 								end
 							end
 							task.wait(tonumber(CFG.plantDelay) or 0)
