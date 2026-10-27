@@ -91,7 +91,22 @@ return function(ctx)
 		pcall(function()
 			local mc = control.UIElements and control.UIElements.MenuCanvas
 			local c = mc and mc:FindFirstChildOfClass("UISizeConstraint")
-			if c then c.MaxSize = Vector2.new(292, 440) end
+			if c then
+				local maxH = 440
+				-- Adaptive: dropdown di bawah layar dulu kepotong & scroll mentok
+				-- (gak bisa kesampai) — clamp tinggi menu ke sisa ruang layar
+				-- di bawah elemen. Min 140 biar search-bar tetap kesampai.
+				pcall(function()
+					local cam = workspace.CurrentCamera
+					local vp = cam and cam.ViewportSize
+					local ef = control.ElementFrame
+					if ef and vp and vp.Y > 0 then
+						local avail = vp.Y - (ef.AbsolutePosition.Y + ef.AbsoluteSize.Y) - 16
+						if avail < maxH then maxH = math.max(140, math.floor(avail)) end
+					end
+				end)
+				c.MaxSize = Vector2.new(292, maxH)
+			end
 		end)
 		pcall(function()
 			local sf = control.UIElements and control.UIElements.Menu
