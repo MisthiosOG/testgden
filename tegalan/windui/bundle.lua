@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T20:52:13.229Z
+-- 42 modul, di-generate 2026-10-27T20:57:36.399Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -10,39 +10,13 @@ return function(ctx)
 	local tabBtns = ctx.ui.tabBtns
 	local C = ctx.C
 
-	-- toast "loaded" di pojok kanan bawah
+	-- toast "loaded" = notifikasi bawaan WindUI (custom ScreenGui lama dihapus:
+	-- numpuk, jelek, emoji-nya rusak/âœ¦ mojibake)
 	pcall(function()
-		local host = (gethui and gethui()) or game:GetService("CoreGui")
-		local old = host:FindFirstChild("AHNotif"); if old then old:Destroy() end
-		local sg = Instance.new("ScreenGui")
-		sg.Name = "AHNotif"; sg.ResetOnSpawn = false; sg.IgnoreGuiInset = true; sg.DisplayOrder = 9999; sg.Parent = host
-		local f = Instance.new("Frame")
-		f.AnchorPoint = Vector2.new(1, 1)
-		f.Position = UDim2.new(1, 280, 1, -20)     -- mulai di luar layar (buat slide-in)
-		f.Size = UDim2.fromOffset(250, 62)
-		f.BackgroundColor3 = C.panel or Color3.fromRGB(24, 26, 31)
-		f.BorderSizePixel = 0; f.Parent = sg
-		local cr = Instance.new("UICorner"); cr.CornerRadius = UDim.new(0, 12); cr.Parent = f
-		local strk = Instance.new("UIStroke"); strk.Color = C.acc; strk.Thickness = 1.5; strk.Transparency = 0.2; strk.Parent = f
-		local pad = Instance.new("UIPadding"); pad.PaddingLeft = UDim.new(0, 14); pad.PaddingTop = UDim.new(0, 10); pad.Parent = f
-		local title = Instance.new("TextLabel")
-		title.BackgroundTransparency = 1; title.Size = UDim2.new(1, -14, 0, 18)
-		title.Font = Enum.Font.FredokaOne; title.TextSize = 16; title.TextXAlignment = Enum.TextXAlignment.Left
-		title.RichText = true; title.Text = 'âœ¦ CeszParadiseHub <font color="#ff3287">Garden</font>'
-		title.TextColor3 = C.txt; title.Parent = f
-		local body = Instance.new("TextLabel")
-		body.BackgroundTransparency = 1; body.Size = UDim2.new(1, -14, 0, 16); body.Position = UDim2.fromOffset(0, 24)
-		body.Font = Enum.Font.Ubuntu; body.TextSize = 13
 		local initFps = math.clamp(math.round(workspace:GetRealPhysicsFPS() or 60), 1, 999)
-		body.Text = ("Loaded successfully âœ¦  |  %d FPS"):format(initFps); body.TextColor3 = C.accSoft; body.Parent = f
-		local TS = game:GetService("TweenService")
-		TS:Create(f, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = UDim2.new(1, -20, 1, -20) }):Play()
-		task.delay(3, function()
-			pcall(function()
-				TS:Create(f, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = UDim2.new(1, 280, 1, -20) }):Play()
-				task.wait(0.45); sg:Destroy()
-			end)
-		end)
+		if ctx.wi and ctx.wi.notify then
+			ctx.wi.notify("CeszParadiseHub", "Garden loaded | " .. initFps .. " FPS", 4)
+		end
 	end)
 
 	-- default tab = Inventory
@@ -1094,10 +1068,18 @@ return function(ctx)
 		end
 		ctx.state.fsStatus = summary
 		earlyLog(summary)
-		-- Toast biar gak perlu buka console/log buat tahu statusnya.
+		-- Toast PENDEK: path utama aja, satu baris (nungulin semua kandidat
+		-- path = notif numpuk jelek). Detail lengkup tetap kebaca di panel
+		-- Config Status & tab Logs.
+		local toast
+		if #okPaths > 0 then
+			toast = "Config OK: " .. okPaths[1]
+		else
+			toast = "Config storage MATI - cek tab Settings"
+		end
 		task.delay(4.5, function()
 			if ctx.wi and ctx.wi.notify then
-				pcall(function() ctx.wi.notify("Config", summary, 7) end)
+				pcall(function() ctx.wi.notify("Config", toast, 4) end)
 			end
 		end)
 	end)

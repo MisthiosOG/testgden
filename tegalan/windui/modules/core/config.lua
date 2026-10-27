@@ -812,10 +812,18 @@ return function(ctx)
 		end
 		ctx.state.fsStatus = summary
 		earlyLog(summary)
-		-- Toast biar gak perlu buka console/log buat tahu statusnya.
+		-- Toast PENDEK: path utama aja, satu baris (nungulin semua kandidat
+		-- path = notif numpuk jelek). Detail lengkup tetap kebaca di panel
+		-- Config Status & tab Logs.
+		local toast
+		if #okPaths > 0 then
+			toast = "Config OK: " .. okPaths[1]
+		else
+			toast = "Config storage MATI - cek tab Settings"
+		end
 		task.delay(4.5, function()
 			if ctx.wi and ctx.wi.notify then
-				pcall(function() ctx.wi.notify("Config", summary, 7) end)
+				pcall(function() ctx.wi.notify("Config", toast, 4) end)
 			end
 		end)
 	end)
