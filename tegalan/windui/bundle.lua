@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T15:59:00.156Z
+-- 42 modul, di-generate 2026-10-27T16:06:22.853Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -10631,10 +10631,10 @@ return function(ctx)
 			return displays, selected
 		end
 		local control
-		local function fill(delayed)
+		local function fill()
 			local displays, selected = snapshot()
-			pcall(function() control:Refresh(displays) end)
-			if delayed then pcall(function() control:Select(selected) end) end
+			control.Values = displays
+			pcall(function() control:Select(selected) end) -- Select = Refresh internal (satu rebuild)
 			patchDropdown(control)
 		end
 		snapshot() -- isi mapping d2v/v2d buat Callback; rows-nya ditahan kosong
@@ -10649,11 +10649,20 @@ return function(ctx)
 				persist()
 			end),
 		})
-		-- Rows dibangun belakangan: ctor dropdown dgn Values penuh = bangun
-		-- baris menu sinkron = freeze (pola sama dgn dyn dropdown).
-		task.delay(opts.fillDelay or 0.6, function() pcall(fill, true) end)
+		-- LAZY: baris dibangun SAAT MENU PERTAMA DIBUKA, bukan saat load/post-load
+		-- fill (Refresh/Select dist rebuild seluruh baris sinkron = freeze scan).
+		-- Menu kebuka instan, baris menyusul di thread sendiri. ponytail: open
+		-- pertama list besar masih ngehitch — upgrade path = list virtualisasi.
+		local built, origOpen = false, control.Open
+		control.Open = function(self, ...)
+			if origOpen then pcall(origOpen, self, ...) end
+			if not built then
+				built = true
+				task.spawn(function() pcall(fill) end)
+			end
+		end
 		local function refresh()
-			task.spawn(function() pcall(fill, true) end)
+			task.spawn(function() pcall(fill) end)
 		end
 		if opts.register and W.refreshers then
 			W.refreshers[#W.refreshers + 1] = refresh
@@ -10712,26 +10721,47 @@ return function(ctx)
 			end),
 		})
 		-- Constraint menu + wrap Title opsi ditangani patchDropdown() (module level)
-		local function fill()
-			local t0 = os.clock()
-			local ds, sel2, extra = snapshot()
-			local t1 = os.clock()
-			pcall(function() control:Refresh(ds) end)
-			pcall(function() control:Select(sel2) end)
+		local function buildRows(p)
+			control.Values = p.ds
+			pcall(function() control:Select(p.sel2) end) -- Select = Refresh internal
 			patchDropdown(control)
 			if ctx.log then
-				ctx.log(("dropdown '%s' terisi: fetch+snapshot %.2fs, refresh %.2fs (%d opsi%s)")
-					:format(title, t1 - t0, os.clock() - t1, #ds, extra > 0 and (", +" .. extra .. " pet tak ditampilkan") or ""))
+				ctx.log(("dropdown '%s' terisi: %d opsi%s")
+					:format(title, #p.ds, p.extra > 0 and (", +" .. p.extra .. " pet tak ditampilkan") or ""))
+			end
+		end
+		-- LAZY: baris dibangun pas menu pertama dibuka. Snapshot datanya sendiri
+		-- jalan 0.5s setelah build di thread sendiri (fetchOptions = cukup 1x
+		-- GetData), BARIS gak dibangun pas load/post-load = freeze scan habis.
+		local pendingDone, pending = false, nil
+		task.delay(0.5, function()
+			pcall(function()
+				local ds, sel2, extra = snapshot()
+				pendingDone, pending = true, { ds = ds, sel2 = sel2, extra = extra }
+			end)
+		end)
+		local built, origOpen = false, control.Open
+		control.Open = function(self, ...)
+			if origOpen then pcall(origOpen, self, ...) end
+			if not built then
+				built = true
+				task.spawn(function()
+					local t0 = os.clock()
+					while not pendingDone and os.clock() - t0 < 15 do task.wait(0.1) end
+					if pending then pcall(buildRows, pending) end
+				end)
 			end
 		end
 		local function refresh()
-			-- Tombol "Update Pet List": cache TTL 5s bikin ini murah.
-			task.spawn(function() pcall(fill) end)
+			-- Tombol "Update Pet List": rebuild penuh (aksi eksplisit user);
+			-- cache TTL 5s bikin fetch-nya murah.
+			task.spawn(function()
+				pcall(function()
+					local ds, sel2, extra = snapshot()
+					buildRows({ ds = ds, sel2 = sel2, extra = extra })
+				end)
+			end)
 		end
-		-- Isi awal DI-DELAY + DI-STAGGER per dropdown: task.spawn jalan inline
-		-- sampai yield pertama -> GetData cold bisa ngaretin build. delay tiap
-		-- dropdown beda (0.3/1.3/2.3/3.3) biar fetch & Refresh gak numpuk.
-		task.delay(opts.fillDelay or 1, function() pcall(fill) end)
 		if opts.register then
 			W.refreshers[#W.refreshers + 1] = refresh
 		end
@@ -10766,14 +10796,26 @@ return function(ctx)
 				if onChange then onChange() end
 			end),
 		})
-		task.delay(opts.fillDelay or 0.6, function()
-			pcall(function() control:Refresh(options) end)
-			pcall(function() control:Select(savedTitles()) end)
-			patchDropdown(control)
-			if ctx.log then
-				ctx.log(("dropdown '%s' terisi (%d opsi)"):format(title, #options))
+		-- LAZY: baris dibangun pas menu pertama dibuka — 4x PET_OPTIONS penuh
+		-- dibangun sinkron (ctor/fill) = freeze berdetik; menu kebuka instan,
+		-- baris menyusul. ponytail: open pertama list besar ngehitch sekali —
+		-- upgrade path = list virtualisasi buat dropdown dist.
+		local built, origOpen = false, control.Open
+		control.Open = function(self, ...)
+			if origOpen then pcall(origOpen, self, ...) end
+			if not built then
+				built = true
+				task.spawn(function()
+					local titles = savedTitles()
+					control.Values = options
+					pcall(function() control:Select(titles) end)
+					patchDropdown(control)
+					if ctx.log then
+						ctx.log(("dropdown '%s' terisi (%d opsi)"):format(title, #options))
+					end
+				end)
 			end
-		end)
+		end
 		return control
 	end
 
