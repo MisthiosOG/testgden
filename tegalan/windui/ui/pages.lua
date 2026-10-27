@@ -1031,14 +1031,13 @@ end
 	----------------------------------------------------------------- TAB: HATCH (Auto Hatch + Auto Sell)
 	local function buildHatchTab(tab)
 		local hdefs = {
-			core   = { name = "Main Team" },
-			bronto = { name = "Bronto Team" },
-			hatch  = { name = "Hatch Team" },
-			sell   = { name = "Sell Team" },
-			eggs   = { name = "Egg Config" },
-			cfg    = { name = "Config" },
+			ctrl   = { name = "Status & Control" },
+			teams  = { name = "Teams" },
+			eggs   = { name = "Egg Configuration" },
+			bronto = { name = "Bronto Configuration" },
+			sell   = { name = "Sell Configuration" },
 		}
-		local horder = { "core", "bronto", "hatch", "sell", "eggs", "cfg" }
+		local horder = { "ctrl", "teams", "eggs", "bronto", "sell" }
 		local hsecs = {}
 		local function miniTab(id, buildFn)
 			local sec = section(tab, hdefs[id].name)
@@ -1046,12 +1045,13 @@ end
 			hsecs[id] = sec
 		end
 
-		--------------------------------------------------- panel 1: Main Team
-		miniTab("core", function(sec)
-			-- Status live dari state loop hatch (murah: state fields + getHatchSummary per 2.5s).
+		--------------------------------------------------- panel 1: Status & Control
+		miniTab("ctrl", function(sec)
+			-- Live status lengkap (style SRC lama): status, phase, team, bp,
+			-- egg tracking, placed, hatched, sell cycle, recovery stat (2s).
 			local stat = sec:Paragraph({
-				Title = "Hatch Status",
-				Desc = "Phase: -\nStatus: Idle\nPet di backpack: -",
+				Title = "Live Status",
+				Desc = "Status: -",
 			})
 			task.spawn(function()
 				task.wait(3)
@@ -1059,13 +1059,25 @@ end
 				while ctx.alive() do
 					pcall(function()
 						local s = ctx.getHatchSummary and ctx.getHatchSummary()
-						local txt = ("Phase: %s\nStatus: %s\nPet di backpack: %s"):format(
-							tostring(ctx.state.hatchPhase or "-"),
-							tostring(ctx.state.hatchStatus or "Idle"),
-							s and (tostring(s.backpack) .. "/" .. tostring(s.maxBackpack)) or "-")
-						if txt ~= last then last = txt; stat:SetDesc(txt) end
+						if s then
+							local proc = s.proc or {}
+							local txt = table.concat({
+								("Status: %s | Phase: %s"):format(tostring(s.status or "-"), tostring(s.phase or "-")),
+								("Pet di backpack: %s/%s"):format(tostring(s.backpack or 0), tostring(s.maxBackpack or 0)),
+								("Egg: %s\n  Sebelum: %s | Sekarang: %s"):format(
+									tostring(s.currentEgg or "-"), tostring(s.eggBefore or 0), tostring(s.currentAmount or 0)),
+								("Placed: %s/%s (ready %s)"):format(
+									tostring(s.placed or 0), tostring(s.maxPlaced or 0), tostring(s.ready or 0)),
+								("Eggs hatched: %s | Sell cycle: %s/%s (%s)"):format(
+									tostring(s.eggsHatched or 0), tostring(s.cycleProg or 0), tostring(s.cycleTarget or 0), tostring(s.sellMode or "-")),
+								("Recovery — Koi: %s (%s%%) | Seal: %s (%s%%)"):format(
+									tostring(proc.koiCount or 0), tostring(proc.koiPct or 0),
+									tostring(proc.sealCount or 0), tostring(proc.sealPct or 0)),
+							}, "\n")
+							if txt ~= last then last = txt; stat:SetDesc(txt) end
+						end
 					end)
-					task.wait(2.5)
+					task.wait(2.0)
 				end
 			end)
 
@@ -1090,44 +1102,38 @@ end
 			ctx.ui.rHatchToggle = function()
 				pcall(function() masterCtrl:Set(CFG.hatchEnabled) end)
 			end
+			makeToggleW(sec, "Auto Sell Pets", "Jual otomatis pet di backpack sesuai pengaturan.",
+				function() return CFG.autoSellEnabled end,
+				function(v) CFG.autoSellEnabled = v end)
+		end)
 
-			makeInputW(sec, "Delay Equip — Main (sec)", "Jeda antar pet pas equip Main team",
-				function() return tostring(CFG.hatchCoreEquipDelay or 0) end,
-				function(t) CFG.hatchCoreEquipDelay = tonumber(t) or 0 end)
-			makeInputW(sec, "Delay Unequip — Main (sec)", "Jeda antar pet pas unequip Main team",
-				function() return tostring(CFG.hatchCoreUnequipDelay or 1) end,
-				function(t) CFG.hatchCoreUnequipDelay = tonumber(t) or 1 end)
-			makeMultiDynW(sec, "Main Team", "Percepat egg (incubation speed)",
+		--------------------------------------------------- panel 2: Teams
+		miniTab("teams", function(sec)
+			makeMultiDynW(sec, "Core Team", "Percepat egg (incubation speed)",
 				function() return ctx.inventoryPetOptions(CFG.hatchCoreTeam) end,
 				CFG.hatchCoreTeam, function() persist() end,
 				{ register = true, cacheKey = "inv_pets", fillDelay = 0.2, max = 250 })
-			addRefresh(sec)
-		end)
-
-		--------------------------------------------------- panel 2: Bronto Team
-		miniTab("bronto", function(sec)
-			makeInputW(sec, "Delay Equip — Bronto (sec)", "Jeda antar pet pas equip Bronto team",
-				function() return tostring(CFG.hatchBrontoEquipDelay or 0) end,
-				function(t) CFG.hatchBrontoEquipDelay = tonumber(t) or 0 end)
-			makeInputW(sec, "Delay Unequip — Bronto (sec)", "Jeda antar pet pas unequip Bronto team",
-				function() return tostring(CFG.hatchBrontoUnequipDelay or 1) end,
-				function(t) CFG.hatchBrontoUnequipDelay = tonumber(t) or 1 end)
-			makeInputW(sec, "Bronto Team Delay (sec)", "Tunggu abis swap team sebelum hatch bronto",
-				function() return tostring(CFG.brontoTeamDelay or 5.5) end,
-				function(t) CFG.brontoTeamDelay = tonumber(t) or 5.5 end)
-			makeToggleW(sec, "Don't Hatch Bronto Pets",
-				"Skip pet yg memenuhi syarat Bronto (jangan di-hatch).",
-				function() return CFG.brontoSkipSpecial end,
-				function(v) CFG.brontoSkipSpecial = v end)
+			makeMultiDynW(sec, "Hatch Team", "Hatch egg ready (Koi = balikin egg)",
+				function() return ctx.inventoryPetOptions(CFG.hatchHatchTeam) end,
+				CFG.hatchHatchTeam, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.4, max = 250 })
 			makeMultiDynW(sec, "Bronto Team", "+30% berat pet pas hatch (Brontosaurus)",
 				function() return ctx.inventoryPetOptions(CFG.hatchBrontoTeam) end,
 				CFG.hatchBrontoTeam, function() persist() end,
-				{ register = true, cacheKey = "inv_pets", fillDelay = 0.4, max = 250 })
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.6, max = 250 })
+			makeMultiDynW(sec, "Sell Team", "Jual + balikin pet jadi egg (Seal the Deal)",
+				function() return ctx.inventoryPetOptions(CFG.hatchSellTeam) end,
+				CFG.hatchSellTeam, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.8, max = 250 })
 			addRefresh(sec)
-		end)
 
-		--------------------------------------------------- panel 3: Hatch Team
-		miniTab("hatch", function(sec)
+			sec:Paragraph({ Title = "Delay (Advanced)", Desc = "Jeda equip/unequip antar pet & jeda swap team (detik)." })
+			makeInputW(sec, "Delay Equip — Core (sec)", "Jeda antar pet pas equip Core team",
+				function() return tostring(CFG.hatchCoreEquipDelay or 0) end,
+				function(t) CFG.hatchCoreEquipDelay = tonumber(t) or 0 end)
+			makeInputW(sec, "Delay Unequip — Core (sec)", "Jeda antar pet pas unequip Core team",
+				function() return tostring(CFG.hatchCoreUnequipDelay or 1) end,
+				function(t) CFG.hatchCoreUnequipDelay = tonumber(t) or 1 end)
 			makeInputW(sec, "Delay Equip — Hatch (sec)", "Jeda antar pet pas equip Hatch team",
 				function() return tostring(CFG.hatchTeamEquipDelay or 0) end,
 				function(t) CFG.hatchTeamEquipDelay = tonumber(t) or 0 end)
@@ -1137,15 +1143,15 @@ end
 			makeInputW(sec, "Hatch Team Delay (sec)", "Tunggu abis swap team sebelum hatch",
 				function() return tostring(CFG.hatchTeamDelay or 5.5) end,
 				function(t) CFG.hatchTeamDelay = tonumber(t) or 5.5 end)
-			makeMultiDynW(sec, "Hatch Team", "Hatch egg ready (Koi = balikin egg)",
-				function() return ctx.inventoryPetOptions(CFG.hatchHatchTeam) end,
-				CFG.hatchHatchTeam, function() persist() end,
-				{ register = true, cacheKey = "inv_pets", fillDelay = 0.6, max = 250 })
-			addRefresh(sec)
-		end)
-
-		--------------------------------------------------- panel 4: Sell Team
-		miniTab("sell", function(sec)
+			makeInputW(sec, "Delay Equip — Bronto (sec)", "Jeda antar pet pas equip Bronto team",
+				function() return tostring(CFG.hatchBrontoEquipDelay or 0) end,
+				function(t) CFG.hatchBrontoEquipDelay = tonumber(t) or 0 end)
+			makeInputW(sec, "Delay Unequip — Bronto (sec)", "Jeda antar pet pas unequip Bronto team",
+				function() return tostring(CFG.hatchBrontoUnequipDelay or 1) end,
+				function(t) CFG.hatchBrontoUnequipDelay = tonumber(t) or 1 end)
+			makeInputW(sec, "Bronto Team Delay (sec)", "Tunggu abis swap team sebelum hatch bronto",
+				function() return tostring(CFG.brontoTeamDelay or 5.5) end,
+				function(t) CFG.brontoTeamDelay = tonumber(t) or 5.5 end)
 			makeInputW(sec, "Delay Equip — Sell (sec)", "Jeda antar pet pas equip Sell team",
 				function() return tostring(CFG.hatchSellEquipDelay or 0) end,
 				function(t) CFG.hatchSellEquipDelay = tonumber(t) or 0 end)
@@ -1155,19 +1161,10 @@ end
 			makeInputW(sec, "Sell Team Delay (sec)", "Tunggu abis swap team sebelum jual",
 				function() return tostring(CFG.sellTeamDelay or 5.5) end,
 				function(t) CFG.sellTeamDelay = tonumber(t) or 5.5 end)
-			makeToggleW(sec, "Auto Boost Before Sell", "Boost pet aktif pakai toy sebelum jual",
-				function() return CFG.autoBoostBeforeSell end,
-				function(v) CFG.autoBoostBeforeSell = v end)
-			makeMultiDynW(sec, "Sell Team", "Jual + balikin pet jadi egg (Seal the Deal)",
-				function() return ctx.inventoryPetOptions(CFG.hatchSellTeam) end,
-				CFG.hatchSellTeam, function() persist() end,
-				{ register = true, cacheKey = "inv_pets", fillDelay = 0.8, max = 250 })
-			addRefresh(sec)
 		end)
 
-		--------------------------------------------------- panel 5: Egg Config
+		--------------------------------------------------- panel 3: Egg Configuration
 		miniTab("eggs", function(sec)
-			sec:Paragraph({ Title = "Egg Configuration", Desc = "Egg yg di-place & di-hatch." })
 			makeSingleW(sec, "Egg to Hatch", "Egg dari backpack (angka = jumlah).",
 				function() return ctx.getEggBackpackOptions() end,
 				function() return tostring(CFG.hatchEggName or "") end,
@@ -1211,29 +1208,33 @@ end
 			addRefresh(sec)
 		end)
 
-		--------------------------------------------------- panel 6: Config
-		miniTab("cfg", function(sec)
-			makeToggleW(sec, "Auto Sell Pets", "Jual otomatis pet di backpack sesuai pengaturan.",
-				function() return CFG.autoSellEnabled end,
-				function(v) CFG.autoSellEnabled = v end)
-			makeSingleW(sec, "Sell Trigger", "Cycle = jual tiap N cycle hatch. Total Pet (BP) = jual pas backpack penuh.",
-				function() return { "Cycle", "Backpack" } end,
-				function() return CFG.sellMode or "Cycle" end,
-				function(v) CFG.sellMode = (v == "Backpack") and "Backpack" or "Cycle" end, { fillDelay = 0.9 })
-			makeInputW(sec, "Sell Tiap Berapa Cycle", "Dipakai kalau Sell Trigger = Cycle.",
-				function() return tostring(CFG.sellEveryNCycles or 1) end,
-				function(t) CFG.sellEveryNCycles = math.max(1, tonumber(t) or 1) end)
-			makeInputW(sec, "Auto Sell Aktif Saat Total Pet", "Dipakai kalau Sell Trigger = Total Pet (BP).",
-				function() return tostring(CFG.sellWhenReach or 100) end,
-				function(t) CFG.sellWhenReach = tonumber(t) or 100 end)
-			makeSingleW(sec, "Sell Style", "One by One = jual yg cocok filter saja (aman). All at Once = jual semua non-favorit yg cocok.",
-				function() return { "One by One", "All at Once" } end,
-				function() return CFG.sellStyle or "All at Once" end,
-				function(v) CFG.sellStyle = (v == "One by One") and "One by One" or "All at Once" end, { fillDelay = 1.0 })
-
+		--------------------------------------------------- panel 4: Bronto Configuration
+		miniTab("bronto", function(sec)
 			sec:Paragraph({
-				Title = "Sell & Bronto Rules",
-				Desc = "Weight < KG -> aksi (SELL/KEEP). Weight >= KG -> KEEP + BRONTO (hatch pakai Bronto team).",
+				Title = "Bronto Configuration",
+				Desc = "Egg yg di-hatch pakai Bronto team (+30% berat). Prioritas: aturan per-pet di tab Sell Config. Filter di bawah = fallback kalau aturan kosong.",
+			})
+			makeMultiW(sec, "Special Pets", "Pet yg WAJIB di-hatch pakai Bronto team (★ Special).",
+				reg.PET_EGG_ONLY, CFG.brontoSpecialPets, function() persist() end, { fillDelay = 1.0 })
+			makeInputW(sec, "Special Pets Weight Filter", "Special cuma dihitung kalau weight > ini (0 = ga difilter).",
+				function() return tostring(CFG.brontoSpecialWeight or 0) end,
+				function(t) CFG.brontoSpecialWeight = tonumber(t) or 0 end)
+			makeMultiW(sec, "Universal Weight Pet Types", "Tipe pet buat aturan universal (kosong = semua).",
+				reg.PET_EGG_ONLY, CFG.brontoUniversalTypes, function() persist() end, { fillDelay = 1.1 })
+			makeInputW(sec, "Universal Weight Threshold", "Pakai Bronto team kalau weight > ini (0 = off).",
+				function() return tostring(CFG.brontoUniversalWeight or 0) end,
+				function(t) CFG.brontoUniversalWeight = tonumber(t) or 0 end)
+			makeToggleW(sec, "Don't Hatch Special Pets", "Skip special pet sama sekali (jangan di-hatch).",
+				function() return CFG.brontoSkipSpecial end,
+				function(v) CFG.brontoSkipSpecial = v end)
+			addRefresh(sec)
+		end)
+
+		--------------------------------------------------- panel 5: Sell Configuration
+		miniTab("sell", function(sec)
+			sec:Paragraph({
+				Title = "Sell & Bronto Rule Per-Pet",
+				Desc = "Aturan utama: Weight < KG -> aksi (SELL/KEEP). Weight >= KG -> KEEP + BRONTO. Tandai ★ Special = wajib Bronto.",
 			})
 
 			-- Bulk editor (pengganti tabel per-pet build lama):
@@ -1302,7 +1303,7 @@ end
 
 			sec:Button({
 				Title = "CLEAR ALL RULES",
-				Desc = "Hapus SEMUA aturan Sell & Bronto (filter kosong = sell dibatalin otomatis).",
+				Desc = "Hapus SEMUA aturan Sell & Bronto.",
 				Callback = safe(function()
 					CFG.hatchSellList = {}
 					persist()
@@ -1311,6 +1312,45 @@ end
 				end),
 			})
 
+			sec:Paragraph({
+				Title = "Filter Cepat (dipakai kalau Rules kosong)",
+				Desc = "Jual sederhana: cocok tipe + di bawah threshold. Rules per-pet di atas SELALU menang kalau ada.",
+			})
+			makeMultiW(sec, "Pets to Sell", "Tipe pet yg DIJUAL (sisanya difavoritin biar aman)",
+				reg.PET_OPTIONS, CFG.sellPetTypes, function() persist() end, { fillDelay = 1.7 })
+			makeInputW(sec, "Sell Weight Threshold", "Jual kalau weight < ini (0 = off)",
+				function() return tostring(CFG.sellWeightThreshold or 0) end,
+				function(t) CFG.sellWeightThreshold = tonumber(t) or 0 end)
+			makeInputW(sec, "Sell Age Threshold", "Jual kalau age < ini (0 = off)",
+				function() return tostring(CFG.sellAgeThreshold or 0) end,
+				function(t) CFG.sellAgeThreshold = tonumber(t) or 0 end)
+			makeMultiW(sec, "Special Pets to Sell", "Pet spesial (jual by weight)",
+				reg.PET_EGG_ONLY, CFG.sellSpecialTypes, function() persist() end, { fillDelay = 1.8 })
+			makeInputW(sec, "Special Pet Weight Threshold", "Jual pet spesial dgn weight < ini (0 = off)",
+				function() return tostring(CFG.sellSpecialWeight or 0) end,
+				function(t) CFG.sellSpecialWeight = tonumber(t) or 0 end)
+
+			sec:Paragraph({
+				Title = "Trigger & Eksekusi",
+				Desc = "Kapan sell dijalankan & caranya.",
+			})
+			makeSingleW(sec, "Sell Trigger", "Cycle = jual tiap N cycle hatch. Backpack = jual pas pet >= batas.",
+				function() return { "Cycle", "Backpack" } end,
+				function() return CFG.sellMode or "Cycle" end,
+				function(v) CFG.sellMode = (v == "Backpack") and "Backpack" or "Cycle" end, { fillDelay = 1.9 })
+			makeInputW(sec, "Sell Tiap Berapa Cycle", "Dipakai kalau Sell Trigger = Cycle.",
+				function() return tostring(CFG.sellEveryNCycles or 1) end,
+				function(t) CFG.sellEveryNCycles = math.max(1, tonumber(t) or 1) end)
+			makeInputW(sec, "Auto Sell Aktif Saat Total Pet", "Dipakai kalau Sell Trigger = Backpack.",
+				function() return tostring(CFG.sellWhenReach or 100) end,
+				function(t) CFG.sellWhenReach = tonumber(t) or 100 end)
+			makeSingleW(sec, "Sell Style", "One by One = jual yg cocok filter saja (aman). All at Once = jual semua non-favorit yg cocok.",
+				function() return { "One by One", "All at Once" } end,
+				function() return CFG.sellStyle or "All at Once" end,
+				function(v) CFG.sellStyle = (v == "One by One") and "One by One" or "All at Once" end, { fillDelay = 2.0 })
+			makeToggleW(sec, "Auto Boost Before Sell", "Boost pet aktif pakai toy sebelum jual",
+				function() return CFG.autoBoostBeforeSell end,
+				function(v) CFG.autoBoostBeforeSell = v end)
 			sec:Button({
 				Title = "Sell Now (manual)", Desc = "Jalankan proses sell sekali sekarang.",
 				Callback = safe(function()
@@ -1320,7 +1360,7 @@ end
 			addRefresh(sec)
 		end)
 
-		miniBar(hsecs, horder, hdefs, "core")
+		miniBar(hsecs, horder, hdefs, "ctrl")
 	end
 
 	----------------------------------------------------------------- TAB: SETTINGS
