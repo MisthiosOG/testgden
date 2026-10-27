@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T19:25:40.869Z
+-- 42 modul, di-generate 2026-10-27T19:31:21.145Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -11115,7 +11115,7 @@ end
 -- Warna dari theme WindUI langsung (GetThemes), fallback konstanta Dark.
 -- JANGAN baca Outline.BackgroundColor3: konstanta theme "Outline" = #FFFFFF,
 -- ThemeTag-nya belum di-apply pas tab dibangun -> bar nyala putih.
-local function miniBar(secs, order, defs, defaultId)
+local function miniBar(secs, order, defs, defaultId, rows)
 	local container = secs[order[1]].ElementFrame.Parent
 	local lib = W.windui
 	local okTheme, cur = pcall(function()
@@ -11137,12 +11137,17 @@ local function miniBar(secs, order, defs, defaultId)
 	bar.Parent = container
 	Instance.new("UICorner", bar).CornerRadius = UDim.new(0, 10)
 
-	local row = Instance.new("UIListLayout")
-	row.FillDirection = Enum.FillDirection.Horizontal
-	row.Padding = UDim.new(0, 6)
-	row.SortOrder = Enum.SortOrder.LayoutOrder
-	row.VerticalAlignment = Enum.VerticalAlignment.Center
-	row.Parent = bar
+	-- rows (opsional): pecah pill jadi R baris — {{a,b},{c}} -> 2 baris.
+	-- order tetap list flat buat paint/unlock. Hatch: baris 1 = run config,
+	-- baris 2 = rule config (biar gak berdesakan 5 pill sambung).
+	local rowsDef = rows or { order }
+	bar.Size = UDim2.new(1, 0, 0, (#rowsDef * 36) + ((#rowsDef - 1) * 4))
+	local vstack = Instance.new("UIListLayout")
+	vstack.FillDirection = Enum.FillDirection.Vertical
+	vstack.Padding = UDim.new(0, 4)
+	vstack.SortOrder = Enum.SortOrder.LayoutOrder
+	vstack.VerticalAlignment = Enum.VerticalAlignment.Center
+	vstack.Parent = bar
 
 	local btns = {}
 	local function paint(id, on)
@@ -11152,20 +11157,34 @@ local function miniBar(secs, order, defs, defaultId)
 		b.TextColor3 = on and ((cur and cur.Text) or Color3.fromRGB(255, 255, 255)) or txth
 	end
 
-	for i, id in ipairs(order) do
-		local b = Instance.new("TextButton")
-		b.Name = "Tab_" .. id
-		b.LayoutOrder = i
-		b.Size = UDim2.new(1 / #order, -4, 1, -8)
-		b.AutoButtonColor = false
-		b.BackgroundTransparency = 1
-		b.Text = defs[id].name
-		b.TextTruncate = Enum.TextTruncate.AtEnd
-		b.TextSize = 14
-		b.Font = Enum.Font.GothamMedium
-		Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
-		b.Parent = bar
-		btns[id] = b
+	for ri, rlist in ipairs(rowsDef) do
+		local rf = Instance.new("Frame")
+		rf.Name = "MiniRow" .. ri
+		rf.LayoutOrder = ri
+		rf.Size = UDim2.new(1, 0, 0, 36)
+		rf.BackgroundTransparency = 1
+		rf.Parent = bar
+		local hl = Instance.new("UIListLayout")
+		hl.FillDirection = Enum.FillDirection.Horizontal
+		hl.Padding = UDim.new(0, 6)
+		hl.SortOrder = Enum.SortOrder.LayoutOrder
+		hl.VerticalAlignment = Enum.VerticalAlignment.Center
+		hl.Parent = rf
+		for ci, id in ipairs(rlist) do
+			local b = Instance.new("TextButton")
+			b.Name = "Tab_" .. id
+			b.LayoutOrder = ci
+			b.Size = UDim2.new(1 / #rlist, -6, 0, 32)
+			b.AutoButtonColor = false
+			b.BackgroundTransparency = 1
+			b.Text = defs[id].name
+			b.TextTruncate = Enum.TextTruncate.AtEnd
+			b.TextSize = 14
+			b.Font = Enum.Font.GothamMedium
+			Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
+			b.Parent = rf
+			btns[id] = b
+		end
 	end
 
 	local function selectPanel(id)
@@ -11829,27 +11848,17 @@ end
 				function() return ctx.inventoryPetOptions(CFG.hatchCoreTeam) end,
 				CFG.hatchCoreTeam, function() persist() end,
 				{ register = true, cacheKey = "inv_pets", fillDelay = 0.2, max = 250 })
-			makeMultiDynW(sec, "Hatch Team", "Hatch egg ready (Koi = balikin egg)",
-				function() return ctx.inventoryPetOptions(CFG.hatchHatchTeam) end,
-				CFG.hatchHatchTeam, function() persist() end,
-				{ register = true, cacheKey = "inv_pets", fillDelay = 0.4, max = 250 })
-			makeMultiDynW(sec, "Bronto Team", "+30% berat pet pas hatch (Brontosaurus)",
-				function() return ctx.inventoryPetOptions(CFG.hatchBrontoTeam) end,
-				CFG.hatchBrontoTeam, function() persist() end,
-				{ register = true, cacheKey = "inv_pets", fillDelay = 0.6, max = 250 })
-			makeMultiDynW(sec, "Sell Team", "Jual + balikin pet jadi egg (Seal the Deal)",
-				function() return ctx.inventoryPetOptions(CFG.hatchSellTeam) end,
-				CFG.hatchSellTeam, function() persist() end,
-				{ register = true, cacheKey = "inv_pets", fillDelay = 0.8, max = 250 })
-			addRefresh(sec)
-
-			sec:Paragraph({ Title = "Delay (Advanced)", Desc = "Jeda equip/unequip antar pet & jeda swap team (detik)." })
 			makeInputW(sec, "Delay Equip — Core (sec)", "Jeda antar pet pas equip Core team",
 				function() return tostring(CFG.hatchCoreEquipDelay or 0) end,
 				function(t) CFG.hatchCoreEquipDelay = tonumber(t) or 0 end)
 			makeInputW(sec, "Delay Unequip — Core (sec)", "Jeda antar pet pas unequip Core team",
 				function() return tostring(CFG.hatchCoreUnequipDelay or 1) end,
 				function(t) CFG.hatchCoreUnequipDelay = tonumber(t) or 1 end)
+
+			makeMultiDynW(sec, "Hatch Team", "Hatch egg ready (Koi = balikin egg)",
+				function() return ctx.inventoryPetOptions(CFG.hatchHatchTeam) end,
+				CFG.hatchHatchTeam, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.4, max = 250 })
 			makeInputW(sec, "Delay Equip — Hatch (sec)", "Jeda antar pet pas equip Hatch team",
 				function() return tostring(CFG.hatchTeamEquipDelay or 0) end,
 				function(t) CFG.hatchTeamEquipDelay = tonumber(t) or 0 end)
@@ -11859,6 +11868,11 @@ end
 			makeInputW(sec, "Hatch Team Delay (sec)", "Tunggu abis swap team sebelum hatch",
 				function() return tostring(CFG.hatchTeamDelay or 5.5) end,
 				function(t) CFG.hatchTeamDelay = tonumber(t) or 5.5 end)
+
+			makeMultiDynW(sec, "Bronto Team", "+30% berat pet pas hatch (Brontosaurus)",
+				function() return ctx.inventoryPetOptions(CFG.hatchBrontoTeam) end,
+				CFG.hatchBrontoTeam, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.6, max = 250 })
 			makeInputW(sec, "Delay Equip — Bronto (sec)", "Jeda antar pet pas equip Bronto team",
 				function() return tostring(CFG.hatchBrontoEquipDelay or 0) end,
 				function(t) CFG.hatchBrontoEquipDelay = tonumber(t) or 0 end)
@@ -11868,6 +11882,11 @@ end
 			makeInputW(sec, "Bronto Team Delay (sec)", "Tunggu abis swap team sebelum hatch bronto",
 				function() return tostring(CFG.brontoTeamDelay or 5.5) end,
 				function(t) CFG.brontoTeamDelay = tonumber(t) or 5.5 end)
+
+			makeMultiDynW(sec, "Sell Team", "Jual + balikin pet jadi egg (Seal the Deal)",
+				function() return ctx.inventoryPetOptions(CFG.hatchSellTeam) end,
+				CFG.hatchSellTeam, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.8, max = 250 })
 			makeInputW(sec, "Delay Equip — Sell (sec)", "Jeda antar pet pas equip Sell team",
 				function() return tostring(CFG.hatchSellEquipDelay or 0) end,
 				function(t) CFG.hatchSellEquipDelay = tonumber(t) or 0 end)
@@ -11877,6 +11896,7 @@ end
 			makeInputW(sec, "Sell Team Delay (sec)", "Tunggu abis swap team sebelum jual",
 				function() return tostring(CFG.sellTeamDelay or 5.5) end,
 				function(t) CFG.sellTeamDelay = tonumber(t) or 5.5 end)
+			addRefresh(sec)
 		end)
 
 		--------------------------------------------------- panel 3: Egg Configuration
@@ -12076,7 +12096,8 @@ end
 			addRefresh(sec)
 		end)
 
-		miniBar(hsecs, horder, hdefs, "ctrl")
+		-- 2 baris: atas = Status/Teams/Egg (run), bawah = Sell/Bronto (rule)
+		miniBar(hsecs, horder, hdefs, "ctrl", { { "ctrl", "teams", "eggs" }, { "sell", "bronto" } })
 	end
 
 	----------------------------------------------------------------- TAB: SETTINGS
