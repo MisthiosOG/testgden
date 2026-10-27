@@ -189,6 +189,7 @@ local MODULES = {
 	"modules/misc/player_mods.lua",
 	"modules/misc/perf_mods.lua",
 	"modules/misc/automation_reconnect.lua",
+	"ui/components.lua",
 	"ui/window.lua",
 	"ui/pages.lua",
 	"app.lua",
