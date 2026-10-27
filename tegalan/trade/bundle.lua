@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 14 modul, di-generate 2026-10-27T11:08:55.065Z
+-- 14 modul, di-generate 2026-10-27T11:09:43.948Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua — inisialisasi akhir: default page, supervisor auto-claim, auto-resume. ]]
@@ -3390,10 +3390,16 @@ return function(ctx)
         return tab
     end
     local function makeToggle(parent, title, desc, getValue, setValue)
-        return tabFor(parent):Toggle({
+        local control = tabFor(parent):Toggle({
             Title = title, Desc = desc,
             Value = type(getValue) == "function" and getValue() or false,
             Callback = function(value) if setValue then setValue(value) end end,
+        })
+        return setmetatable({ _windControl = control }, {
+            __index = control,
+            __call = function()
+                if control and control.Set and getValue then control:Set(getValue()) end
+            end,
         })
     end
     local function makeInput(parent, title, desc, getValue, setValue)

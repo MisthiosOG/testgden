@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 43 modul, di-generate 2026-10-27T11:08:55.030Z
+-- 43 modul, di-generate 2026-10-27T11:09:43.914Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua — init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -13974,12 +13974,18 @@ return function(ctx)
 
     local function makeToggle(parent, title, desc, getValue, setValue)
         local tab = parentTab(parent)
-        return tab:Toggle({
+        local control = tab:Toggle({
             Title = title,
             Desc = desc,
             Value = type(getValue) == "function" and getValue() or false,
             Callback = function(value)
                 if setValue then setValue(value) end
+            end,
+        })
+        return setmetatable({ _windControl = control }, {
+            __index = control,
+            __call = function()
+                if control and control.Set and getValue then control:Set(getValue()) end
             end,
         })
     end

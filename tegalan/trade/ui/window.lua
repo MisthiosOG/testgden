@@ -56,10 +56,16 @@ return function(ctx)
         return tab
     end
     local function makeToggle(parent, title, desc, getValue, setValue)
-        return tabFor(parent):Toggle({
+        local control = tabFor(parent):Toggle({
             Title = title, Desc = desc,
             Value = type(getValue) == "function" and getValue() or false,
             Callback = function(value) if setValue then setValue(value) end end,
+        })
+        return setmetatable({ _windControl = control }, {
+            __index = control,
+            __call = function()
+                if control and control.Set and getValue then control:Set(getValue()) end
+            end,
         })
     end
     local function makeInput(parent, title, desc, getValue, setValue)
