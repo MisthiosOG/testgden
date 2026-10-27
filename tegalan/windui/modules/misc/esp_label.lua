@@ -4,8 +4,8 @@
               nama + berat + level + mutasi.
      Shared screen renderer: modul ini (load pertama) yang owns gui list
      layar; esp_egg (load kedua) nimpa baris egg-nya lewat ctx.espScreenData.
-     Keduanya ON → jadi satu list kecil (font 11) + pembatas di antara egg
-     dan pet. Satu ON → list normal (font 13), tanpa pembatas.
+      Keduanya ON → satu list (font 16) + pembatas di antara egg dan pet.
+      Satu ON → list sama, tanpa pembatas. Nama pet warna tetap per nama.
      Data pet: nama tipe + berat (BaseWeight*1.1) + level + mutasi.
      ESP EGG TERPISAH di modules/misc/esp_egg.lua.
      Toggle: CFG.espEnabled, mode: CFG.espMode ("target"/"screen"). ]]
@@ -98,7 +98,7 @@ return function(ctx)
 	-- ===== Shared screen list (plain text, tanpa background) =====
 	-- ctx.espScreenData.pet / .egg masing-masing modul isi sendiri;
 	-- paint() gabungin: [egg baris] \n [pembatas] \n [pet baris].
-	-- Dua-duanya ON → compact (font 11); satu → font 13.
+	-- Dua-duanya ON → font 16; satu → font 16, tanpa pembatas.
 	ctx.espScreenData = ctx.espScreenData or { pet = nil, egg = nil }
 	local screenData = ctx.espScreenData
 	local listSg, listLbl
@@ -134,18 +134,17 @@ return function(ctx)
 			listLbl.Parent = listSg
 		end
 
-		local compact = hasE and hasP
 		local lines = {}
 		if hasE then
 			for _, t in ipairs(screenData.egg) do lines[#lines + 1] = t end
 		end
 		if hasE and hasP then
-			lines[#lines + 1] = '<font color="#5A5A5A" size="9">' .. string.rep("─", 24) .. "</font>"
+			lines[#lines + 1] = '<font color="#9A9A9A" size="12">' .. string.rep("─", 20) .. "</font>"
 		end
 		if hasP then
 			for _, t in ipairs(screenData.pet) do lines[#lines + 1] = t end
 		end
-		listLbl.TextSize = compact and 11 or 13
+		listLbl.TextSize = 16
 		listLbl.Text = table.concat(lines, "\n")
 	end
 	ctx.espScreenPaint = paint
@@ -155,11 +154,29 @@ return function(ctx)
 		paint()
 	end
 
-	-- Palet teks monokrom (sesuai menu): putih / abu.
+	-- Palet billboard (target mode): card gelap di belakang → putih/abu aman.
 	local C_NAME = "#FFFFFF"
 	local C_WEIGHT = "#D6D6D6"
 	local C_LV = "#969696"
 	local C_MUT = "#B4B4B4"
+
+	-- Palet screen list: TANPA background → teks harus cerah biar kebaca.
+	-- Nama pet: warna tetap per nama (hash) — beda-beda tapi konsisten.
+	local NAME_COLORS = {
+		"#5FC3FF", "#FF8AD8", "#7CE8A4", "#B08CFF", "#5FE3D0", "#FF8A6B", "#D6FF6B",
+	}
+	local C_S_WEIGHT = "#FFC24D"
+	local C_S_LV = "#7FE3A0"
+	local MUT_SCREEN = {
+		Golden = "#FFD700", Rainbow = "#FF6EC7", Frozen = "#7FDBFF", Wet = "#4FC3F7",
+		Shocked = "#FFF176", Moonlit = "#B39DFF", Shiny = "#FFB300", Huge = "#FF5C5C",
+		Mega = "#FF3B3B", Tiny = "#8AE6FF", Windstruck = "#CFFFE8", Tempered = "#FF9E80",
+	}
+	local function nameColor(s)
+		local h = 0
+		for i = 1, #s do h = (h * 31 + string.byte(s, i)) % 100003 end
+		return NAME_COLORS[(h % #NAME_COLORS) + 1]
+	end
 
 	-- ===== Data pet =====
 	local function update(mode)
@@ -184,9 +201,12 @@ return function(ctx)
 
 							if mode == "screen" then
 								local w = bw and string.format("%.2fkg", bw * WEIGHT_MULT) or "-"
-								local t = ("<font color='%s'><b>%s</b></font> <font color='%s'>%s</font> <font color='%s'>Lv.%d</font>")
-									:format(C_NAME, tostring(pt), C_WEIGHT, w, C_LV, lv)
-								if mutTxt then t = t .. (" <font color='%s'>%s</font>"):format(C_MUT, mutTxt) end
+								local t = ('<font size="17" color="%s"><b>%s</b></font> <font size="13" color="%s">%s</font> <font size="13" color="%s">Lv.%d</font>')
+									:format(nameColor(tostring(pt)), tostring(pt), C_S_WEIGHT, w, C_S_LV, lv)
+								if mutTxt then
+									local mc = MUT_SCREEN[mutTxt] or nameColor("m" .. mutTxt)
+									t = t .. (' <font size="13" color="%s">• %s</font>'):format(mc, mutTxt)
+								end
 								rows[#rows + 1] = t
 								if #rows >= 40 then break end
 							else

@@ -2,8 +2,8 @@
      MODE "target": BillboardGui polos nempel di egg (NEBULA asli):
        - belum siap : <kuning>nama egg</> \n <oranye>m:ss</> \n <abu kecil>BW: xkg</>
        - siap       : <kuning>nama egg</> \n <putih>pet (est kg)</> \n <warna>[Size class]</>
-     MODE "screen": panel list di sisi kanan layar, satu baris per egg —
-       info muncul di layar, bukan di objek. Ready eggs paling atas.
+     MODE "screen": list plain text tanpa background di sisi kanan layar —
+        font 16, nama pet berwarna. Ready eggs paling atas.
      Size class: >=7 Titanic (merah) / >=6 Semi Titanic (oranye) / >=3 Huge (kuning)
      / sisanya Small (hijau). Isi egg dari upvalue handler PetEggService +
      scan BaseWeight di DataService:GetData. GothamBold 17, RichText.
@@ -17,6 +17,17 @@ return function(ctx)
 
 	-- Game nampilin berat = BaseWeight * 1.10 (sama kayak NEBULA).
 	local WEIGHT_MULT = 1.1
+
+	-- Nama pet di list screen dikasih warna tetap per nama (hash) — cerah,
+	-- rapih, konsisten dengan warna di ESP pet.
+	local NAME_COLORS = {
+		"#5FC3FF", "#FF8AD8", "#7CE8A4", "#B08CFF", "#5FE3D0", "#FF8A6B", "#D6FF6B",
+	}
+	local function eggNameColor(s)
+		local h = 0
+		for i = 1, #s do h = (h * 31 + string.byte(s, i)) % 100003 end
+		return NAME_COLORS[(h % #NAME_COLORS) + 1]
+	end
 
 	-- eggPets[uuid] = nama pet yang bakal menetas (upvalue handler hatch).
 	local eggPets = {}
@@ -156,7 +167,7 @@ return function(ctx)
 			listLbl.RichText = true
 			listLbl.TextXAlignment = Enum.TextXAlignment.Right
 			listLbl.TextYAlignment = Enum.TextYAlignment.Top
-			listLbl.TextSize = 13
+			listLbl.TextSize = 16
 			listLbl.TextColor3 = Color3.new(1, 1, 1)
 			listLbl.Text = ""
 			listLbl.Parent = listSg
@@ -212,13 +223,13 @@ return function(ctx)
 			if i > 40 then break end
 			local petName = eggPets[e.uuid] or "Pet"
 			if not e.ready then
-				rows[#rows + 1] = ("<font color='#FFD400'>%s</font> <font color='#FF5E00'>%s</font> <font size='9' color='#BBBBBB'>BW: %skg</font>")
+				rows[#rows + 1] = ("<font size='16' color='#FFD400'>%s</font> <font size='16' color='#FF5E00'>%s</font> <font size='13' color='#8FD9FF'>BW: %skg</font>")
 					:format(e.eggName, formatTime(e.timeLeft), tostring(e.bw))
 			else
 				local est = round(e.bw * WEIGHT_MULT, 2)
 				local size, color = getSizeInfo(est)
-				rows[#rows + 1] = ("<font color='#FFD400'>%s</font> <font color='#FFFFFF'>%s (%skg)</font> <font color='%s'>[%s]</font>")
-					:format(e.eggName, petName, tostring(est), color, size)
+				rows[#rows + 1] = ("<font size='16' color='#FFD400'>%s</font> <font size='16' color='%s'><b>%s</b></font> <font size='13' color='#FFC24D'>(%skg)</font> <font size='13' color='%s'>[%s]</font>")
+					:format(e.eggName, eggNameColor(petName), petName, tostring(est), color, size)
 			end
 		end
 
