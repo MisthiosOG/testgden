@@ -1461,6 +1461,391 @@ end
 		miniBar(hsecs, horder, hdefs, "ctrl", { { "ctrl", "teams", "eggs" }, { "sell", "bronto" } })
 	end
 
+	----------------------------------------------------------------- live status helper (dipakai Elephant & Leveling)
+	-- Paragraph tipu + loop SetDesc kala teks berubah (pola addStatus di INVENTORY
+	-- tapi generic). Cache teks terakhir biar gak bersaing dgn layout dist.
+	local function liveStatus(sec, title, getTxt, interval)
+		local stat = sec:Paragraph({ Title = title, Desc = "Loading stats..." })
+		task.spawn(function()
+			task.wait(3)
+			local last = ""
+			while ctx.alive() do
+				pcall(function()
+					local txt = getTxt()
+					if txt and txt ~= last and txt ~= "" then
+						last = txt
+						stat:SetDesc(txt)
+					end
+				end)
+				task.wait(interval or 1.5)
+			end
+		end)
+	end
+
+	----------------------------------------------------------------- TAB: ELEPHANT (V1 + V2 Swap 40)
+	local function buildElephantTab(tab)
+		local edefs = {
+			v1 = { name = "Elephant V1" },
+			v2 = { name = "Elephant V2 (Swap 40)" },
+		}
+		local eorder = { "v1", "v2" }
+		local esecs = {}
+
+		local function miniTab(id, buildFn)
+			local sec = section(tab, edefs[id].name)
+			buildFn(sec)
+			esecs[id] = sec
+		end
+
+		-- panel 1: Automation Elephant V1 (penempatan = garden Elephant V1)
+		miniTab("v1", function(sec)
+			liveStatus(sec, "Elephant V1 Status", function()
+				local ok, s = pcall(function() return ctx.getElephantSummary() end)
+				if not ok or not s then return nil end
+				local col = s.status == "ACTIVE" and "#5acc78" or "#dc5050"
+				return ("Automation Status: <font color=\"%s\"><b>%s</b></font>\n\n" ..
+					"Elephant Team: <font color=\"#8c929e\">%s</font>\n" ..
+					"Target Types: <font color=\"#f5c82d\">%s</font>\n" ..
+					"Target Pets Ready: <font color=\"#8c929e\">%s</font>\n" ..
+					"Pets at Max KG: <font color=\"#8c929e\">%s</font>\n\n" ..
+					"Max Target Pets: <font color=\"#8c929e\">%s</font>\n" ..
+					"Target Weight: <font color=\"#f5c82d\"><b>%s</b></font>")
+					:format(col, s.status, s.team, s.types, s.ready, s.maxKg, s.maxTarget, s.targetWeight)
+			end, 1.5)
+			makeMultiDynW(sec, "V1 Pet Team", "Select elephant pet team (stays in the garden)",
+				function() return ctx.inventoryPetOptions(CFG.elephantTeamUuids) end,
+				CFG.elephantTeamUuids, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.4, max = 250 })
+			makeMultiW(sec, "V1 Target Pet Types", "Select pet types to auto-elephant (all pets in game)",
+				reg.PET_OPTIONS, CFG.elephantPetTypes, function() persist() end,
+				{ fillDelay = 0.8 })
+			makeInputW(sec, "Target Weight (KG)", "Max weight before being replaced (e.g. 5.5)",
+				function() return CFG.elephantTargetWeight end,
+				function(t) CFG.elephantTargetWeight = tonumber(t) or 5.5 end)
+			makeInputW(sec, "Max Target Pets", "How many target pets are active at once",
+				function() return CFG.elephantMaxPets end,
+				function(t) CFG.elephantMaxPets = math.max(1, math.floor(tonumber(t) or 2)) end)
+			makeToggleW(sec, "Enable Automation Elephant",
+				"Rotate target pets automatically. OFF = removes all target pets from the garden.",
+				function() return CFG.elephantEnabled end,
+				function(v)
+					CFG.elephantEnabled = v; persist()
+					if v then
+						if ctx.startElephant then pcall(function() ctx.startElephant() end) end
+					else
+						if ctx.stopElephant then pcall(function() ctx.stopElephant() end) end
+					end
+				end)
+			addRefresh(sec)
+		end)
+
+		-- panel 2: Automation Elephant V2 (swap gajah di trigger level)
+		miniTab("v2", function(sec)
+			liveStatus(sec, "Elephant V2 Status", function()
+				local ok, s = pcall(function() return ctx.getElephantV2Summary() end)
+				if not ok or not s then return nil end
+				local col = s.status == "ACTIVE" and "#5acc78" or "#dc5050"
+				return ("Automation Status: <font color=\"%s\"><b>%s</b></font>  |  <font color=\"#f5c82d\">%s</font>\n\n" ..
+					"Elephant Team: <font color=\"#8c929e\">%s</font>\n" ..
+					"Target Types: <font color=\"#f5c82d\">%s</font>\n" ..
+					"Target Pets Ready: <font color=\"#8c929e\">%s</font>\n" ..
+					"Pets at Max KG: <font color=\"#8c929e\">%s</font>\n" ..
+					"Max Target Pets: <font color=\"#8c929e\">%s</font>  |  Target Weight: <font color=\"#f5c82d\"><b>%s</b></font>\n\n" ..
+					"Gajah: <font color=\"#8c929e\">%s</font>\n" ..
+					"Switch: <font color=\"#8c929e\">%s</font>\n" ..
+					"Gajah masuk saat target Age >= <font color=\"#f5c82d\"><b>%s</b></font>")
+					:format(col, s.status, tostring(s.info), s.team, s.types, s.ready, s.maxKg,
+						s.maxTarget, s.targetWeight, s.gajah, s.switch, s.level)
+			end, 1.5)
+			makeMultiDynW(sec, "V2 Elephant Team", "Team standing by in the garden (source of the Pet Switch choice)",
+				function() return ctx.inventoryPetOptions(CFG.elephantV2Team) end,
+				CFG.elephantV2Team, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.6, max = 250 })
+			makeMultiW(sec, "V2 Target Pet Types", "Select pet types to auto-level + elephant (all pets in game)",
+				reg.PET_OPTIONS, CFG.elephantV2Types, function() persist() end,
+				{ fillDelay = 1.0 })
+			makeSingleW(sec, "Gajah Pet (Slot 1)", "The elephant sent in when a target reaches the trigger level",
+				function() return ctx.elephantV2GajahOptions() end,
+				function() return CFG.elephantV2Gajah end,
+				function(uuid) CFG.elephantV2Gajah = uuid end,
+				{ fillDelay = 1.2 })
+			makeSingleW(sec, "Pet Switch (Slot 2)", "Pet from the Team that the Gajah replaces (usually Capy)",
+				function() return ctx.elephantV2SwitchOptions() end,
+				function() return CFG.elephantV2Switch end,
+				function(uuid) CFG.elephantV2Switch = uuid end,
+				{ fillDelay = 1.4 })
+			makeInputW(sec, "Target Weight (KG)", "Max weight of a target before being released (e.g. 5.5)",
+				function() return CFG.elephantV2Weight end,
+				function(t) CFG.elephantV2Weight = tonumber(t) or 5.5 end)
+			makeInputW(sec, "Max Target Pets", "How many target pets are active at once in the garden",
+				function() return CFG.elephantV2MaxPets end,
+				function(t) CFG.elephantV2MaxPets = math.max(1, math.floor(tonumber(t) or 3)) end)
+			makeInputW(sec, "Trigger Level", "Target level to send the Gajah in (default 40)",
+				function() return CFG.elephantV2Level end,
+				function(t) CFG.elephantV2Level = math.floor(tonumber(t) or 40) end)
+			makeToggleW(sec, "Enable Elephant V2",
+				"Rotate targets + auto-swap the Gajah at the trigger level. Runs together with PNP.",
+				function() return CFG.elephantV2Enabled end,
+				function(v)
+					CFG.elephantV2Enabled = v; persist()
+					if v then
+						if ctx.startElephantV2 then pcall(function() ctx.startElephantV2() end) end
+					else
+						if ctx.stopElephantV2 then pcall(function() ctx.stopElephantV2() end) end
+					end
+				end)
+			addRefresh(sec)
+		end)
+
+		miniBar(esecs, eorder, edefs, "v1")
+	end
+
+	----------------------------------------------------------------- TAB: FLOW (growth pipeline)
+	local function buildFlowTab(tab)
+		local fdefs = {
+			flow     = { name = "Flow Config" },
+			elephant = { name = "Elephant" },
+			mut      = { name = "Mutation" },
+			level    = { name = "Leveling" },
+		}
+		local forder = { "flow", "elephant", "mut", "level" }
+		local fsecs = {}
+
+		local function miniTab(id, buildFn)
+			local sec = section(tab, fdefs[id].name)
+			buildFn(sec)
+			fsecs[id] = sec
+		end
+
+		-- panel 1: Flow Config (Controls & Targets + Configuration Flow)
+		miniTab("flow", function(sec)
+			makeMultiW(sec, "Flow Target Pet Types (Default)",
+				"Default targets; used by any step whose own target types are empty",
+				reg.PET_OPTIONS, CFG.growthPetTypes, function() persist() end,
+				{ fillDelay = 0.4 })
+			-- Step 1..6 pipeline — penempatan sama garden, opsi None/Elephant/
+			-- Mutation/Leveling/P1/P2.
+			local FLOW_OPTS = {
+				{ name = "none",         display = "None (empty)" },
+				{ name = "elephant",     display = "Elephant" },
+				{ name = "mutation",     display = "Mutation" },
+				{ name = "leveling",     display = "Leveling" },
+				{ name = "leveling_p1",  display = "Leveling Phase 1" },
+				{ name = "leveling_p2",  display = "Leveling Phase 2" },
+			}
+			local function capStep(s)
+				for _, o in ipairs(FLOW_OPTS) do
+					if o.name == s then return o.display end
+				end
+				return "Select"
+			end
+			local stepDesc = {
+				"First step in pipeline flow", "Second step in pipeline flow",
+				"Third step in pipeline flow", "Fourth step in pipeline flow",
+				"Fifth step in pipeline flow", "Sixth step in pipeline flow",
+			}
+			for i = 1, 6 do
+				makeSingleW(sec, "Step " .. i, stepDesc[i],
+					function() return FLOW_OPTS end,
+					function() return capStep((CFG.growthFlow or {})[i]) end,
+					function(code)
+						CFG.growthFlow = CFG.growthFlow or {}
+						CFG.growthFlow[i] = code
+						persist()
+					end)
+			end
+			makeToggleW(sec, "Enable Automation Growth (Flow)", "Runs the step pipeline above in order.",
+				function() return CFG.growthEnabled end,
+				function(v)
+					CFG.growthEnabled = v; persist()
+					if v then
+						if ctx.startGrowth then pcall(function() ctx.startGrowth() end) end
+					else
+						if ctx.stopGrowth then pcall(function() ctx.stopGrowth() end) end
+					end
+				end)
+		end)
+
+		-- panel 2: step Elephant
+		miniTab("elephant", function(sec)
+			makeMultiW(sec, "Elephant Target Pet Types", "Targets for the Elephant step (empty = use Default)",
+				reg.PET_OPTIONS, CFG.growthPetTypesElephant, function() persist() end,
+				{ fillDelay = 0.6 })
+			makeMultiDynW(sec, "Elephant Pet Team", "Aura team used to grow weight",
+				function() return ctx.inventoryPetOptions(CFG.growthElephantTeam) end,
+				CFG.growthElephantTeam, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.8, max = 250 })
+			makeInputW(sec, "Target Weight (KG)", "Target weight before moving to the next step (e.g. 5.5)",
+				function() return CFG.growthElephantWeight end,
+				function(t) CFG.growthElephantWeight = tonumber(t) or 5.5 end)
+			makeInputW(sec, "Max Target Pets", "Max target pets in the garden (Elephant step)",
+				function() return CFG.growthElephantMax end,
+				function(t) CFG.growthElephantMax = math.max(1, math.floor(tonumber(t) or 2)) end)
+			addRefresh(sec)
+		end)
+
+		-- panel 3: step Mutation
+		miniTab("mut", function(sec)
+			makeMultiW(sec, "Mutation Target Pet Types", "Targets for the Mutation step (empty = use Default)",
+				reg.PET_OPTIONS, CFG.growthPetTypesMutation, function() persist() end,
+				{ fillDelay = 0.6 })
+			makeMultiDynW(sec, "Mutation Pet Team", "Aura team that gives mutations",
+				function() return ctx.inventoryPetOptions(CFG.growthMutationTeam) end,
+				CFG.growthMutationTeam, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.8, max = 250 })
+			makeMultiW(sec, "Target Mutations", "Desired mutations (wrong mutations get auto cleansed)",
+				reg.MUT_OPTIONS, CFG.growthMutationTargets, function() persist() end,
+				{ fillDelay = 1.0 })
+			makeInputW(sec, "Max Target Pets", "Max target pets in the garden (Mutation step)",
+				function() return CFG.growthMutationMax end,
+				function(t) CFG.growthMutationMax = math.max(1, math.floor(tonumber(t) or 2)) end)
+			addRefresh(sec)
+		end)
+
+		-- panel 4: step Leveling
+		miniTab("level", function(sec)
+			makeMultiW(sec, "Leveling Target Pet Types", "Targets for the Leveling step (empty = use Default)",
+				reg.PET_OPTIONS, CFG.growthPetTypesLeveling, function() persist() end,
+				{ fillDelay = 0.6 })
+			makeMultiDynW(sec, "Leveling Phase 1 Pet Team", "Team for Phase 1 (Age 1 to Phase 1 Target)",
+				function() return ctx.inventoryPetOptions(CFG.growthLevP1Team) end,
+				CFG.growthLevP1Team, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.8, max = 250 })
+			makeInputW(sec, "Leveling Phase 1 Target", "End of Phase 1 / start of Phase 2 (default 40)",
+				function() return CFG.growthLevP1Target end,
+				function(t) CFG.growthLevP1Target = math.floor(tonumber(t) or 40) end)
+			makeInputW(sec, "Leveling Phase 1 Max Pets", "Max target pets in garden during Phase 1",
+				function() return CFG.growthLevP1Max end,
+				function(t) CFG.growthLevP1Max = math.max(1, math.floor(tonumber(t) or 3)) end)
+			makeMultiDynW(sec, "Leveling Phase 2 Pet Team", "Team for Phase 2 (Phase 1 Target to Final Target)",
+				function() return ctx.inventoryPetOptions(CFG.growthLevP2Team) end,
+				CFG.growthLevP2Team, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 1.0, max = 250 })
+			makeInputW(sec, "Leveling Phase 2 Target", "Final target level (default 500 = max age)",
+				function() return CFG.growthLevP2Target end,
+				function(t) CFG.growthLevP2Target = math.floor(tonumber(t) or 500) end)
+			makeInputW(sec, "Leveling Phase 2 Max Pets", "Max target pets in garden during Phase 2",
+				function() return CFG.growthLevP2Max end,
+				function(t) CFG.growthLevP2Max = math.max(1, math.floor(tonumber(t) or 1)) end)
+			addRefresh(sec)
+		end)
+
+		miniBar(fsecs, forder, fdefs, "flow", { { "flow", "elephant" }, { "mut", "level" } })
+	end
+
+	----------------------------------------------------------------- TAB: LEVELING (V1 + V2 2-phase)
+	local function buildLevelingTab(tab)
+		local ldefs = {
+			v1 = { name = "Leveling V1" },
+			v2 = { name = "Leveling V2" },
+		}
+		local lorder = { "v1", "v2" }
+		local lsecs = {}
+
+		local function miniTab(id, buildFn)
+			local sec = section(tab, ldefs[id].name)
+			buildFn(sec)
+			lsecs[id] = sec
+		end
+
+		-- panel 1: Automation Leveling V1
+		miniTab("v1", function(sec)
+			liveStatus(sec, "Leveling V1 Status", function()
+				local ok, s = pcall(function() return ctx.getLevelingSummary() end)
+				if not ok or not s then return nil end
+				local col = s.status == "ACTIVE" and "#5acc78" or "#dc5050"
+				return ("Automation Status: <font color=\"%s\"><b>%s</b></font>\n\n" ..
+					"<b>Current Settings:</b>\n" ..
+					"Pet Team: <font color=\"#8c929e\">%s</font>\n" ..
+					"Target Types: <font color=\"#f5c82d\">%s</font>\n" ..
+					"Pets Ready to Level: <font color=\"#8c929e\">%s</font>\n" ..
+					"Pets at Max Level: <font color=\"#8c929e\">%s</font>\n" ..
+					"Max in Garden: <font color=\"#8c929e\">%s</font>\n\n" ..
+					"Target Level: <font color=\"#f5c82d\"><b>%s</b></font>\n\n" ..
+					"Ready: Settings configured")
+					:format(col, s.status, s.team, s.types, s.ready, s.maxLvl, s.maxInGarden, s.targetLevel)
+			end, 1.5)
+			makeMultiDynW(sec, "Leveling Pet Team", "Select pets to keep in the garden while leveling",
+				function() return ctx.inventoryPetOptions(CFG.levelingTeamUuids) end,
+				CFG.levelingTeamUuids, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.4, max = 250 })
+			makeMultiW(sec, "Leveling Pet Types", "Select pet types to auto-level (all pets in game)",
+				reg.PET_OPTIONS, CFG.levelingPetTypes, function() persist() end,
+				{ fillDelay = 0.8 })
+			makeInputW(sec, "Target Level", "Target level to reach before un-equipping",
+				function() return CFG.levelingTargetLevel end,
+				function(t) CFG.levelingTargetLevel = math.floor(tonumber(t) or 500) end)
+			makeInputW(sec, "Max Pets in Garden", "Maximum active leveling pets allowed in the garden",
+				function() return CFG.levelingMaxPets end,
+				function(t) CFG.levelingMaxPets = math.max(1, math.floor(tonumber(t) or 2)) end)
+			makeToggleW(sec, "Enable Automation Leveling", "Equips and rotates pets automatically based on the settings above.",
+				function() return CFG.levelingEnabled end,
+				function(v)
+					CFG.levelingEnabled = v; persist()
+					if v then
+						if ctx.startLeveling then pcall(function() ctx.startLeveling() end) end
+					else
+						if ctx.stopLeveling then pcall(function() ctx.stopLeveling() end) end
+					end
+				end)
+			addRefresh(sec)
+		end)
+
+		-- panel 2: Automation Leveling V2 (2 fase)
+		miniTab("v2", function(sec)
+			liveStatus(sec, "Leveling V2 Status", function()
+				local ok, s = pcall(function() return ctx.getLevelingV2Summary() end)
+				if not ok or not s then return nil end
+				local col = s.status == "ACTIVE" and "#5acc78" or "#dc5050"
+				return ("Automation Status: <font color=\"%s\"><b>%s</b></font>  |  <font color=\"#f5c82d\">%s</font>\n\n" ..
+					"<b>Target Types:</b> <font color=\"#8c929e\">%s</font>\n\n" ..
+					"<b>Phase 1</b> (->%s): team <font color=\"#8c929e\">%s</font> | queued <font color=\"#f5c82d\">%s</font> pet\n" ..
+					"<b>Phase 2</b> (->%s): team <font color=\"#8c929e\">%s</font> | queued <font color=\"#f5c82d\">%s</font> pet\n" ..
+					"<b>Pet at Max Level:</b> <font color=\"#5acc78\">%s</font> pet")
+					:format(col, s.status, tostring(s.phase), tostring(s.types),
+						tostring(s.p1target), tostring(s.p1team), tostring(s.p1queue),
+						tostring(s.p2target), tostring(s.p2team), tostring(s.p2queue),
+						tostring(s.maxLvl or 0))
+			end, 1.5)
+			makeMultiW(sec, "Leveling Target Pet Types", "Pet types to level up (all pets in game)",
+				reg.PET_OPTIONS, CFG.levelingV2PetTypes, function() persist() end,
+				{ fillDelay = 0.6 })
+			makeMultiDynW(sec, "Leveling Phase 1 Pet Team", "Team for Phase 1 (Age 1 to Phase 1 Target)",
+				function() return ctx.inventoryPetOptions(CFG.levelingV2P1Team) end,
+				CFG.levelingV2P1Team, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.8, max = 250 })
+			makeInputW(sec, "Leveling Phase 1 Target", "End of Phase 1 / start of Phase 2 (default 40)",
+				function() return CFG.levelingV2P1Target end,
+				function(t) CFG.levelingV2P1Target = math.floor(tonumber(t) or 40) end)
+			makeInputW(sec, "Leveling Phase 1 Max Pets", "Max target pets in garden during Phase 1",
+				function() return CFG.levelingV2P1Max end,
+				function(t) CFG.levelingV2P1Max = math.max(1, math.floor(tonumber(t) or 3)) end)
+			makeMultiDynW(sec, "Leveling Phase 2 Pet Team", "Team for Phase 2 (Phase 1 Target to Final Target)",
+				function() return ctx.inventoryPetOptions(CFG.levelingV2P2Team) end,
+				CFG.levelingV2P2Team, function() persist() end,
+				{ register = true, cacheKey = "inv_pets", fillDelay = 1.0, max = 250 })
+			makeInputW(sec, "Leveling Phase 2 Target", "Final target level (default 500 = max age)",
+				function() return CFG.levelingV2P2Target end,
+				function(t) CFG.levelingV2P2Target = math.floor(tonumber(t) or 500) end)
+			makeInputW(sec, "Leveling Phase 2 Max Pets", "Max target pets in garden during Phase 2",
+				function() return CFG.levelingV2P2Max end,
+				function(t) CFG.levelingV2P2Max = math.max(1, math.floor(tonumber(t) or 1)) end)
+			makeToggleW(sec, "Enable Automation Leveling V2", "Levels pets in 2 stages (Phase 1 team -> Phase 2 team).",
+				function() return CFG.levelingV2Enabled end,
+				function(v)
+					CFG.levelingV2Enabled = v; persist()
+					if v then
+						if ctx.startLevelingV2 then pcall(function() ctx.startLevelingV2() end) end
+					else
+						if ctx.stopLevelingV2 then pcall(function() ctx.stopLevelingV2() end) end
+					end
+				end)
+			addRefresh(sec)
+		end)
+
+		miniBar(lsecs, lorder, ldefs, "v1")
+	end
+
 	----------------------------------------------------------------- TAB: SETTINGS
 	local function buildSettingsTab(tab)
 		local sec = section(tab, "General")
@@ -1678,8 +2063,11 @@ end
 		Inventory = buildInventoryTab,
 		Farm = buildFarmTab,
 		Hatch = buildHatchTab,
+		Elephant = buildElephantTab,
+		Flow = buildFlowTab,
+		Leveling = buildLevelingTab,
 		Settings = buildSettingsTab,
-		-- berikutnya: Misc, Elephant, Flow, Leveling, Mutation, Shop (satu per satu)
+		-- berikutnya: Misc, Mutation, Shop (satu per satu)
 	}
 
 	local TABS = {
@@ -1745,5 +2133,5 @@ end
 	----------------------------------------------------------------- default tab (pilot)
 	pcall(function() if first and first.Select then first:Select() end end)
 
-	ctx.log("WindUI pages dibangun: Pet, Inventory, Farm, Hatch, Settings + placeholder sisanya.")
+	ctx.log("WindUI pages dibangun: Pet, Inventory, Farm, Hatch, Elephant, Flow, Leveling, Settings + placeholder sisanya.")
 end
