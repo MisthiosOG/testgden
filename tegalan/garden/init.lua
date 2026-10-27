@@ -190,7 +190,7 @@ local MODULES = {
 	"modules/misc/perf_mods.lua",
 	"modules/misc/automation_reconnect.lua",
 	"ui/window.lua",
-	"ui/pages_wind.lua",
+	"ui/pages.lua",
 	"app.lua",
 }
 

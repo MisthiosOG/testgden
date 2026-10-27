@@ -69,7 +69,7 @@ return function(ctx)
     local uiBuildOps = 0
     local function yieldUiBuild()
         uiBuildOps += 1
-        if uiBuildOps % 20 == 0 then task.wait() end
+        if uiBuildOps % 5 == 0 then task.wait() end
     end
     local tabIcons = {
         Pet = "paw-print", Farm = "wheat", Hatch = "egg",
@@ -111,7 +111,9 @@ return function(ctx)
     end
 
     local function makePage(name, title, icon)
-        local tab = tabs[name] or window:Tab({ Title = title or name, Icon = icon or tabIcons[name] })
+        -- Ignore emoji icons from pages.lua; WindUI resolves lucide names only,
+        -- unknown names trigger remote icon fetches that stall window build.
+        local tab = tabs[name] or window:Tab({ Title = title or name, Icon = tabIcons[name] })
         tabs[name] = tab
         local page = { __windTab = tab, Visible = false }
         ctx.ui.pages[name] = page
@@ -125,9 +127,11 @@ return function(ctx)
 
     local function makeAccordion(parent, title)
         local tab = parentTab(parent)
-        -- Keep accordion semantics lightweight during migration. WindUI's tab
-        -- is the visual container; legacy body frames remain hidden adapters.
-        return tab
+        -- Return a page-style wrapper (not the raw tab) so nested accordions
+        -- and mk() calls resolve through __windTab instead of falling back
+        -- to tabs.Misc. Legacy open/close states degrade to a flat list of
+        -- controls on the owning sub-tab, preserving creation order.
+        return { __windTab = tab, Visible = false }
     end
 
     local function makeToggle(parent, title, desc, getValue, setValue)
