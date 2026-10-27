@@ -66,6 +66,11 @@ return function(ctx)
     end
 
     local tabs = {}
+    local uiBuildOps = 0
+    local function yieldUiBuild()
+        uiBuildOps += 1
+        if uiBuildOps % 20 == 0 then task.wait() end
+    end
     local tabIcons = {
         Pet = "paw-print", Farm = "wheat", Hatch = "egg",
         Elephant = "rabbit", Flow = "git-branch", Leveling = "zap",
@@ -120,14 +125,13 @@ return function(ctx)
 
     local function makeAccordion(parent, title)
         local tab = parentTab(parent)
-        if tab.Section then
-            local ok, section = pcall(function() return tab:Section({ Title = title }) end)
-            if ok and section then return section end
-        end
+        -- Keep accordion semantics lightweight during migration. WindUI's tab
+        -- is the visual container; legacy body frames remain hidden adapters.
         return tab
     end
 
     local function makeToggle(parent, title, desc, getValue, setValue)
+        yieldUiBuild()
         local tab = parentTab(parent)
         local control = tab:Toggle({
             Title = title,
@@ -146,6 +150,7 @@ return function(ctx)
     end
 
     local function makeInput(parent, title, desc, getValue, setValue)
+        yieldUiBuild()
         local tab = parentTab(parent)
         return tab:Input({
             Title = title,
@@ -158,6 +163,7 @@ return function(ctx)
     end
 
     local function makeSingleDropdown(parent, title, desc, getOptions, getValue, setValue)
+        yieldUiBuild()
         local tab = parentTab(parent)
         local options = type(getOptions) == "function" and getOptions() or {}
         local displayToCode = {}
@@ -182,6 +188,7 @@ return function(ctx)
     end
 
     local function makeMultiDropdown(parent, title, desc, options, selected, onChange)
+        yieldUiBuild()
         local tab = parentTab(parent)
         local values, displayToValue = {}, {}
         for _, option in ipairs(options or {}) do
@@ -206,6 +213,7 @@ return function(ctx)
     end
 
     local function makeMultiDropdownDyn(parent, title, desc, getOptions, selected, onChange)
+        yieldUiBuild()
         local tab = parentTab(parent)
         local values = type(getOptions) == "function" and getOptions() or {}
         local displayToValue = {}
@@ -233,6 +241,7 @@ return function(ctx)
     end
 
     local function makeButton(parent, title, desc, callback)
+        yieldUiBuild()
         return parentTab(parent):Button({ Title = title, Desc = desc, Callback = callback })
     end
 
