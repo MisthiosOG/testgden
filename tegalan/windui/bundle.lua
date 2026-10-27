@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T14:26:08.085Z
+-- 42 modul, di-generate 2026-10-27T14:29:46.031Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -10840,21 +10840,29 @@ return function(ctx)
 		-- Parent = parent card sections (ContainerFrame, padding halaman sama) ->
 		-- lebar bar PERSIS selebar cards. SortOrder kontainer = LayoutOrder + semua
 		-- element WindUI LayoutOrder 0 -> -1000 dipastikan row pertama.
+		-- Warna dari theme WindUI langsung (GetThemes), fallback konstanta Dark.
+		-- JANGAN baca Outline.BackgroundColor3: konstanta theme "Outline" = #FFFFFF,
+		-- ThemeTag-nya belum di-apply pas tab dibangun -> bar nyala putih.
 		local container = secs.v1.ElementFrame.Parent
-		local card = (function()
-			local ok, c = pcall(function() return secs.v1.ElementFrame.Outline.BackgroundColor3 end)
-			if ok and c then return c end
-			return Color3.fromRGB(26, 26, 26)
-		end)()
-		local activeBg = card:Lerp(Color3.new(1, 1, 1), 0.12)
-		local restBg = card:Lerp(Color3.new(1, 1, 1), 0.04)
+		local lib = W.windui
+		local okTheme, cur = pcall(function()
+			local th = lib and lib.GetThemes and lib:GetThemes() or nil
+			local name = lib and lib.GetCurrentTheme and lib:GetCurrentTheme() or nil
+			return th and name and th[name] or nil
+		end)
+		local bgc = (okTheme and cur and cur.Background) or Color3.fromRGB(16, 16, 16)
+		local elc = (okTheme and cur and cur.ElementBackground) or Color3.fromRGB(42, 42, 44)
+		local txth = (okTheme and cur and cur.Placeholder) or Color3.fromRGB(161, 161, 170)
+		local pillBg = bgc:Lerp(elc, 0.30)
+		local activeBg = elc:Lerp(Color3.new(1, 1, 1), 0.10)
 
 		local bar = Instance.new("Frame")
 		bar.Name = "PetMiniTabs"
 		bar.LayoutOrder = -1000
 		bar.Size = UDim2.new(1, 0, 0, 40)
-		bar.BackgroundTransparency = 1
+		bar.BackgroundColor3 = pillBg
 		bar.Parent = container
+		Instance.new("UICorner", bar).CornerRadius = UDim.new(0, 10)
 
 		local row = Instance.new("UIListLayout")
 		row.FillDirection = Enum.FillDirection.Horizontal
@@ -10866,9 +10874,9 @@ return function(ctx)
 		local btns = {}
 		local function paint(id, on)
 			local b = btns[id]
-			b.BackgroundColor3 = on and activeBg or restBg
-			b.BackgroundTransparency = on and 0 or 0.25
-			b.TextColor3 = on and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(165, 165, 165)
+			b.BackgroundColor3 = activeBg
+			b.BackgroundTransparency = on and 0 or 1
+			b.TextColor3 = on and ((cur and cur.Text) or Color3.fromRGB(255, 255, 255)) or txth
 		end
 
 		for i, id in ipairs(ORDER) do
