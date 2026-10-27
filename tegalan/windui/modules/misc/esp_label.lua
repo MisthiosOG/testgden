@@ -1,10 +1,9 @@
---[[ esp.lua — label melayang (BillboardGui) di dunia 3D di atas tiap egg.
-     Egg: nama egg + ISI-nya (pet yang bakal menetas + berat) dari
-          SaveSlots.AllSlots.<slot>.SavedObjects.<uuid>.Data (Type/BaseWeight),
-          fallback sisa waktu hatch / READY.
+--[[ esp_label.lua — ESP PET: label melayang (BillboardGui) di dunia 3D di atas
+     tiap pet fisik (nama + berat + level + mutasi).
+     ESP EGG SUDAH TERPISAH: modules/misc/esp_egg.lua (style NEBULA, toggle
+     CFG.espEggEnabled sendiri — biar gak nyampur).
      Toggle: CFG.espEnabled. ]]
 return function(ctx)
-	local RS = game:GetService("ReplicatedStorage")
 	local LP = ctx.LP
 	local DataService = ctx.deps.DataService
 
@@ -13,7 +12,6 @@ return function(ctx)
 
 	local bbFolder
 	local billboards = {} -- key -> { gui, lbl }
-	local eggSlotKey  -- cache slot aktif yg nyimpen SavedObjects
 
 	local function ensureFolder()
 		if bbFolder and bbFolder.Parent then return bbFolder end
@@ -95,75 +93,10 @@ return function(ctx)
 		return rec
 	end
 
-	local function fmtTime(sec)
-		sec = math.max(0, math.floor(sec))
-		local m = math.floor(sec / 60)
-		local s = sec % 60
-		if m >= 60 then local h = math.floor(m / 60); m = m % 60; return string.format("%dh %dm", h, m) end
-		return string.format("%dm %02ds", m, s)
-	end
-
-	-- Data isi egg (pet yg bakal menetas + berat) dari SavedObjects by uuid.
-	local function eggDataOf(uuid)
-		if not uuid then return nil end
-		local ok, d = pcall(function() return DataService:GetData() end)
-		local slots = ok and d and d.SaveSlots and d.SaveSlots.AllSlots
-		if not slots then return nil end
-		-- coba slot yg di-cache dulu
-		local s = eggSlotKey and slots[eggSlotKey]
-		if s and s.SavedObjects and s.SavedObjects[uuid] then return s.SavedObjects[uuid].Data end
-		-- scan semua slot
-		for sn, slot in pairs(slots) do
-			if type(slot) == "table" and slot.SavedObjects and slot.SavedObjects[uuid] then
-				eggSlotKey = sn
-				return slot.SavedObjects[uuid].Data
-			end
-		end
-		return nil
-	end
-
-	local function eggNameFallback(e)
-		local n = e:GetAttribute("EggName")
-		if not n or n == "" then
-			for _, c in ipairs(e:GetChildren()) do if c:IsA("Model") then n = c.Name; break end end
-		end
-		return n or "Egg"
-	end
-
 	local function update()
 		local seen = {}
 
-		-- ===== EGG (nama + isi: pet + berat) =====
-		local farm; pcall(function() farm = require(RS.Modules.GetFarm)(LP) end)
-		if farm then
-			for _, e in ipairs(farm:GetDescendants()) do
-				if e:IsA("Model") and e.Name == "PetEgg" and e:GetAttribute("OWNER") == LP.Name then
-					local adornee = e:FindFirstChild("PetEgg") or partOf(e)
-					if adornee then
-						local uuid = e:GetAttribute("OBJECT_UUID")
-						local key = "egg_" .. tostring(uuid or e:GetDebugId())
-						seen[key] = true
-						local rec = acquire(key, adornee, 3)
-						local data = eggDataOf(uuid)
-						local lines = { ("<font color='#FF87CD'><b>🥚 %s</b></font>"):format(eggNameFallback(e)) }
-						if data and data.Type then
-							lines[#lines + 1] = ("<font color='#FF3791'>%s</font>"):format(tostring(data.Type))
-							local w = tonumber(data.BaseWeight)
-							if w then lines[#lines + 1] = ("<font color='#FFD7F0'>%.2f KG</font>"):format(w * WEIGHT_MULT) end
-						end
-						local t = tonumber(e:GetAttribute("TimeToHatch")) or (data and tonumber(data.TimeToHatch)) or 0
-						if t > 0 then
-							lines[#lines + 1] = ("<font color='#FFB4CD'>⏱ %s</font>"):format(fmtTime(t))
-						elseif not (data and data.Type) then
-							lines[#lines + 1] = "<font color='#6EF5B9'><b>READY</b></font>"
-						end
-						rec.lbl.Text = table.concat(lines, "\n")
-					end
-				end
-			end
-		end
-
-		-- ===== PET (nama + berat + lv) =====
+		-- ===== PET (nama + berat + lv) — ESP egg di modul terpisah =====
 		local okData, d = pcall(function() return DataService:GetData() end)
 		local inv = okData and d and d.PetsData and d.PetsData.PetInventory and d.PetsData.PetInventory.Data or {}
 		local pp = workspace:FindFirstChild("PetsPhysical")

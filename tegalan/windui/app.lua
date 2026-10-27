@@ -75,6 +75,10 @@ return function(ctx)
 		ctx.startEsp()
 		ctx.log("Auto-resume: ESP Label ON.")
 	end
+	if CFG.espEggEnabled and ctx.startEspEgg then
+		ctx.startEspEgg()
+		ctx.log("Auto-resume: ESP Egg ON.")
+	end
 	if CFG.espInvEnabled and ctx.startEspInv then
 		ctx.startEspInv()
 		ctx.log("Auto-resume: ESP Base Weight (Inventory) ON.")

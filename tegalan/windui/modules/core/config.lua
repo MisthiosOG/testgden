@@ -106,7 +106,8 @@ return function(ctx)
 		pnpV2EquipDelay  = 0.03,
 		pnpV2ScanInterval = 0.05,
 		pnpV2Enabled     = false,
-		espEnabled  = false, -- label melayang (ESP) pet+egg di dunia
+		espEnabled  = false, -- ESP Label pet (label melayang di dunia)
+		espEggEnabled = false, -- ESP Egg (style NEBULA) — terpisah dari ESP pet
 		espInvEnabled = false, -- ESP base weight di tiap slot pet inventory
 		espInvMode  = "age",   -- tampilan ESP inv: "age" (base+age) / "max" (base+max@500)
 		noclipEnabled    = false, -- Player: tembus tembok
@@ -494,6 +495,7 @@ return function(ctx)
 			CFG.pnpV2ScanInterval = tonumber(st.pnpV2ScanInterval) or 0.05
 			CFG.pnpV2Enabled     = st.pnpV2Enabled or false
 			CFG.espEnabled = st.espEnabled or false
+			CFG.espEggEnabled = st.espEggEnabled or false
 			CFG.espInvEnabled = st.espInvEnabled or false
 			CFG.espInvMode = st.espInvMode or "age"
 			CFG.noclipEnabled = st.noclipEnabled or false

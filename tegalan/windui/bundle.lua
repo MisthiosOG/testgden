@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T21:49:42.292Z
+-- 43 modul, di-generate 2026-10-27T21:57:49.163Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -79,6 +79,10 @@ return function(ctx)
 	if CFG.espEnabled and ctx.startEsp then
 		ctx.startEsp()
 		ctx.log("Auto-resume: ESP Label ON.")
+	end
+	if CFG.espEggEnabled and ctx.startEspEgg then
+		ctx.startEspEgg()
+		ctx.log("Auto-resume: ESP Egg ON.")
 	end
 	if CFG.espInvEnabled and ctx.startEspInv then
 		ctx.startEspInv()
@@ -362,7 +366,8 @@ return function(ctx)
 		pnpV2EquipDelay  = 0.03,
 		pnpV2ScanInterval = 0.05,
 		pnpV2Enabled     = false,
-		espEnabled  = false, -- label melayang (ESP) pet+egg di dunia
+		espEnabled  = false, -- ESP Label pet (label melayang di dunia)
+		espEggEnabled = false, -- ESP Egg (style NEBULA) — terpisah dari ESP pet
 		espInvEnabled = false, -- ESP base weight di tiap slot pet inventory
 		espInvMode  = "age",   -- tampilan ESP inv: "age" (base+age) / "max" (base+max@500)
 		noclipEnabled    = false, -- Player: tembus tembok
@@ -750,6 +755,7 @@ return function(ctx)
 			CFG.pnpV2ScanInterval = tonumber(st.pnpV2ScanInterval) or 0.05
 			CFG.pnpV2Enabled     = st.pnpV2Enabled or false
 			CFG.espEnabled = st.espEnabled or false
+			CFG.espEggEnabled = st.espEggEnabled or false
 			CFG.espInvEnabled = st.espInvEnabled or false
 			CFG.espInvMode = st.espInvMode or "age"
 			CFG.noclipEnabled = st.noclipEnabled or false
@@ -8105,6 +8111,195 @@ return function(ctx)
 	ctx.reconnect = doReconnect
 end
 ]=],
+	["modules/misc/esp_egg.lua"] = [=[
+--[[ esp_egg.lua — NEBULA-style Egg ESP (milik Sam, dipotret 1:1).
+     Label melayang di tiap egg MILIK SENDIRI (CollectionService tag
+     "PetEggServer" + OWNER attr):
+       - belum siap : <kuning>nama egg</> \n <oranye>m:ss</> \n <abu kecil>BW: xkg</>
+       - siap       : <kuning>nama egg</> \n <putih>pet (est kg)</> \n <warna>[Size class]</>
+     Size class: >=7 Titanic (merah) / >=6 Semi Titanic (oranye) / >=3 Huge (kuning)
+     / sisanya Small (hijau). Isi egg (pet yg bakal menetas + BW) dari upvalue
+     handler PetEggService.OnClientEvent + scan BaseWeight di DataService:GetData.
+     Style: BillboardGui polos (tanpa kartu/emoji), GothamBold 17, RichText.
+     Toggle: CFG.espEggEnabled — TERPISAH dari ESP pet (espEnabled). ]]
+return function(ctx)
+	local RS = game:GetService("ReplicatedStorage")
+	local CS = game:GetService("CollectionService")
+	local LP = ctx.LP
+	local DataService = ctx.deps.DataService
+
+	-- Game nampilin berat = BaseWeight * 1.10 (sama kayak NEBULA).
+	local WEIGHT_MULT = 1.1
+
+	-- eggPets[uuid] = nama pet yang bakal menetas (upvalue handler hatch).
+	local eggPets = {}
+	-- Cache BaseWeight per uuid (scan data game — NEBULA buildBW).
+	local bwCache = {}
+
+	local function updateEggPets()
+		pcall(function()
+			local remote = RS.GameEvents:FindFirstChild("PetEggService")
+			if not remote then return end
+			local con = getconnections(remote.OnClientEvent)[1]
+			if not con or not con.Function then return end
+			local hatchFunc = getupvalue(getupvalue(con.Function, 1), 2)
+			eggPets = getupvalue(hatchFunc, 2) or {}
+		end)
+	end
+
+	local function buildBW()
+		pcall(function()
+			local ok, d = pcall(function() return DataService:GetData() end)
+			if not ok or not d then return end
+			local function scan(t)
+				for k, v in pairs(t) do
+					if type(v) == "table" then
+						if v.Data and v.Data.BaseWeight then
+							bwCache[tostring(k)] = v.Data.BaseWeight
+						else
+							scan(v)
+						end
+					end
+				end
+			end
+			scan(d)
+		end)
+	end
+
+	local function getBW(uuid)
+		if not bwCache[uuid] then buildBW() end
+		return bwCache[uuid]
+	end
+
+	local function round(n, d)
+		local m = 10 ^ (d or 2)
+		return math.floor(n * m + 0.5) / m
+	end
+
+	local function formatTime(sec)
+		sec = math.max(0, math.floor(sec or 0))
+		return string.format("%d:%02d", math.floor(sec / 60), sec % 60)
+	end
+
+	local function getSizeInfo(kg)
+		if kg >= 7 then return "Titanic", "#FF2A2A"
+		elseif kg >= 6 then return "Semi Titanic", "#FF8C00"
+		elseif kg >= 3 then return "Huge", "#FFD400"
+		elseif kg >= 0 then return "Small", "#3CFF3C"
+		end
+		return "Unknown", "#FFFFFF"
+	end
+
+	-- makeESP: Billboard 220x90 nutup 3.5 stud, GothamBold 17, stroke solid,
+	-- tanpa background/emoji — 1:1 dengan NEBULA. Text cuma di-update kalo beda.
+	local function makeESP(obj, text)
+		local part = obj:FindFirstChildWhichIsA("BasePart", true)
+		if not part then return end
+
+		local gui = obj:FindFirstChild("EggESP_UI")
+		if not gui then
+			gui = Instance.new("BillboardGui")
+			gui.Name = "EggESP_UI"
+			gui.Adornee = part
+			gui.Size = UDim2.fromOffset(220, 90)
+			gui.StudsOffset = Vector3.new(0, 3.5, 0)
+			gui.AlwaysOnTop = true
+
+			local lbl = Instance.new("TextLabel", gui)
+			lbl.Name = "Text"
+			lbl.Size = UDim2.fromScale(1, 1)
+			lbl.BackgroundTransparency = 1
+			lbl.RichText = true
+			lbl.TextSize = 17
+			lbl.Font = Enum.Font.GothamBold
+			lbl.TextColor3 = Color3.new(1, 1, 1)
+			lbl.TextStrokeTransparency = 0
+
+			gui.Parent = obj
+		end
+
+		if gui.Text.Text ~= text then
+			gui.Text.Text = text
+		end
+	end
+
+	local function clearAll()
+		for _, egg in ipairs(CS:GetTagged("PetEggServer")) do
+			pcall(function()
+				local g = egg:FindFirstChild("EggESP_UI")
+				if g then g:Destroy() end
+			end)
+		end
+	end
+
+	local lastMeta = 0
+	local function update()
+		local now = os.clock()
+		-- Refresh metadata egg/BW tiap 3s (murah, yang tiap-tick cuma teks).
+		if now - lastMeta >= 3 then
+			lastMeta = now
+			updateEggPets()
+			buildBW()
+		end
+		for _, egg in ipairs(CS:GetTagged("PetEggServer")) do
+			if egg:GetAttribute("OWNER") ~= LP.Name then continue end
+			if not (egg:GetAttribute("READY") or tonumber(egg:GetAttribute("TimeToHatch"))) then continue end
+
+			local uuid = tostring(egg:GetAttribute("OBJECT_UUID"))
+			local bw = getBW(uuid)
+			if not bw then continue end
+
+			local eggName = egg:GetAttribute("EggName") or egg.Name
+			local petName = eggPets[uuid] or "Pet"
+			local ready = egg:GetAttribute("READY")
+			local timeLeft = egg:GetAttribute("TimeToHatch")
+
+			local text
+			if not ready then
+				text = string.format(
+					'<font color="#FFD400">%s</font>\n<font color="#FF5E00">%s</font>\n<font size="12" color="#BBBBBB">BW: %skg</font>',
+					eggName,
+					formatTime(timeLeft),
+					tostring(bw)
+				)
+			else
+				local est = round(bw * WEIGHT_MULT, 2)
+				local size, color = getSizeInfo(est)
+				text = string.format(
+					'<font color="#FFD400">%s</font>\n<font color="#FFFFFF">%s (%skg)</font>\n<font color="%s">[%s]</font>',
+					eggName,
+					petName,
+					tostring(est),
+					color,
+					size
+				)
+			end
+
+			makeESP(egg, text)
+		end
+	end
+
+	local loopId = 0
+	function ctx.startEspEgg()
+		loopId = loopId + 1
+		local my = loopId
+		task.spawn(function()
+			updateEggPets()
+			buildBW()
+			while ctx.alive() and ctx.CFG.espEggEnabled and loopId == my do
+				pcall(update)
+				task.wait(0.5)
+			end
+			clearAll()
+		end)
+	end
+
+	function ctx.stopEspEgg()
+		loopId = loopId + 1
+		clearAll()
+	end
+end
+]=],
 	["modules/misc/esp_inventory.lua"] = [=[
 --[[ esp_inventory.lua — ESP Base Weight di INVENTORY (Pet Items).
      Nempel label kecil "Base X.XX KG" di tiap slot pet di backpack GUI,
@@ -8268,13 +8463,12 @@ return function(ctx)
 end
 ]=],
 	["modules/misc/esp_label.lua"] = [=[
---[[ esp.lua — label melayang (BillboardGui) di dunia 3D di atas tiap egg.
-     Egg: nama egg + ISI-nya (pet yang bakal menetas + berat) dari
-          SaveSlots.AllSlots.<slot>.SavedObjects.<uuid>.Data (Type/BaseWeight),
-          fallback sisa waktu hatch / READY.
+--[[ esp_label.lua — ESP PET: label melayang (BillboardGui) di dunia 3D di atas
+     tiap pet fisik (nama + berat + level + mutasi).
+     ESP EGG SUDAH TERPISAH: modules/misc/esp_egg.lua (style NEBULA, toggle
+     CFG.espEggEnabled sendiri — biar gak nyampur).
      Toggle: CFG.espEnabled. ]]
 return function(ctx)
-	local RS = game:GetService("ReplicatedStorage")
 	local LP = ctx.LP
 	local DataService = ctx.deps.DataService
 
@@ -8283,7 +8477,6 @@ return function(ctx)
 
 	local bbFolder
 	local billboards = {} -- key -> { gui, lbl }
-	local eggSlotKey  -- cache slot aktif yg nyimpen SavedObjects
 
 	local function ensureFolder()
 		if bbFolder and bbFolder.Parent then return bbFolder end
@@ -8365,75 +8558,10 @@ return function(ctx)
 		return rec
 	end
 
-	local function fmtTime(sec)
-		sec = math.max(0, math.floor(sec))
-		local m = math.floor(sec / 60)
-		local s = sec % 60
-		if m >= 60 then local h = math.floor(m / 60); m = m % 60; return string.format("%dh %dm", h, m) end
-		return string.format("%dm %02ds", m, s)
-	end
-
-	-- Data isi egg (pet yg bakal menetas + berat) dari SavedObjects by uuid.
-	local function eggDataOf(uuid)
-		if not uuid then return nil end
-		local ok, d = pcall(function() return DataService:GetData() end)
-		local slots = ok and d and d.SaveSlots and d.SaveSlots.AllSlots
-		if not slots then return nil end
-		-- coba slot yg di-cache dulu
-		local s = eggSlotKey and slots[eggSlotKey]
-		if s and s.SavedObjects and s.SavedObjects[uuid] then return s.SavedObjects[uuid].Data end
-		-- scan semua slot
-		for sn, slot in pairs(slots) do
-			if type(slot) == "table" and slot.SavedObjects and slot.SavedObjects[uuid] then
-				eggSlotKey = sn
-				return slot.SavedObjects[uuid].Data
-			end
-		end
-		return nil
-	end
-
-	local function eggNameFallback(e)
-		local n = e:GetAttribute("EggName")
-		if not n or n == "" then
-			for _, c in ipairs(e:GetChildren()) do if c:IsA("Model") then n = c.Name; break end end
-		end
-		return n or "Egg"
-	end
-
 	local function update()
 		local seen = {}
 
-		-- ===== EGG (nama + isi: pet + berat) =====
-		local farm; pcall(function() farm = require(RS.Modules.GetFarm)(LP) end)
-		if farm then
-			for _, e in ipairs(farm:GetDescendants()) do
-				if e:IsA("Model") and e.Name == "PetEgg" and e:GetAttribute("OWNER") == LP.Name then
-					local adornee = e:FindFirstChild("PetEgg") or partOf(e)
-					if adornee then
-						local uuid = e:GetAttribute("OBJECT_UUID")
-						local key = "egg_" .. tostring(uuid or e:GetDebugId())
-						seen[key] = true
-						local rec = acquire(key, adornee, 3)
-						local data = eggDataOf(uuid)
-						local lines = { ("<font color='#FF87CD'><b>🥚 %s</b></font>"):format(eggNameFallback(e)) }
-						if data and data.Type then
-							lines[#lines + 1] = ("<font color='#FF3791'>%s</font>"):format(tostring(data.Type))
-							local w = tonumber(data.BaseWeight)
-							if w then lines[#lines + 1] = ("<font color='#FFD7F0'>%.2f KG</font>"):format(w * WEIGHT_MULT) end
-						end
-						local t = tonumber(e:GetAttribute("TimeToHatch")) or (data and tonumber(data.TimeToHatch)) or 0
-						if t > 0 then
-							lines[#lines + 1] = ("<font color='#FFB4CD'>⏱ %s</font>"):format(fmtTime(t))
-						elseif not (data and data.Type) then
-							lines[#lines + 1] = "<font color='#6EF5B9'><b>READY</b></font>"
-						end
-						rec.lbl.Text = table.concat(lines, "\n")
-					end
-				end
-			end
-		end
-
-		-- ===== PET (nama + berat + lv) =====
+		-- ===== PET (nama + berat + lv) — ESP egg di modul terpisah =====
 		local okData, d = pcall(function() return DataService:GetData() end)
 		local inv = okData and d and d.PetsData and d.PetsData.PetInventory and d.PetsData.PetInventory.Data or {}
 		local pp = workspace:FindFirstChild("PetsPhysical")
@@ -13189,7 +13317,7 @@ end
 					if ctx.setInfJump then pcall(function() ctx.setInfJump(v) end) end
 					persist()
 				end)
-			makeToggleW(sec, "Enable ESP Label", "Floating labels above pets (name+weight) & eggs (name+hatch time)",
+			makeToggleW(sec, "Enable ESP Label", "Floating labels above pets (name + weight + level + mutation)",
 				function() return CFG.espEnabled end,
 				function(v)
 					CFG.espEnabled = v; persist()
@@ -13197,6 +13325,16 @@ end
 						if ctx.startEsp then pcall(function() ctx.startEsp() end) end
 					elseif ctx.stopEsp then
 						pcall(function() ctx.stopEsp() end)
+					end
+				end)
+			makeToggleW(sec, "Enable ESP Egg", "NEBULA-style floating egg info (egg name, hatch timer/Base Weight or hatched pet + size class). Separate from pet ESP.",
+				function() return CFG.espEggEnabled end,
+				function(v)
+					CFG.espEggEnabled = v; persist()
+					if v then
+						if ctx.startEspEgg then pcall(function() ctx.startEspEgg() end) end
+					elseif ctx.stopEspEgg then
+						pcall(function() ctx.stopEspEgg() end)
 					end
 				end)
 			makeToggleW(sec, "Enable ESP Base Weight", "Shows the Base Weight on every pet slot when opening the inventory",

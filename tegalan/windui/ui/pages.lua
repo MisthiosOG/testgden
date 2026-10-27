@@ -2209,7 +2209,7 @@ end
 					if ctx.setInfJump then pcall(function() ctx.setInfJump(v) end) end
 					persist()
 				end)
-			makeToggleW(sec, "Enable ESP Label", "Floating labels above pets (name+weight) & eggs (name+hatch time)",
+			makeToggleW(sec, "Enable ESP Label", "Floating labels above pets (name + weight + level + mutation)",
 				function() return CFG.espEnabled end,
 				function(v)
 					CFG.espEnabled = v; persist()
@@ -2217,6 +2217,16 @@ end
 						if ctx.startEsp then pcall(function() ctx.startEsp() end) end
 					elseif ctx.stopEsp then
 						pcall(function() ctx.stopEsp() end)
+					end
+				end)
+			makeToggleW(sec, "Enable ESP Egg", "NEBULA-style floating egg info (egg name, hatch timer/Base Weight or hatched pet + size class). Separate from pet ESP.",
+				function() return CFG.espEggEnabled end,
+				function(v)
+					CFG.espEggEnabled = v; persist()
+					if v then
+						if ctx.startEspEgg then pcall(function() ctx.startEspEgg() end) end
+					elseif ctx.stopEspEgg then
+						pcall(function() ctx.stopEspEgg() end)
 					end
 				end)
 			makeToggleW(sec, "Enable ESP Base Weight", "Shows the Base Weight on every pet slot when opening the inventory",
