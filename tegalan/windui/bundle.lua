@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T18:11:05.203Z
+-- 42 modul, di-generate 2026-10-27T18:18:01.367Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -12308,10 +12308,18 @@ return function(ctx)
 	ctx.ui.tabBtns = {}
 
 	ctx.state.isAlive = true
+	-- Tag versi terlihat: biar langsung ketahuan build mana yang beneran jalan
+	-- (kalau tag masih "rev main"/"beta" -> executor jalanin snippet lama).
+	local revTag = (getgenv and getgenv().GAG_REVISION) or _G.GAG_REVISION
+	if type(revTag) == "string" and #revTag > 8 then
+		revTag = revTag:sub(1, 7)
+	else
+		revTag = "main"
+	end
 	pcall(function()
 		window:Tag({
-			Title = "windui-beta",
-			Icon = "solar:info-circle-bold",
+			Title = "rev " .. revTag,
+			Icon = "solar:rocket-bold",
 		})
 	end)
 

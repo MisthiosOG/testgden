@@ -58,10 +58,18 @@ return function(ctx)
 	ctx.ui.tabBtns = {}
 
 	ctx.state.isAlive = true
+	-- Tag versi terlihat: biar langsung ketahuan build mana yang beneran jalan
+	-- (kalau tag masih "rev main"/"beta" -> executor jalanin snippet lama).
+	local revTag = (getgenv and getgenv().GAG_REVISION) or _G.GAG_REVISION
+	if type(revTag) == "string" and #revTag > 8 then
+		revTag = revTag:sub(1, 7)
+	else
+		revTag = "main"
+	end
 	pcall(function()
 		window:Tag({
-			Title = "windui-beta",
-			Icon = "solar:info-circle-bold",
+			Title = "rev " .. revTag,
+			Icon = "solar:rocket-bold",
 		})
 	end)
 
