@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T14:55:53.275Z
+-- 42 modul, di-generate 2026-10-27T15:03:15.306Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -10927,18 +10927,26 @@ return function(ctx)
 			btns[id].Activated:Connect(function() selectPanel(id) end)
 		end
 
-		-- Re-pin ukuran section: pin dist bisa ke-frozen dari snapshot konten
-		-- belum lengkap (kotak panel kepotong pas di tengah). Open(true) =
-		-- pin ulang instan ke Top.Y+Content.Y+10, tanpa tween. Defer+delay biar
-		-- jalan SETELAH minimal satu pass layout/render.
-		local function repin()
+		-- Ukuran section dist dipin manual (Open/Close = snapshot Top+Contentpx).
+		-- Kalau pin kebaca sebelum layout jalan -> pin kecil -> konten ter-clip
+		-- (panel "kosong", kasus V1/V2). Matikan mode expandable + force auto-size:
+		-- section selalu sebesar konten, Open/Close dist jadi no-op permanen.
+		local function unlockSize()
 			for _, id in ipairs(ORDER) do
 				local s = secs[id]
-				if s and s.Open then pcall(function() s:Open(true) end) end
+				local ef = s and s.ElementFrame
+				if ef and ef:FindFirstChild("Outline") then
+					s.Expandable = false
+					pcall(function()
+						ef.AutomaticSize = Enum.AutomaticSize.Y
+						ef.Size = UDim2.new(1, 0, 0, 0)
+						ef.Outline.Content.Visible = true
+					end)
+				end
 			end
 		end
-		task.defer(repin)
-		task.delay(0.15, repin)
+		task.defer(unlockSize)
+		task.delay(0.15, unlockSize)
 
 		selectPanel("v1")
 	end
