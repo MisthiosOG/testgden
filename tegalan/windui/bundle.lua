@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 42 modul, di-generate 2026-10-27T21:46:12.646Z
+-- 42 modul, di-generate 2026-10-27T21:49:42.292Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -11141,15 +11141,10 @@ return function(ctx)
 		end)
 	end
 
-	-- Anti-freeze klik: dropdown dgn list ratusan baris dibangunnya di background
-	-- SETELAH window jadi (dijadwal serial via queueRebuild), bukan pas klik
-	-- pertama pemain ("mencet pet target elephant freeze lama"). nextPrebuild()
-	-- kasih slot jadwal berurutan biar gak tabrak barengan.
-	local prebuildIdx = 0
-	local function nextPrebuild()
-		prebuildIdx = prebuildIdx + 1
-		return 2.5 + prebuildIdx * 0.7
-	end
+	-- ponytail: prebuild rows di background pernah dicoba (anti-freeze klik) —
+	-- DIBATALK: ribuan row instance hidup = FPS drop parah. Kembali lazy: click
+	-- pertama ngehitch sekali (0.5-2s), sisanya instan & FPS aman. Upgrade path =
+	-- list virtualisasi per-row di level library.
 
 	-- Lazy open: dist ngebind klik ke <menuTabel>:Open() (bukan selalu table
 	-- yang kitaa hold) -> hook dipasang di KEDUA sink: menu.Open & control.Open.
@@ -11236,12 +11231,6 @@ return function(ctx)
 		-- baris menyusul di thread sendiri). ponytail: open pertama list besar
 		-- masih ngehitch — upgrade path = list virtualisasi.
 		lazyOpen(control, fill)
-		-- Prebuild di background (lihat komentar nextPrebuild).
-		if opts.prebuild then
-			task.delay(opts.prebuild, function()
-				queueRebuild(fill)
-			end)
-		end
 		local function refresh()
 			queueRebuild(function() pcall(fill) end)
 		end
@@ -11380,12 +11369,6 @@ return function(ctx)
 			if pending then buildRows(pending) end
 		end
 		lazyOpen(control, fill)
-		-- Prebuild di background (lihat komentar nextPrebuild).
-		if opts.prebuild then
-			task.delay(math.max(opts.prebuild, 1.2), function()
-				queueRebuild(fill)
-			end)
-		end
 		local function refresh()
 			-- Tombol "Update Pet List": rebuild penuh (aksi eksplisit user);
 			-- via queueRebuild -> antar dropdown serial, gak freeze barengan.
@@ -11451,12 +11434,6 @@ return function(ctx)
 			end
 		end
 		lazyOpen(control, fill)
-		-- Prebuild di background (lihat komentar nextPrebuild).
-		if opts.prebuild then
-			task.delay(opts.prebuild, function()
-				queueRebuild(fill)
-			end)
-		end
 		return control
 	end
 
@@ -12524,10 +12501,10 @@ end
 			makeMultiDynW(sec, "V1 Pet Team", "Select elephant pet team (stays in the garden)",
 				function() return ctx.inventoryPetOptions(CFG.elephantTeamUuids) end,
 				CFG.elephantTeamUuids, function() persist() end,
-				{ register = true, cacheKey = "inv_pets", fillDelay = 0.4, max = 250, prebuild = nextPrebuild() })
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.4, max = 250 })
 			makeMultiW(sec, "V1 Target Pet Types", "Select pet types to auto-elephant (all pets in game)",
 				reg.PET_OPTIONS, CFG.elephantPetTypes, function() persist() end,
-				{ fillDelay = 0.8, prebuild = nextPrebuild() })
+				{ fillDelay = 0.8 })
 			makeInputW(sec, "Target Weight (KG)", "Max weight before being replaced (e.g. 5.5)",
 				function() return CFG.elephantTargetWeight end,
 				function(t) CFG.elephantTargetWeight = tonumber(t) or 5.5 end)
@@ -12569,20 +12546,20 @@ end
 			makeMultiDynW(sec, "V2 Elephant Team", "Team standing by in the garden (source of the Pet Switch choice)",
 				function() return ctx.inventoryPetOptions(CFG.elephantV2Team) end,
 				CFG.elephantV2Team, function() persist() end,
-				{ register = true, cacheKey = "inv_pets", fillDelay = 0.6, max = 250, prebuild = nextPrebuild() })
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.6, max = 250 })
 			makeMultiW(sec, "V2 Target Pet Types", "Select pet types to auto-level + elephant (all pets in game)",
 				reg.PET_OPTIONS, CFG.elephantV2Types, function() persist() end,
-				{ fillDelay = 1.0, prebuild = nextPrebuild() })
+				{ fillDelay = 1.0 })
 			makeSingleW(sec, "Elephant Pet (Slot 1)", "The elephant sent in when a target reaches the trigger level",
 				function() return ctx.elephantV2GajahOptions() end,
 				function() return CFG.elephantV2Gajah end,
 				function(uuid) CFG.elephantV2Gajah = uuid end,
-				{ fillDelay = 1.2, prebuild = nextPrebuild() })
+				{ fillDelay = 1.2 })
 			makeSingleW(sec, "Pet Switch (Slot 2)", "Pet from the Team that the Elephant replaces (usually Capy)",
 				function() return ctx.elephantV2SwitchOptions() end,
 				function() return CFG.elephantV2Switch end,
 				function(uuid) CFG.elephantV2Switch = uuid end,
-				{ fillDelay = 1.4, prebuild = nextPrebuild() })
+				{ fillDelay = 1.4 })
 			makeInputW(sec, "Target Weight (KG)", "Max weight of a target before being released (e.g. 5.5)",
 				function() return CFG.elephantV2Weight end,
 				function(t) CFG.elephantV2Weight = tonumber(t) or 5.5 end)
@@ -12894,21 +12871,21 @@ end
 			makeMultiDynW(sec, "EXP Team (Leveling)", "Pets for leveling the target to age 50/500",
 				function() return ctx.inventoryPetOptions(CFG.mutationExpTeam) end,
 				CFG.mutationExpTeam, function() persist() end,
-				{ register = true, cacheKey = "inv_pets", fillDelay = 0.4, max = 250, prebuild = nextPrebuild() })
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.4, max = 250 })
 			makeMultiDynW(sec, "Boost Team (Machine)", "Pets for boosting the mutation machine speed",
 				function() return ctx.inventoryPetOptions(CFG.mutationBoostTeam) end,
 				CFG.mutationBoostTeam, function() persist() end,
-				{ register = true, cacheKey = "inv_pets", fillDelay = 0.6, max = 250, prebuild = nextPrebuild() })
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.6, max = 250 })
 			makeMultiDynW(sec, "Phoenix Team (Claim)", "Pets for claiming the mutated pet",
 				function() return ctx.inventoryPetOptions(CFG.mutationPhoenixTeam) end,
 				CFG.mutationPhoenixTeam, function() persist() end,
-				{ register = true, cacheKey = "inv_pets", fillDelay = 0.8, max = 250, prebuild = nextPrebuild() })
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.8, max = 250 })
 			makeMultiW(sec, "Target Pet Types", "Pet types to mutate (all pets in game)",
 				reg.PET_OPTIONS, CFG.mutationTargetTypes, function() persist() end,
-				{ fillDelay = 1.0, prebuild = nextPrebuild() })
+				{ fillDelay = 1.0 })
 			makeMultiW(sec, "Target Mutations (Machine)", "Stop when the pet gets these mutations (machine mutations only)",
 				reg.MACHINE_MUT_OPTIONS or reg.MUT_OPTIONS, CFG.mutationTargetMutations, function() persist() end,
-				{ fillDelay = 1.2, prebuild = nextPrebuild() })
+				{ fillDelay = 1.2 })
 			makeInputW(sec, "Target Age", "Level to reach before submitting (e.g. 50 or 500)",
 				function() return CFG.mutationTargetAge end,
 				function(t) CFG.mutationTargetAge = math.floor(tonumber(t) or 50) end)
@@ -12956,13 +12933,13 @@ end
 			makeMultiDynW(sec, "Pet Team for Mutation", "Mutation aura pets (stay in the garden)",
 				function() return ctx.inventoryPetOptions(CFG.cleanseTeamUuids) end,
 				CFG.cleanseTeamUuids, function() persist() end,
-				{ register = true, cacheKey = "inv_pets", fillDelay = 0.6, max = 250, prebuild = nextPrebuild() })
+				{ register = true, cacheKey = "inv_pets", fillDelay = 0.6, max = 250 })
 			makeMultiW(sec, "Pet Types for Mutation", "Target pet types to mutate (all pets in game)",
 				reg.PET_OPTIONS, CFG.cleansePetTypes, function() persist() end,
-				{ fillDelay = 0.8, prebuild = nextPrebuild() })
+				{ fillDelay = 0.8 })
 			makeMultiW(sec, "Mutations to Keep", "These mutations are kept (won't be cleansed)",
 				reg.MUT_OPTIONS, CFG.cleanseKeepMutations, function() persist() end,
-				{ fillDelay = 1.0, prebuild = nextPrebuild() })
+				{ fillDelay = 1.0 })
 			makeInputW(sec, "Max Pets in Garden", "Max target pets in the garden at once",
 				function() return CFG.cleanseMaxPets end,
 				function(t) CFG.cleanseMaxPets = math.max(1, math.floor(tonumber(t) or 2)) end)
@@ -13005,7 +12982,7 @@ end
 			makeMultiDynW(sec, "Select Seeds to Buy", "Pick seeds to auto-buy (live stock)",
 				function() return ctx.getSeedShopOptions(CFG.buySeedNames) end,
 				CFG.buySeedNames, function() persist() end,
-				{ register = true, cacheKey = "shop_seed", fillDelay = 0.4, prebuild = nextPrebuild() })
+				{ register = true, cacheKey = "shop_seed", fillDelay = 0.4 })
 			makeToggleW(sec, "Enable Automation Buy Seed", "Auto-buys the selected seeds whenever they are in stock.",
 				function() return CFG.buySeedEnabled end,
 				function(v)
@@ -13018,7 +12995,7 @@ end
 			makeMultiDynW(sec, "Select Eggs to Buy", "Pick eggs to auto-buy (live stock)",
 				function() return ctx.getEggShopOptions(CFG.buyEggNames) end,
 				CFG.buyEggNames, function() persist() end,
-				{ register = true, cacheKey = "shop_egg", fillDelay = 0.6, prebuild = nextPrebuild() })
+				{ register = true, cacheKey = "shop_egg", fillDelay = 0.6 })
 			makeToggleW(sec, "Enable Automation Buy Egg", "Auto-buys the selected eggs whenever they are in stock.",
 				function() return CFG.buyEggEnabled end,
 				function(v)
@@ -13031,7 +13008,7 @@ end
 			makeMultiDynW(sec, "Select Gear to Buy", "Pick gear to auto-buy (live stock)",
 				function() return ctx.getGearShopOptions(CFG.buyGearNames) end,
 				CFG.buyGearNames, function() persist() end,
-				{ register = true, cacheKey = "shop_gear", fillDelay = 0.8, prebuild = nextPrebuild() })
+				{ register = true, cacheKey = "shop_gear", fillDelay = 0.8 })
 			makeToggleW(sec, "Enable Automation Buy Gear", "Auto-buys the selected gear whenever it is in stock.",
 				function() return CFG.buyGearEnabled end,
 				function(v)
@@ -13091,7 +13068,7 @@ end
 						("Items from %s%s. 'All' = everything."):format(mtitle, (kind == "travel") and " merchant" or ""),
 						function() return ctx.getMerchantItemOptions(id) end,
 						ctx.merchantSelFor(id), function() persist() end,
-						{ register = true, cacheKey = "merch_" .. tostring(id), fillDelay = 0.5, prebuild = nextPrebuild() })
+						{ register = true, cacheKey = "merch_" .. tostring(id), fillDelay = 0.5 })
 				end
 			end)
 			makeToggleW(sec, "Auto Buy Merchant", "Buys the selected items (merchant & event shop) whenever they appear / restock",
