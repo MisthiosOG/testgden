@@ -3,7 +3,8 @@
      Remote: Plant_RE:FireServer(Vector3 pos, "SeedName")
      Seed & jumlah dari DataService InventoryData (ItemType="Seed", ItemData.ItemName/Quantity).
      WAJIB megang tool seed-nya pas Plant_RE -> equip ulang tiap mau tanam (kayak reclaimer).
-     Posisi: Random (titik acak di Can_Plant) / Player Position (posisi karakter).
+     Posisi: Random / Player Position / God Position (barisan lurus, skip
+     posisi terisi biar server nggak geser tanaman ke kolom sebelah).
      Fungsi: ctx.getPlantSeedOptions / ctx.startPlant. ]]
 return function(ctx)
 	local LP  = ctx.LP
@@ -93,30 +94,59 @@ return function(ctx)
 	-- lisih tengah part Can_Plant (Z tetap), X maju GOD_STEP tiap tanam;
 	-- mentok ujung -> pindah baris baru (Z += GOD_STEP) -> barisan lurus
 	-- beraturan, bukan acak. Cursor dipertahankan antar siklus.
+	-- PENTING: minta posisi yang udah keisi = server GESESER plant ke cell
+	-- sebelah sendiri (dgn sendirinya jadi kolom kedua paralel). Makanya tiap
+	-- kandidat dicek dulu ke plant yang ada; kena -> cursor maju sendiri.
 	local GOD_STEP = 2.5
+	local GOD_TAKE_R = GOD_STEP - 0.1 -- < step, biar tetangga sebaris g lolos
 	local godCursor = { part = nil, x = 0, row = 0 }
+	local function godSpots(pf) -- posisi (X,Z) semua plant, sekali per tanam
+		local out = {}
+		if not pf then return out end
+		for _, m in ipairs(pf:GetChildren()) do
+			local ok, pv = pcall(function() return m:GetPivot().Position end)
+			if ok and pv then out[#out + 1] = { pv.X, pv.Z } end
+		end
+		return out
+	end
+	local function godTaken(spots, x, z)
+		for _, s in ipairs(spots) do
+			if math.abs(s[1] - x) < GOD_TAKE_R and math.abs(s[2] - z) < GOD_TAKE_R then
+				return true
+			end
+		end
+		return false
+	end
 	local function godPos()
 		local parts = canPlantParts()
 		if #parts == 0 then godCursor = { part = nil, x = 0, row = 0 }; return nil end
 		local p = parts[1]
-		if godCursor.part ~= p then godCursor = { part = p, x = 0, row = 0 } end
 		local halfX = p.Size.X / 2 - 0.75
 		local halfZ = p.Size.Z / 2 - 1
+		local spots = godSpots(plantsFolder())
 		local startX = p.Position.X - halfX + GOD_STEP
-		local x = startX + godCursor.x * GOD_STEP
-		if x > p.Position.X + halfX then -- baris penuh -> turun ke baris baru
-			godCursor.x = 0
-			godCursor.row = godCursor.row + 1
-			x = startX
+		for _ = 1, 800 do -- sweep capped; habis semua = lahan beneran keblokir
+			if godCursor.part ~= p then godCursor = { part = p, x = 0, row = 0 } end
+			local x = startX + godCursor.x * GOD_STEP
+			if x > p.Position.X + halfX then -- baris penuh -> turun ke baris baru
+				godCursor.x = 0
+				godCursor.row = godCursor.row + 1
+				x = startX
+			end
+			local z = p.Position.Z - halfZ + godCursor.row * GOD_STEP
+			if z > p.Position.Z + halfZ then -- lahan penuh -> mulai lagi dari baris 1
+				godCursor.row = 0
+				godCursor.x = 0
+				z = p.Position.Z - halfZ
+			end
+			godCursor.x = godCursor.x + 1
+			godCursor.part = p
+			if not godTaken(spots, x, z) then
+				return Vector3.new(x, p.Position.Y, z)
+			end
+			-- spot keisi -> cursor udah maju, coba kandidat berikutnya
 		end
-		local z = p.Position.Z - halfZ + godCursor.row * GOD_STEP
-		if z > p.Position.Z + halfZ then -- lahan penuh -> mulai lagi dari baris 1
-			godCursor.row = 0
-			godCursor.x = 0
-			z = p.Position.Z - halfZ
-		end
-		godCursor.x = godCursor.x + 1
-		return Vector3.new(x, p.Position.Y, z)
+		return nil -- semua spot keblokir (tanaman raksasa/dll); coba tik depan
 	end
 
 	----------------------------------------------------------------- ack tanam
@@ -127,8 +157,11 @@ return function(ctx)
 	-- muncul (ack, max 2.5s) baru lanjut. Ini bikin God Position lurus di
 	-- SEMUA nilai delay (0 pun bisa, kecepatan = secepat server nyatet);
 	-- delay user tetap jadi gap tambahan di atas ack.
-	-- ponytail: kalau masih ada yang tampak acak, verifikasi per-tanam (cocokkan
-	-- posisi plant baru dgn posisi request, tanam ulang kalau meleset).
+	-- ponytail: God Position udah skip spot terisi (radius GOD_TAKE_R, cek
+	-- pivot semua plant). Celah yang tersisa: tanaman RAKSASA badannya nutup
+	-- cell sebelah tapi pivotnya jauh -> lolos cek. Upgrade kalau kejadian:
+	-- verifikasi per-tanam (cocokkan pivot plant baru dgn request, shovel +
+	-- tanam ulang kalau meleset).
 	local function plantSet(pf)
 		local set = {}
 		for _, m in ipairs(pf:GetChildren()) do
