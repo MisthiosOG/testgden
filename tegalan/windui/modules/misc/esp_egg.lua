@@ -2,7 +2,7 @@
      MODE "target": BillboardGui polos nempel di egg (NEBULA asli):
        - belum siap : <kuning>nama egg</> \n <oranye>m:ss</> \n <abu kecil>BW: xkg</>
        - siap       : <kuning>nama egg</> \n <putih>pet (est kg)</> \n <warna>[Size class]</>
-     MODE "screen": list plain text tanpa background di sisi KIRI TENGAH —
+     MODE "screen": list plain text tanpa background di sisi KANAN TENGAH —
         font 16 bold + outline hitam, nama pet berwarna. Ready eggs paling atas.
      Size class: >=7 Titanic (merah) / >=6 Semi Titanic (oranye) / >=3 Huge (kuning)
      / sisanya Small (hijau). Isi egg dari upvalue handler PetEggService +
@@ -158,14 +158,15 @@ return function(ctx)
 			listSg.Parent = (gethui and gethui()) or game:GetService("CoreGui")
 
 			listLbl = Instance.new("TextLabel")
-			listLbl.AnchorPoint = Vector2.new(0, 0.5)
-			listLbl.Position = UDim2.new(0, 14, 0.5, 0)
+			-- Sisi KANAN TENGAH (sama dengan renderer shared di esp_label).
+			listLbl.AnchorPoint = Vector2.new(1, 0.5)
+			listLbl.Position = UDim2.new(1, -14, 0.5, 0)
 			listLbl.Size = UDim2.new(0, 480, 0, 0)
 			listLbl.AutomaticSize = Enum.AutomaticSize.Y
 			listLbl.BackgroundTransparency = 1
 			listLbl.Font = Enum.Font.GothamBold
 			listLbl.RichText = true
-			listLbl.TextXAlignment = Enum.TextXAlignment.Left
+			listLbl.TextXAlignment = Enum.TextXAlignment.Right
 			listLbl.TextYAlignment = Enum.TextYAlignment.Top
 			listLbl.TextSize = 16
 			listLbl.TextColor3 = Color3.new(1, 1, 1)

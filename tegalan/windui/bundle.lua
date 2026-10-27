@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 43 modul, di-generate 2026-10-27T22:27:36.951Z
+-- 43 modul, di-generate 2026-10-27T22:34:02.850Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -8120,7 +8120,7 @@ end
      MODE "target": BillboardGui polos nempel di egg (NEBULA asli):
        - belum siap : <kuning>nama egg</> \n <oranye>m:ss</> \n <abu kecil>BW: xkg</>
        - siap       : <kuning>nama egg</> \n <putih>pet (est kg)</> \n <warna>[Size class]</>
-     MODE "screen": list plain text tanpa background di sisi KIRI TENGAH —
+     MODE "screen": list plain text tanpa background di sisi KANAN TENGAH —
         font 16 bold + outline hitam, nama pet berwarna. Ready eggs paling atas.
      Size class: >=7 Titanic (merah) / >=6 Semi Titanic (oranye) / >=3 Huge (kuning)
      / sisanya Small (hijau). Isi egg dari upvalue handler PetEggService +
@@ -8276,14 +8276,15 @@ return function(ctx)
 			listSg.Parent = (gethui and gethui()) or game:GetService("CoreGui")
 
 			listLbl = Instance.new("TextLabel")
-			listLbl.AnchorPoint = Vector2.new(0, 0.5)
-			listLbl.Position = UDim2.new(0, 14, 0.5, 0)
+			-- Sisi KANAN TENGAH (sama dengan renderer shared di esp_label).
+			listLbl.AnchorPoint = Vector2.new(1, 0.5)
+			listLbl.Position = UDim2.new(1, -14, 0.5, 0)
 			listLbl.Size = UDim2.new(0, 480, 0, 0)
 			listLbl.AutomaticSize = Enum.AutomaticSize.Y
 			listLbl.BackgroundTransparency = 1
 			listLbl.Font = Enum.Font.GothamBold
 			listLbl.RichText = true
-			listLbl.TextXAlignment = Enum.TextXAlignment.Left
+			listLbl.TextXAlignment = Enum.TextXAlignment.Right
 			listLbl.TextYAlignment = Enum.TextYAlignment.Top
 			listLbl.TextSize = 16
 			listLbl.TextColor3 = Color3.new(1, 1, 1)
@@ -8588,12 +8589,14 @@ end
 --[[ esp_label.lua — ESP PET dengan 2 mode:
      target : label BillboardGui nempel di atas tiap pet di dunia (klasik).
      screen : PLAIN TEXT list di layar (tanpa background/frame) — per baris:
-              nama + berat + level + mutasi.
+              nama + berat + level + cd skill ("15s | 10m" / "READY").
      Shared screen renderer: modul ini (load pertama) yang owns gui list
      layar; esp_egg (load kedua) nimpa baris egg-nya lewat ctx.espScreenData.
       Keduanya ON → satu list (font 16) + pembatas di antara egg dan pet.
       Satu ON → list sama, tanpa pembatas. Nama pet warna tetap per nama.
-     Data pet: nama tipe + berat (BaseWeight*1.1) + level + mutasi.
+     Data pet: nama tipe + berat (BaseWeight*1.1) + level + cd skill.
+     Cd pet dapet dari server push PetCooldownsUpdated + seed GetPetCooldown
+     (sisa detik di-interpolasi lokal biar countdown halus antara push).
      ESP EGG TERPISAH di modules/misc/esp_egg.lua.
      Toggle: CFG.espEnabled, mode: CFG.espMode ("target"/"screen"). ]]
 return function(ctx)
@@ -8707,14 +8710,15 @@ return function(ctx)
 			listSg.Parent = (gethui and gethui()) or game:GetService("CoreGui")
 
 			listLbl = Instance.new("TextLabel")
-			listLbl.AnchorPoint = Vector2.new(0, 0.5)
-			listLbl.Position = UDim2.new(0, 14, 0.5, 0)
+			-- Sisi KANAN TENGAH: nempel pinggir kanan layar, teks rata kanan.
+			listLbl.AnchorPoint = Vector2.new(1, 0.5)
+			listLbl.Position = UDim2.new(1, -14, 0.5, 0)
 			listLbl.Size = UDim2.new(0, 480, 0, 0)
 			listLbl.AutomaticSize = Enum.AutomaticSize.Y
 			listLbl.BackgroundTransparency = 1
 			listLbl.Font = Enum.Font.GothamBold
 			listLbl.RichText = true
-			listLbl.TextXAlignment = Enum.TextXAlignment.Left
+			listLbl.TextXAlignment = Enum.TextXAlignment.Right
 			listLbl.TextYAlignment = Enum.TextYAlignment.Top
 			listLbl.TextColor3 = Color3.new(1, 1, 1)
 			-- Outline tebal biar teks tetap kebaca di background terang (sky).
@@ -8761,15 +8765,78 @@ return function(ctx)
 	}
 	local C_S_WEIGHT = "#FFAA00"
 	local C_S_LV = "#33FF77"
-	local MUT_SCREEN = {
-		Golden = "#FFD700", Rainbow = "#FF4FD8", Frozen = "#33CFFF", Wet = "#00B0FF",
-		Shocked = "#FFEE33", Moonlit = "#9D66FF", Shiny = "#FFB300", Huge = "#FF3D3D",
-		Mega = "#E60000", Tiny = "#4DD2FF", Windstruck = "#66FFCC", Tempered = "#FF7043",
-	}
+	local C_S_CD = "#FFD21E" -- warna sisa cd skill (READY pakai hijau C_S_LV)
 	local function nameColor(s)
 		local h = 0
 		for i = 1, #s do h = (h * 31 + string.byte(s, i)) % 100003 end
 		return NAME_COLORS[(h % #NAME_COLORS) + 1]
+	end
+
+	-- ===== Data cooldown pet (server push PetCooldownsUpdated) =====
+	-- Event kirim (uuid, {{Time=<sisa detik>, Passive=<nama>}, ...}).
+	-- Passive "Mutation" bukan skill → di-skip, konsisten dengan logika pickup.
+	-- Sisa detik di-interpolasi lokal (Time - elapsed) biar countdown jalan
+	-- halus antara dua push server.
+	local cdRem = {} -- uuid -> { times = {sisa detik per skill}, at = os.clock() }
+	local cdSeeded = {} -- uuid -> true (seed GetPetCooldown sudah/sedang dijalankan)
+	local RSRaw = game:GetService("ReplicatedStorage")
+	local cdGameEvents = RSRaw:FindFirstChild("GameEvents")
+	local cdPushEvent = cdGameEvents and cdGameEvents:FindFirstChild("PetCooldownsUpdated")
+	local cdSeedRemote = cdGameEvents and cdGameEvents:FindFirstChild("GetPetCooldown")
+
+	local function storeCd(uuid, cdTable)
+		if type(cdTable) ~= "table" then return end
+		local times = {}
+		for _, e in ipairs(cdTable) do
+			if not tostring(e.Passive or ""):find("Mutation") then
+				times[#times + 1] = tonumber(e.Time) or 0
+			end
+		end
+		cdRem[uuid] = { times = times, at = os.clock() }
+	end
+
+	local gEnv = (getgenv and getgenv()) or _G
+	if gEnv.__cespCdConn then pcall(function() gEnv.__cespCdConn:Disconnect() end) end
+	gEnv.__cespCdConn = nil
+	if cdPushEvent then
+		gEnv.__cespCdConn = cdPushEvent.OnClientEvent:Connect(function(uuid, cdTable)
+			if type(uuid) == "string" then storeCd(uuid, cdTable) end
+		end)
+	end
+
+	-- Seed awal per pet: InvokeServer yield → fire-and-forget di task.spawn.
+	local function seedCd(uuid)
+		if cdSeeded[uuid] or not cdSeedRemote then return end
+		cdSeeded[uuid] = true
+		task.spawn(function()
+			local ok, cd = pcall(function() return cdSeedRemote:InvokeServer(uuid) end)
+			if ok then storeCd(uuid, cd) end
+		end)
+	end
+
+	local function fmtDur(sec)
+		if sec < 60 then return ("%ds"):format(math.clamp(math.ceil(sec), 0, 59)) end
+		if sec < 3600 then return ("%dm"):format(math.floor(sec / 60)) end
+		return ("%dh"):format(math.floor(sec / 3600))
+	end
+
+	-- Segmen cd untuk satu pet: "15s | 10m" atau "READY", nil kalau pet
+	-- tanpa skill / data belum masuk (seed dikirim sekali per uuid).
+	local function cdSegment(uuid)
+		local rec = cdRem[uuid]
+		if not rec then seedCd(uuid); return nil end
+		if #rec.times == 0 then return nil end
+		local el = os.clock() - rec.at
+		local parts, allReady = {}, true
+		for _, t0 in ipairs(rec.times) do
+			local rem = t0 - el
+			if rem > 0.05 then
+				allReady = false
+				parts[#parts + 1] = fmtDur(rem)
+			end
+		end
+		if allReady then return "READY" end
+		return table.concat(parts, " | ")
 	end
 
 	-- ===== Data pet =====
@@ -8797,9 +8864,11 @@ return function(ctx)
 								local w = bw and string.format("%.2fkg", bw * WEIGHT_MULT) or "-"
 								local t = ('<font size="17" color="%s"><b>%s</b></font> <font size="13" color="%s">%s</font> <font size="13" color="%s">Lv.%d</font>')
 									:format(nameColor(tostring(pt)), tostring(pt), C_S_WEIGHT, w, C_S_LV, lv)
-								if mutTxt then
-									local mc = MUT_SCREEN[mutTxt] or nameColor("m" .. mutTxt)
-									t = t .. (' <font size="13" color="%s">• %s</font>'):format(mc, mutTxt)
+								-- Sisi kanan: cd skill ("15s | 10m"), READY kalau semua siap.
+								local cd = cdSegment(uuid)
+								if cd then
+									local cc = (cd == "READY") and C_S_LV or C_S_CD
+									t = t .. (' <font size="13" color="%s">%s</font>'):format(cc, cd)
 								end
 								rows[#rows + 1] = t
 								if #rows >= 40 then break end
