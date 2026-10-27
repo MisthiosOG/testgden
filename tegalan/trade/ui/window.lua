@@ -31,10 +31,30 @@ return function(ctx)
     ctx.ui.windWindow = window
     ctx.state.isAlive = true
 
+    local compatGui = Instance.new("ScreenGui")
+    compatGui.Name = "iStealthTradeCompat"
+    compatGui.ResetOnSpawn = false
+    compatGui.Enabled = false
+    compatGui.Parent = (gethui and gethui()) or game:GetService("CoreGui")
+    local compatRoot = Instance.new("Frame")
+    compatRoot.Size = UDim2.fromOffset(1, 1)
+    compatRoot.Visible = false
+    compatRoot.Parent = compatGui
+    local legacyMk = ctx.mk
+    local compatOwners = {}
+    ctx.mk = function(className, props, parent)
+        local owner = type(parent) == "table" and parent.__windTab or compatOwners[parent]
+        local instance = legacyMk(className, props, (owner and compatRoot) or parent)
+        if owner then compatOwners[instance] = owner end
+        return instance
+    end
+
     local tabs = {}
     local noopSignal = { Connect = function() return { Disconnect = function() end } end }
     local function tabFor(parent)
-        return parent and (parent.__windTab or parent) or tabs.Sell
+        return (type(parent) == "table" and parent.__windTab)
+            or compatOwners[parent] or (parent and parent.__windTab)
+            or tabs.Sell
     end
     local function makePage(name, title, icon)
         local tab = tabs[name] or window:Tab({ Title = title or name, Icon = icon })

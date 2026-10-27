@@ -40,6 +40,28 @@ return function(ctx)
     ctx.ui.logLines = ctx.state.logLines
     ctx.state.isAlive = true
 
+    -- Legacy pages still create layout-only Frames through ctx.mk. Keep those
+    -- objects alive in a hidden compatibility host; visible controls come from
+    -- WindUI adapters below. This preserves page/module logic without rendering
+    -- the old shell or attempting to parent Instances to a WindUI tab object.
+    local compatGui = Instance.new("ScreenGui")
+    compatGui.Name = "iStealthGardenCompat"
+    compatGui.ResetOnSpawn = false
+    compatGui.Enabled = false
+    compatGui.Parent = (gethui and gethui()) or game:GetService("CoreGui")
+    local compatRoot = Instance.new("Frame")
+    compatRoot.Size = UDim2.fromOffset(1, 1)
+    compatRoot.Visible = false
+    compatRoot.Parent = compatGui
+    local legacyMk = ctx.mk
+    local compatOwners = {}
+    ctx.mk = function(className, props, parent)
+        local owner = type(parent) == "table" and parent.__windTab or compatOwners[parent]
+        local instance = legacyMk(className, props, (owner and compatRoot) or parent)
+        if owner then compatOwners[instance] = owner end
+        return instance
+    end
+
     local tabs = {}
     local tabIcons = {
         Pet = "paw-print", Farm = "wheat", Hatch = "egg",
@@ -75,7 +97,9 @@ return function(ctx)
     end
 
     local function parentTab(parent)
-        return parent and (parent.__windTab or parent) or tabs.Misc
+        return (type(parent) == "table" and parent.__windTab)
+            or compatOwners[parent] or (parent and parent.__windTab)
+            or tabs.Misc
     end
 
     local function makePage(name, title, icon)
