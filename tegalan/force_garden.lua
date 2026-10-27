@@ -3,7 +3,8 @@
 local compile = loadstring or load
 assert(compile, "No Luau compiler available")
 local BUILD = "windui-direct-2026-10-27"
-local BASE = "https://raw.githubusercontent.com/MisthiosOG/testgden/main/tegalan/garden"
+local REVISION = "1c76ead9ef8a572e9c5b1a1bb4dbcaeba6728b24"
+local BASE = "https://raw.githubusercontent.com/MisthiosOG/testgden/" .. REVISION .. "/tegalan/garden"
 print("[iStealth][DIRECT] build=" .. BUILD)
 
 local function clearLegacy()
@@ -26,6 +27,7 @@ local function clearLegacy()
 end
 
 clearLegacy()
+if getgenv then getgenv().GAG_REVISION = REVISION else _G.GAG_REVISION = REVISION end
 local ok, source = pcall(function()
     return game:HttpGet(BASE .. "/init.lua?direct=" .. tostring(os.clock()))
 end)

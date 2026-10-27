@@ -10,9 +10,10 @@
 
 -- Branch: "main" = production. Override buat dev: getgenv().GAG_BRANCH = "dev"
 local branch = (getgenv and getgenv().GAG_BRANCH) or _G.GAG_BRANCH or "main"
+local revision = (getgenv and getgenv().GAG_REVISION) or _G.GAG_REVISION or branch
 local compile = loadstring or load
 local LOCAL_ROOT = (getgenv and getgenv().GAG_LOCAL_ROOT) or _G.GAG_LOCAL_ROOT
-local ROOT = LOCAL_ROOT or ("https://raw.githubusercontent.com/milmscr/opoki/" .. branch .. "/tegalan")
+local ROOT = LOCAL_ROOT or ("https://raw.githubusercontent.com/MisthiosOG/testgden/" .. revision .. "/tegalan")
 
 -- PlaceId server Trade World.
 local TRADE_WORLD_PLACE = 129954712878723

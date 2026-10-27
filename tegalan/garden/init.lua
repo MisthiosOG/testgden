@@ -5,10 +5,11 @@
 --]]
 
 local branch = (getgenv and getgenv().GAG_BRANCH) or _G.GAG_BRANCH or "main"
+local revision = (getgenv and getgenv().GAG_REVISION) or _G.GAG_REVISION or branch
 local compile = loadstring or load
 local LOCAL_ROOT = (getgenv and getgenv().GAG_LOCAL_ROOT) or _G.GAG_LOCAL_ROOT
 local BASE = LOCAL_ROOT and (LOCAL_ROOT .. "/garden")
-    or ("https://raw.githubusercontent.com/milmscr/opoki/" .. branch .. "/tegalan/garden")
+    or ("https://raw.githubusercontent.com/MisthiosOG/testgden/" .. revision .. "/tegalan/garden")
 
 -- Remove any previous legacy UI before WindUI/modules initialize. This runs
 -- before a library download, so a failed reload cannot leave the old shell
