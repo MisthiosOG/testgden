@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 45 modul, di-generate 2026-10-28T16:18:08.256Z
+-- 45 modul, di-generate 2026-10-28T16:52:04.136Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -16009,7 +16009,7 @@ return function(ctx)
 		pnpUuids    = {},     -- filter per-UUID pet equipped; kosong = semua equipped
 		pickupDelay = 0.5,    -- jeda setelah skill mulai sebelum pet ditarik
 		equipDelay  = 1e-20,  -- jeda tambahan unequip -> equip setelah server konfirmasi (1E-20 = tanpa jeda)
-		pnpScanInterval = 0.15, -- polling cd cadangan (sinyal utama = push server)
+		pnpScanInterval = 0.5,  -- (nggak dipakai V1 lagi; timing dikunci di modul)
 		pnpEnabled  = false,
 		-- PnP V2 (event-driven, config terpisah dari V1)
 		pnpV2Uuids       = {},
@@ -16403,7 +16403,7 @@ return function(ctx)
 			CFG.pnpUuids    = (type(st.pnpUuids) == "table") and st.pnpUuids or {}
 			CFG.pickupDelay = tonumber(st.pickupDelay) or 0.5
 			CFG.equipDelay  = tonumber(st.equipDelay) or 1e-20
-			CFG.pnpScanInterval = tonumber(st.pnpScanInterval) or 0.05
+			CFG.pnpScanInterval = tonumber(st.pnpScanInterval) or 0.5
 			CFG.pnpEnabled  = st.pnpEnabled or false
 			CFG.pnpV2Uuids       = (type(st.pnpV2Uuids) == "table") and st.pnpV2Uuids or {}
 			CFG.pnpV2PickupDelay = tonumber(st.pnpV2PickupDelay) or 0.05
@@ -26234,10 +26234,10 @@ end
        3. ADV   : cooldown di-advance pet lain -> lompat turun jauh ke <= ~6 (skill langsung jalan,
                   cd nggak pernah lewat 0)
      Pet yang ketahuan punya zone: CD0/ADV cuma nunggu event ZONE (fallback kalau event nggak datang).
-     Setelah pemicu: tunggu pickupDelay (commit) -> Unequip -> tunggu server ack -> Equip -> verifikasi.
+     Setelah pemicu: tunggu PICKUP_DELAY -> Unequip -> tunggu server ack -> Equip -> verifikasi.
 
-     Config: pnpUuids, pickupDelay (jeda setelah skill mulai), equipDelay (jeda tambahan unequip->equip),
-             pnpScanInterval (polling cd cadangan), pnpEnabled.
+     Timing dikunci di konstanta (PICKUP_DELAY 0.5 / EQUIP_DELAY 1E-20 / SCAN_INTERVAL 0.5).
+     Config: pnpUuids, pnpEnabled.
      Fungsi: ctx.startPnpV1 / ctx.stopPnpV1 / ctx.forcePickupPets. Expose ctx.inventoryPetOptions (V1 & V2). ]]
 return function(ctx)
 	local DataService = ctx.deps.DataService
@@ -26251,7 +26251,10 @@ return function(ctx)
 	local cdMap = ctx.state.cdMap or {}
 	ctx.state.cdMap = cdMap
 
-	local DEFAULT_COMMIT = 0.5  -- jeda default setelah skill mulai (Pandora ~0.3-1.0 s)
+	-- Timing DIKUNCI (hasil tes in-game, nggak dibaca dari CFG / UI lagi)
+	local PICKUP_DELAY   = 0.5   -- jeda setelah skill mulai sebelum pet ditarik
+	local EQUIP_DELAY    = 1e-20 -- jeda tambahan unequip -> equip setelah server ack (praktis 0)
+	local SCAN_INTERVAL  = 0.5   -- polling cd cadangan (sinyal utama = push server)
 	local CD0_MIN        = 0.6  -- jeda minimal abis cd 0 natural (Pandora tercepat ~0.63 s)
 	local ZONE_FALLBACK  = 2.0  -- pet zone: kalau event ZONE nggak datang segini setelah CD0, tetap tarik
 	local ADV_DROP       = 10   -- cd turun >= ini dalam 1 update = di-advance pet lain
@@ -26261,7 +26264,7 @@ return function(ctx)
 	local UNEQUIP_ACK    = 0.35 -- maks nunggu server konfirmasi unequip
 	local VERIFY_WAIT    = 0.8  -- maks nunggu konfirmasi equip sebelum retry
 	local EQUIP_RETRIES  = 3
-	local MIN_POLL       = 0.15
+	local MIN_POLL       = SCAN_INTERVAL
 
 	local GameEvents          = RS:WaitForChild("GameEvents")
 	local GetPetCooldown      = GameEvents:WaitForChild("GetPetCooldown")
@@ -26287,8 +26290,7 @@ return function(ctx)
 	local lastValid   = {} -- uuid -> os.clock() terakhir cd valid (server: pet ada di kebun)
 
 	local function commitDelay()
-		local d = tonumber(CFG.pickupDelay)
-		return (d and d >= 0) and d or DEFAULT_COMMIT
+		return PICKUP_DELAY
 	end
 
 	local function schedule(uuid, reason, override, minDelay)
@@ -26484,8 +26486,7 @@ return function(ctx)
 		local tU = os.clock()
 		pcall(function() PetsService:FireServer("UnequipPet", uuid) end)
 		repeat task.wait(0.02) until (lastEmpty[uuid] or 0) >= tU or os.clock() - tU > UNEQUIP_ACK
-		local extra = tonumber(CFG.equipDelay) or 0
-		if extra > 0.001 then task.wait(extra) end
+		if EQUIP_DELAY > 0.001 then task.wait(EQUIP_DELAY) end
 
 		local placed = false
 		for _ = 1, EQUIP_RETRIES do
@@ -26526,7 +26527,7 @@ return function(ctx)
 					break
 				end
 				lastEqCheck = os.clock() -- DataService telat update abis place
-			elseif not polling and now - lastPoll >= math.max(MIN_POLL, tonumber(CFG.pnpScanInterval) or 0) then
+			elseif not polling and now - lastPoll >= SCAN_INTERVAL then
 				lastPoll, polling = now, true
 				task.spawn(function() pollCd(uuid); polling = false end)
 			end
@@ -28117,24 +28118,7 @@ end
 				function() return ctx.inventoryPetOptions(CFG.pnpUuids) end,
 				CFG.pnpUuids, function() persist() end,
 				{ register = true, cacheKey = "inv_pets", fillDelay = 0.3, max = 250 })
-			makeInputW(sec, "Pickup Delay (sec)", "Wait after the skill starts before pickup (0.5 recommended)",
-				function() return CFG.pickupDelay end,
-				function(t) CFG.pickupDelay = tonumber(t) or 0.5 end)
-			makeInputW(sec, "Equip Delay (sec)", "Extra wait unequip -> equip after server confirms (1E-20 = none)",
-				function()
-					if CFG.equipDelay == 1e-20 or CFG.equipDelay == 0 or not CFG.equipDelay then return "1E-20" end
-					return tostring(CFG.equipDelay)
-				end,
-				function(t)
-					if tostring(t):upper():find("1E%-20") then
-						CFG.equipDelay = 1e-20
-					else
-						CFG.equipDelay = tonumber(t) or 1e-20
-					end
-				end)
-			makeInputW(sec, "Scan Interval (sec)", "Backup cooldown poll (min 0.15, main signal is server push)",
-				function() return CFG.pnpScanInterval end,
-				function(t) CFG.pnpScanInterval = math.max(0.01, tonumber(t) or 0.05) end)
+			-- Timing V1 dikunci di modul (pickup 0.5 / equip 1E-20 / scan 0.5), nggak ada input.
 			makeToggleW(sec, "Enable Automation Pickup V1",
 				"Pickup right after the skill starts (zone/cd/advance), re-place instantly. Enabling this turns V2 off.",
 				function() return CFG.pnpEnabled end,
@@ -28148,14 +28132,6 @@ end
 						if ctx.stopPnpV1 then pcall(function() ctx.stopPnpV1() end) end
 					end
 				end)
-			sec:Button({
-				Title = "Force Pickup Now",
-				Desc = "Pickup + re-place semua pet target di papan sekarang (abaikan cd). Baca hasilnya di Settings > Logs.",
-				Callback = safe(function()
-					local n = ctx.forcePickupPets and ctx.forcePickupPets() or 0
-					W.notify("Pickup V1", n == 0 and "No pet on board" or ("Force pickup " .. tostring(n) .. " pet(s)"))
-				end),
-			})
 			addRefresh(sec)
 		end)
 

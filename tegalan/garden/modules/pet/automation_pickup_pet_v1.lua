@@ -8,10 +8,10 @@
        3. ADV   : cooldown di-advance pet lain -> lompat turun jauh ke <= ~6 (skill langsung jalan,
                   cd nggak pernah lewat 0)
      Pet yang ketahuan punya zone: CD0/ADV cuma nunggu event ZONE (fallback kalau event nggak datang).
-     Setelah pemicu: tunggu pickupDelay (commit) -> Unequip -> tunggu server ack -> Equip -> verifikasi.
+     Setelah pemicu: tunggu PICKUP_DELAY -> Unequip -> tunggu server ack -> Equip -> verifikasi.
 
-     Config: pnpUuids, pickupDelay (jeda setelah skill mulai), equipDelay (jeda tambahan unequip->equip),
-             pnpScanInterval (polling cd cadangan), pnpEnabled.
+     Timing dikunci di konstanta (PICKUP_DELAY 0.5 / EQUIP_DELAY 1E-20 / SCAN_INTERVAL 0.5).
+     Config: pnpUuids, pnpEnabled.
      Fungsi: ctx.startPnpV1 / ctx.stopPnpV1 / ctx.forcePickupPets. Expose ctx.inventoryPetOptions (V1 & V2). ]]
 return function(ctx)
 	local DataService = ctx.deps.DataService
@@ -25,7 +25,10 @@ return function(ctx)
 	local cdMap = ctx.state.cdMap or {}
 	ctx.state.cdMap = cdMap
 
-	local DEFAULT_COMMIT = 0.5  -- jeda default setelah skill mulai (Pandora ~0.3-1.0 s)
+	-- Timing DIKUNCI (hasil tes in-game, nggak dibaca dari CFG / UI lagi)
+	local PICKUP_DELAY   = 0.5   -- jeda setelah skill mulai sebelum pet ditarik
+	local EQUIP_DELAY    = 1e-20 -- jeda tambahan unequip -> equip setelah server ack (praktis 0)
+	local SCAN_INTERVAL  = 0.5   -- polling cd cadangan (sinyal utama = push server)
 	local CD0_MIN        = 0.6  -- jeda minimal abis cd 0 natural (Pandora tercepat ~0.63 s)
 	local ZONE_FALLBACK  = 2.0  -- pet zone: kalau event ZONE nggak datang segini setelah CD0, tetap tarik
 	local ADV_DROP       = 10   -- cd turun >= ini dalam 1 update = di-advance pet lain
@@ -35,7 +38,7 @@ return function(ctx)
 	local UNEQUIP_ACK    = 0.35 -- maks nunggu server konfirmasi unequip
 	local VERIFY_WAIT    = 0.8  -- maks nunggu konfirmasi equip sebelum retry
 	local EQUIP_RETRIES  = 3
-	local MIN_POLL       = 0.15
+	local MIN_POLL       = SCAN_INTERVAL
 
 	local GameEvents          = RS:WaitForChild("GameEvents")
 	local GetPetCooldown      = GameEvents:WaitForChild("GetPetCooldown")
@@ -61,8 +64,7 @@ return function(ctx)
 	local lastValid   = {} -- uuid -> os.clock() terakhir cd valid (server: pet ada di kebun)
 
 	local function commitDelay()
-		local d = tonumber(CFG.pickupDelay)
-		return (d and d >= 0) and d or DEFAULT_COMMIT
+		return PICKUP_DELAY
 	end
 
 	local function schedule(uuid, reason, override, minDelay)
@@ -258,8 +260,7 @@ return function(ctx)
 		local tU = os.clock()
 		pcall(function() PetsService:FireServer("UnequipPet", uuid) end)
 		repeat task.wait(0.02) until (lastEmpty[uuid] or 0) >= tU or os.clock() - tU > UNEQUIP_ACK
-		local extra = tonumber(CFG.equipDelay) or 0
-		if extra > 0.001 then task.wait(extra) end
+		if EQUIP_DELAY > 0.001 then task.wait(EQUIP_DELAY) end
 
 		local placed = false
 		for _ = 1, EQUIP_RETRIES do
@@ -300,7 +301,7 @@ return function(ctx)
 					break
 				end
 				lastEqCheck = os.clock() -- DataService telat update abis place
-			elseif not polling and now - lastPoll >= math.max(MIN_POLL, tonumber(CFG.pnpScanInterval) or 0) then
+			elseif not polling and now - lastPoll >= SCAN_INTERVAL then
 				lastPoll, polling = now, true
 				task.spawn(function() pollCd(uuid); polling = false end)
 			end

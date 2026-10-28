@@ -649,24 +649,7 @@ end
 				function() return ctx.inventoryPetOptions(CFG.pnpUuids) end,
 				CFG.pnpUuids, function() persist() end,
 				{ register = true, cacheKey = "inv_pets", fillDelay = 0.3, max = 250 })
-			makeInputW(sec, "Pickup Delay (sec)", "Wait after the skill starts before pickup (0.5 recommended)",
-				function() return CFG.pickupDelay end,
-				function(t) CFG.pickupDelay = tonumber(t) or 0.5 end)
-			makeInputW(sec, "Equip Delay (sec)", "Extra wait unequip -> equip after server confirms (1E-20 = none)",
-				function()
-					if CFG.equipDelay == 1e-20 or CFG.equipDelay == 0 or not CFG.equipDelay then return "1E-20" end
-					return tostring(CFG.equipDelay)
-				end,
-				function(t)
-					if tostring(t):upper():find("1E%-20") then
-						CFG.equipDelay = 1e-20
-					else
-						CFG.equipDelay = tonumber(t) or 1e-20
-					end
-				end)
-			makeInputW(sec, "Scan Interval (sec)", "Backup cooldown poll (min 0.15, main signal is server push)",
-				function() return CFG.pnpScanInterval end,
-				function(t) CFG.pnpScanInterval = math.max(0.01, tonumber(t) or 0.05) end)
+			-- Timing V1 dikunci di modul (pickup 0.5 / equip 1E-20 / scan 0.5), nggak ada input.
 			makeToggleW(sec, "Enable Automation Pickup V1",
 				"Pickup right after the skill starts (zone/cd/advance), re-place instantly. Enabling this turns V2 off.",
 				function() return CFG.pnpEnabled end,
@@ -680,14 +663,6 @@ end
 						if ctx.stopPnpV1 then pcall(function() ctx.stopPnpV1() end) end
 					end
 				end)
-			sec:Button({
-				Title = "Force Pickup Now",
-				Desc = "Pickup + re-place semua pet target di papan sekarang (abaikan cd). Baca hasilnya di Settings > Logs.",
-				Callback = safe(function()
-					local n = ctx.forcePickupPets and ctx.forcePickupPets() or 0
-					W.notify("Pickup V1", n == 0 and "No pet on board" or ("Force pickup " .. tostring(n) .. " pet(s)"))
-				end),
-			})
 			addRefresh(sec)
 		end)
 
