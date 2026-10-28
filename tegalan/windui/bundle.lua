@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 45 modul, di-generate 2026-10-28T11:44:29.816Z
+-- 45 modul, di-generate 2026-10-28T11:51:07.839Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -26404,9 +26404,16 @@ return function(ctx)
 					end
 				end
 				-- Wait sadar-cd: cd masih panjang -> poll pelan (maks 1s),
-				-- hemat RPC; cd mau habis / gak ada -> scan normal.
-				local w = (mainCd and mainCd > READY_TH) and math.min(math.max(mainCd, 0.1), 1)
-					or (math.max(0.01, tonumber(CFG.pnpScanInterval) or 0.05))
+				-- hemat RPC; cd <= 10s -> poll rapet 0.15s (jendela "ready"
+				-- pet team-loop pendek, gak boleh kelewat); cd habis -> scan normal.
+				local w
+				if mainCd and mainCd > READY_TH and mainCd <= 10 then
+					w = 0.15
+				elseif mainCd and mainCd > READY_TH then
+					w = math.min(math.max(mainCd, 0.1), 1)
+				else
+					w = math.max(0.01, tonumber(CFG.pnpScanInterval) or 0.05)
+				end
 				task.wait(w)
 			end
 		end
@@ -26498,13 +26505,21 @@ return function(ctx)
 	-- cdLive: cd real-time per pet, di-update oleh event PetCooldownsUpdated (server push).
 	local cdLive = {}
 	ctx.state.pnpV2CdLive = cdLive
+	-- readyLatch: "pet ini udah PERNAH ready" — team-loop pets recast sendiri
+	-- sehingga push cd=ready bisa KETIMPA push cd baru dalam ~<100ms sebelum
+	-- thread keburu baca. Latch ngunci momen ready sampai pickup dieksekusi.
+	local readyLatch = {}
 	do
 		local g = (getgenv and getgenv()) or _G
 		if g.__pnpV2CdConn then pcall(function() g.__pnpV2CdConn:Disconnect() end) end
 		g.__pnpV2CdConn = PetCooldownsUpdated.OnClientEvent:Connect(function(uuid, cdTable)
 			if type(uuid) ~= "string" then return end
 			local m, data = computeMainCd(cdTable)
-			if m ~= nil then cdLive[uuid] = m; cdMap[uuid] = { data = data } end
+			if m ~= nil then
+				cdLive[uuid] = m
+				cdMap[uuid] = { data = data }
+				if m <= READY_TH then readyLatch[uuid] = true end
+			end
 		end)
 	end
 
@@ -26565,6 +26580,7 @@ return function(ctx)
 				if m ~= nil then
 					cdLive[uuid] = m
 					cdMap[uuid] = { data = data }
+					if m <= READY_TH then readyLatch[uuid] = true end
 				end
 			end
 		end)
@@ -26652,12 +26668,17 @@ return function(ctx)
 
 			queueSeed(uuid)
 			local cd = cdLive[uuid]
-			if cd == nil then
-				dlog(uuid, "cd belum kebaca (nunggu seed/push)")
-			elseif cd <= READY_TH and (os.clock() - (lastPlace[uuid] or 0)) > 0.5 then
-				if pickupOnce(uuid, myId, ("cd ready (%.1f)"):format(cd)) then
+			if cd ~= nil and cd <= READY_TH then readyLatch[uuid] = true end
+			-- Latch = pickup SEKALI per momen ready, gakPeduli cd udah ketimpa
+			-- push recast (team loop). lastPlace guardhindarin double-fire.
+			if readyLatch[uuid] and (os.clock() - (lastPlace[uuid] or 0)) > 0.5 then
+				readyLatch[uuid] = nil
+				local why = cd and ("cd ready (%.1f)"):format(cd) or "ready (latched push)"
+				if pickupOnce(uuid, myId, why) then
 					lastPlace[uuid] = os.clock()
 				end
+			elseif cd == nil then
+				dlog(uuid, "cd belum kebaca (nunggu seed/push)")
 			end
 			task.wait(math.max(0.05, tonumber(CFG.pnpV2ScanInterval) or 0.1))
 		end
