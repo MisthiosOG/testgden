@@ -14,46 +14,13 @@ return function(ctx)
 
 	local cdMap = ctx.state.cdMap or {}
 	ctx.state.cdMap = cdMap
-	-- Ready = cd habis. 0.05 buat noleransi residual cd tipis (server kadang
-	-- masih ngasih 0.001 padahal skill udah ready).
-	local READY_TH = 0.05
+	local READY_TH = 0
 
 	local GetPetCooldown = RS:WaitForChild("GameEvents"):WaitForChild("GetPetCooldown")
 
-	-- InvokeServer bisa MACET (server gak balas) -> thread pet mati selamanya
-	-- (petThreads stuck, gak pernah respown). Wrap: timeout 5s + cancel thread.
-	-- Shared via ctx.state (V2 punya implementasi sama).
-	local invokeCd = ctx.state.pnpInvokeCdTimeout
-	if not invokeCd then
-		invokeCd = function(remote, uuid, timeoutS)
-			local result, done = nil, false
-			local th = task.spawn(function()
-				local ok, cd = pcall(function() return remote:InvokeServer(uuid) end)
-				result = (ok and type(cd) == "table") and cd or false
-				done = true
-			end)
-			local t0 = os.clock()
-			while not done and os.clock() - t0 < (timeoutS or 5) do task.wait(0.05) end
-			if not done then
-				pcall(function() task.cancel(th) end)
-				return nil, true
-			end
-			return (result == false) and nil or result, false
-		end
-		ctx.state.pnpInvokeCdTimeout = invokeCd
-	end
-
 	local function readMainCd(uuid)
-		local cd, timedOut = invokeCd(GetPetCooldown, uuid, 5)
-		if timedOut then
-			local okd, d = pcall(function() return DataService:GetData() end)
-			local pt = okd and d and d.PetsData and d.PetsData.PetInventory
-				and d.PetsData.PetInventory.Data and d.PetsData.PetInventory.Data[uuid]
-			ctx.log(("PnP V1 %s: read cd TIMEOUT (server gak balas)")
-				:format(pt and tostring(pt.PetType) or uuid:sub(2, 9)))
-			return nil
-		end
-		if type(cd) ~= "table" then return nil end
+		local ok, cd = pcall(function() return GetPetCooldown:InvokeServer(uuid) end)
+		if not ok or type(cd) ~= "table" then return nil end
 		local data, mainCd = {}, 0
 		for _, e in ipairs(cd) do
 			local t = tonumber(e.Time) or 0
@@ -66,10 +33,6 @@ return function(ctx)
 		return mainCd
 	end
 
-	-- Target CUMA pet yang udah di papan (EquippedPets). Pet yang masih di
-	-- inventory GAK dipapanin otomatis — pickup harus diem kalo board kosong;
-	-- naruh pet manual itu urusan user. Pilihan dropdown cuma ngefilter pet
-	-- yang ada di papan.
 	local function targetPets()
 		local out = {}
 		local ok, d = pcall(function() return DataService:GetData() end)
@@ -79,14 +42,14 @@ return function(ctx)
 		if not eq then return out end
 		local sel = CFG.pnpUuids or {}
 		for _, uuid in ipairs(eq) do
+			local pt = inv and inv[uuid] and inv[uuid].PetType
 			if (not next(sel)) or sel[uuid] then
-				out[#out + 1] = { uuid = uuid, petType = inv and inv[uuid] and inv[uuid].PetType }
+				out[#out + 1] = { uuid = uuid, petType = pt }
 			end
 		end
 		return out
 	end
 
-	-- daftar pet dari INVENTORY buat dropdown Select Pets (SHARED: dipakai V1 & V2).
 	function ctx.inventoryPetOptions(selectedSet)
 		local out = {}
 		local ok, d = pcall(function() return DataService:GetData() end)
@@ -107,7 +70,6 @@ return function(ctx)
 			local tag = eqSet[uuid] and " [aktif]" or ""
 			out[#out + 1] = {
 				value = uuid,
-				kg = weight, -- buat sort terberat dulu
 				display = ("%s%s | %.2f KG | Age %s | #%s%s"):format(mutPrefix, pt, weight, tostring(age), uuid:sub(2, 5), tag),
 			}
 		end
@@ -124,8 +86,6 @@ return function(ctx)
 			local selA = selectedSet and selectedSet[a.value] and 1 or 0
 			local selB = selectedSet and selectedSet[b.value] and 1 or 0
 			if selA ~= selB then return selA > selB end
-			local ka, kb = a.kg or 0, b.kg or 0
-			if ka ~= kb then return ka > kb end -- terberat dulu
 			return a.display < b.display
 		end)
 		return out
@@ -141,53 +101,27 @@ return function(ctx)
 		return hrp and hrp.Position or nil
 	end
 
-	----------------------------------------------------------------- loop (polling, paralel per-pet)
-	-- Pet masih di papan? true/false; nil = data gak kebaca (anggep oke).
-	local function inEquipped(uuid)
-		local ok, d = pcall(function() return DataService:GetData() end)
-		if not ok or not d then return nil end
-		local eq = d.PetsData and d.PetsData.EquippedPets
-		if not eq then return nil end
-		for _, u in ipairs(eq) do if u == uuid then return true end end
-		return false
-	end
-
 	local petThreads = {}
 	local function runPetThread(uuid, myId)
 		petThreads[uuid] = true
 		while CFG.pnpEnabled and ctx.alive() and ctx.state.pnpV1Id == myId do
-			local target = nil
+			local stillTarget = false
 			for _, p in ipairs(targetPets()) do
-				if p.uuid == uuid then target = p; break end
+				if p.uuid == uuid then stillTarget = true; break end
 			end
-			if not target then break end
+			if not stillTarget then break end
 
+			local mainCd = readMainCd(uuid)
 			local pos = placePos()
-			if not pos then
-				task.wait(1)
-			else
-				local mainCd = readMainCd(uuid)
-				if mainCd ~= nil and mainCd <= READY_TH then
-					if (CFG.pickupDelay or 0) > 0 then task.wait(CFG.pickupDelay) end
-					if not (CFG.pnpEnabled and ctx.state.pnpV1Id == myId) then break end
-					pcall(function() PetsService:FireServer("UnequipPet", uuid) end)
-					task.wait(math.max(0.01, CFG.equipDelay or 0.03))
-					-- Re-place retry sampai pet beneran balik ke papan. Kalo
-					-- ditinggal di inventory, dia ilang dari daftar target &
-					-- gak pernah dikerjain lagi (pickup gagal total diam-diam).
-					for _ = 1, 5 do
-						if not (CFG.pnpEnabled and ctx.state.pnpV1Id == myId) then break end
-						pcall(function() PetsService:FireServer("EquipPet", uuid, CFrame.new(pos)) end)
-						task.wait(0.4)
-						if inEquipped(uuid) ~= false then break end
-					end
-				end
-				-- Wait sadar-cd: cd masih panjang -> poll pelan (maks 1s),
-				-- hemat RPC; cd mau habis / gak ada -> scan normal.
-				local w = (mainCd and mainCd > READY_TH) and math.min(math.max(mainCd, 0.1), 1)
-					or (math.max(0.01, tonumber(CFG.pnpScanInterval) or 0.05))
-				task.wait(w)
+			if pos and mainCd ~= nil and mainCd <= READY_TH then
+				if (CFG.pickupDelay or 0) > 0 then task.wait(CFG.pickupDelay) end
+				if not (CFG.pnpEnabled and ctx.state.pnpV1Id == myId) then break end
+				pcall(function() PetsService:FireServer("UnequipPet", uuid) end)
+				task.wait(math.max(0.01, CFG.equipDelay or 0.03))
+				if not (CFG.pnpEnabled and ctx.state.pnpV1Id == myId) then break end
+				pcall(function() PetsService:FireServer("EquipPet", uuid, CFrame.new(pos)) end)
 			end
+			task.wait(math.max(0.01, tonumber(CFG.pnpScanInterval) or 0.05))
 		end
 		petThreads[uuid] = nil
 	end
@@ -199,34 +133,17 @@ return function(ctx)
 		while CFG.pnpEnabled and ctx.alive() and ctx.state.pnpV1Id == myId do
 			local pets = targetPets()
 			if #pets == 0 then
-				setStatus("PNP V1: board kosong — idle (place pet manual)")
+				setStatus("PNP V1: tidak ada pet target (equip pet dulu)")
 			else
 				for _, p in ipairs(pets) do
 					if not petThreads[p.uuid] then task.spawn(runPetThread, p.uuid, myId) end
 				end
-				setStatus(("PNP V1 (polling): %d pet di papan"):format(#pets))
+				setStatus(("PNP V1 (polling): %d pet"):format(#pets))
 			end
 			task.wait(1)
 		end
 	end
 
 	function ctx.startPnpV1() task.spawn(pnpLoop) end
-	function ctx.stopPnpV1() ctx.state.pnpV1Id = (ctx.state.pnpV1Id or 0) + 1 end -- bump id -> loop lama mati
-
-	-- Force pickup: langsung cycle semua pet target di papan, abaikan cd.
-	function ctx.forcePickupPets()
-		local pets = targetPets()
-		for _, p in ipairs(pets) do
-			task.spawn(function()
-				local pos = placePos()
-				if pos then
-					pcall(function() PetsService:FireServer("UnequipPet", p.uuid) end)
-					task.wait(math.max(0.01, CFG.equipDelay or 0.03))
-					pcall(function() PetsService:FireServer("EquipPet", p.uuid, CFrame.new(pos)) end)
-					ctx.log(("PnP V1 %s: force pickup"):format(p.petType or p.uuid:sub(2, 9)))
-				end
-			end)
-		end
-		return #pets
-	end
+	function ctx.stopPnpV1() ctx.state.pnpV1Id = (ctx.state.pnpV1Id or 0) + 1 end
 end
