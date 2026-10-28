@@ -41,7 +41,14 @@ return function(ctx)
 			Enabled = true,
 			OnlyMobile = false,
 			Draggable = true,
+			-- Ikon doang (bulat kecil) + outline solid tipis — gradient
+			-- pink-biru default WindUI-nya yang norak, jadi di-reset solid.
 			Title = "CeszParadise WindUI",
+			Icon = "solar:planet-3-bold-duotone",
+			OnlyIcon = true,
+			CornerRadius = UDim.new(1, 0),
+			StrokeThickness = 1.4,
+			Color = ColorSequence.new(Color3.fromHex("#666666")),
 		},
 	})
 

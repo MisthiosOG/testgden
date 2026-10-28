@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 43 modul, di-generate 2026-10-27T22:44:13.195Z
+-- 43 modul, di-generate 2026-10-28T09:24:51.194Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -14340,7 +14340,14 @@ return function(ctx)
 			Enabled = true,
 			OnlyMobile = false,
 			Draggable = true,
+			-- Ikon doang (bulat kecil) + outline solid tipis — gradient
+			-- pink-biru default WindUI-nya yang norak, jadi di-reset solid.
 			Title = "CeszParadise WindUI",
+			Icon = "solar:planet-3-bold-duotone",
+			OnlyIcon = true,
+			CornerRadius = UDim.new(1, 0),
+			StrokeThickness = 1.4,
+			Color = ColorSequence.new(Color3.fromHex("#666666")),
 		},
 	})
 
