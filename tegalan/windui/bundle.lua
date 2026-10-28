@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 45 modul, di-generate 2026-10-28T17:02:46.831Z
+-- 45 modul, di-generate 2026-10-28T17:10:29.089Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -26231,9 +26231,9 @@ end
      Pemicu "skill mulai" (dari log in-game):
        1. ZONE  : RemoteEvent PetZoneAbility(uuid, true, ...)  (Peacock, Lion, dst.)
        2. CD0   : cooldown salah satu passive (non-Mutation) nyentuh 0 dengan sendirinya
-       3. ADV   : cooldown di-advance pet lain -> lompat turun jauh ke <= ~6 (skill langsung jalan,
-                  cd nggak pernah lewat 0)
-     Pet yang ketahuan punya zone: CD0/ADV cuma nunggu event ZONE (fallback kalau event nggak datang).
+       3. (ADV dihapus — cd yang di-advance tetap countdown ke 0 dulu, jadi ketangkep CD0)
+     Pet zone: CD0 nunggu event ZONE (fallback kalau event nggak datang), terus +PICKUP_DELAY.
+     Pet non-zone: CD0 + CD0_MIN (ancang-ancang 0.8 s).
      Setelah pemicu: tunggu PICKUP_DELAY -> Unequip -> tunggu server ack -> Equip -> verifikasi.
 
      Timing dikunci di konstanta (PICKUP_DELAY 0.5 / EQUIP_DELAY 1E-20 / SCAN_INTERVAL 0.20).
@@ -26255,10 +26255,9 @@ return function(ctx)
 	local PICKUP_DELAY   = 0.5   -- jeda setelah skill mulai sebelum pet ditarik
 	local EQUIP_DELAY    = 1e-20 -- jeda tambahan unequip -> equip setelah server ack (praktis 0)
 	local SCAN_INTERVAL  = 0.20  -- polling cd cadangan (sinyal utama = push server)
-	local CD0_MIN        = 0.6  -- jeda minimal abis cd 0 natural (Pandora tercepat ~0.63 s)
+	local CD0_MIN        = 0.8  -- ancang-ancang abis cd 0 (Pandora narik Dilo/Hotdog ~0.6-1.3 s abis cd 0)
 	local ZONE_FALLBACK  = 2.0  -- pet zone: kalau event ZONE nggak datang segini setelah CD0, tetap tarik
-	local ADV_DROP       = 10   -- cd turun >= ini dalam 1 update = di-advance pet lain
-	local ADV_LOW        = 6.5  -- ...dan hasilnya <= ini = skill langsung jalan
+	local ADV_DROP, ADV_LOW = nil, nil -- (trigger ADV dihapus)
 	local PLACE_GRACE    = 1.5  -- abis place: sampel cd pertama yang 0 nggak dihitung CD0 (anti loop).
 	                            -- ADV & ZONE tetap jalan (team loop bisa langsung advance pet baru di-place)
 	local UNEQUIP_ACK    = 0.35 -- maks nunggu server konfirmasi unequip
@@ -26335,9 +26334,9 @@ return function(ctx)
 				-- kalau ada passive yang memang nyangkut di 0).
 				if t <= 0 and ((p == nil and now >= (ignoreUntil[uuid] or 0)) or (p and p > 0)) then
 					r = "CD0"
-				elseif p and p - t >= ADV_DROP and t <= ADV_LOW then
-					r = "ADV"
 				end
+				-- (Trigger ADV dihapus: dari log, cd yang di-advance ke ~4-5 TETAP countdown ke 0
+				--  dulu baru skill keluar. Narik pas ADV = narik sebelum skill -> skill hilang.)
 				if r then
 					local z = zonePassive[key:gsub("#%d+$", "")] == true
 					-- passive non-zone menang (langsung dijadwalkan); zone nunggu event
@@ -26350,8 +26349,8 @@ return function(ctx)
 			-- skill zone baru "keluar" pas event ZONE; tunggu itu (dengan fallback)
 			if not fireAt[uuid] and not waitZone[uuid] then waitZone[uuid] = now + ZONE_FALLBACK end
 		else
-			-- CD0 natural: skill butuh ~0.6 s buat "nempel" sebelum aman ditarik
-			schedule(uuid, reason, false, reason == "CD0" and CD0_MIN or 0)
+			-- CD0 natural: skill butuh ~0.8 s buat "nempel" sebelum aman ditarik (ancang-ancang)
+			schedule(uuid, reason, false, CD0_MIN)
 		end
 	end
 
