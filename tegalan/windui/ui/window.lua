@@ -31,7 +31,7 @@ return function(ctx)
 
 	----------------------------------------------------------------- window
 	local window = WindUI:CreateWindow({
-		Title = "CeszParadise | WindUI",
+		Title = "Dopamine | P².Achieve",
 		Icon = "solar:planet-3-bold-duotone",
 		Folder = "CeszParadiseWindUI",
 		Size = UDim2.fromOffset(720, 520),
@@ -43,7 +43,7 @@ return function(ctx)
 			Draggable = true,
 			-- Ikon doang (bulat kecil) + outline solid tipis — gradient
 			-- pink-biru default WindUI-nya yang norak, jadi di-reset solid.
-			Title = "CeszParadise WindUI",
+			Title = "Dopamine | P².Achieve",
 			Icon = "solar:planet-3-bold-duotone",
 			OnlyIcon = true,
 			CornerRadius = UDim.new(1, 0),
@@ -65,17 +65,10 @@ return function(ctx)
 	ctx.ui.tabBtns = {}
 
 	ctx.state.isAlive = true
-	-- Tag versi terlihat: biar langsung ketahuan build mana yang beneran jalan
-	-- (kalau tag masih "rev main"/"beta" -> executor jalanin snippet lama).
-	local revTag = (getgenv and getgenv().GAG_REVISION) or _G.GAG_REVISION
-	if type(revTag) == "string" and #revTag > 8 then
-		revTag = revTag:sub(1, 7)
-	else
-		revTag = "main"
-	end
+	-- Badge bawah judul: build stage, bukan rev (rev masih ada di log & config).
 	pcall(function()
 		window:Tag({
-			Title = "rev " .. revTag,
+			Title = "Beta Test",
 			Icon = "solar:rocket-bold",
 		})
 	end)

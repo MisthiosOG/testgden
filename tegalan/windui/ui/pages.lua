@@ -2323,7 +2323,7 @@ end
 									embeds = {
 										{
 											title = "Webhook Connection Test",
-											description = "Discord Webhook connected successfully to CeszParadise!",
+											description = "Discord Webhook connected successfully to Dopamine!",
 											color = 3066993,
 											fields = {
 												{
@@ -2392,7 +2392,7 @@ end
 		local persist = ctx.persistState
 
 		sec:Paragraph({
-			Title = "CeszParadise WindUI",
+			Title = "Dopamine | P².Achieve",
 			Desc = ("Build: %s\nToggle UI: click the logo open button or press K.\nConfig file: state_%s.json in the executor workspace (auto-saves on every change + every 10s).")
 				:format(
 					tostring((getgenv and getgenv().GAG_REVISION) or ctx.BASE or "-"),

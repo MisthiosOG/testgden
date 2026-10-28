@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 43 modul, di-generate 2026-10-28T09:24:51.194Z
+-- 43 modul, di-generate 2026-10-28T09:28:25.557Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -15,7 +15,7 @@ return function(ctx)
 	pcall(function()
 		local initFps = math.clamp(math.round(workspace:GetRealPhysicsFPS() or 60), 1, 999)
 		if ctx.wi and ctx.wi.notify then
-			ctx.wi.notify("CeszParadiseHub", "Garden loaded | " .. initFps .. " FPS", 4)
+			ctx.wi.notify("Dopamine | P².Achieve", "Garden loaded | " .. initFps .. " FPS", 4)
 		end
 	end)
 
@@ -13863,7 +13863,7 @@ end
 									embeds = {
 										{
 											title = "Webhook Connection Test",
-											description = "Discord Webhook connected successfully to CeszParadise!",
+											description = "Discord Webhook connected successfully to Dopamine!",
 											color = 3066993,
 											fields = {
 												{
@@ -13932,7 +13932,7 @@ end
 		local persist = ctx.persistState
 
 		sec:Paragraph({
-			Title = "CeszParadise WindUI",
+			Title = "Dopamine | P².Achieve",
 			Desc = ("Build: %s\nToggle UI: click the logo open button or press K.\nConfig file: state_%s.json in the executor workspace (auto-saves on every change + every 10s).")
 				:format(
 					tostring((getgenv and getgenv().GAG_REVISION) or ctx.BASE or "-"),
@@ -14330,7 +14330,7 @@ return function(ctx)
 
 	----------------------------------------------------------------- window
 	local window = WindUI:CreateWindow({
-		Title = "CeszParadise | WindUI",
+		Title = "Dopamine | P².Achieve",
 		Icon = "solar:planet-3-bold-duotone",
 		Folder = "CeszParadiseWindUI",
 		Size = UDim2.fromOffset(720, 520),
@@ -14342,7 +14342,7 @@ return function(ctx)
 			Draggable = true,
 			-- Ikon doang (bulat kecil) + outline solid tipis — gradient
 			-- pink-biru default WindUI-nya yang norak, jadi di-reset solid.
-			Title = "CeszParadise WindUI",
+			Title = "Dopamine | P².Achieve",
 			Icon = "solar:planet-3-bold-duotone",
 			OnlyIcon = true,
 			CornerRadius = UDim.new(1, 0),
@@ -14364,17 +14364,10 @@ return function(ctx)
 	ctx.ui.tabBtns = {}
 
 	ctx.state.isAlive = true
-	-- Tag versi terlihat: biar langsung ketahuan build mana yang beneran jalan
-	-- (kalau tag masih "rev main"/"beta" -> executor jalanin snippet lama).
-	local revTag = (getgenv and getgenv().GAG_REVISION) or _G.GAG_REVISION
-	if type(revTag) == "string" and #revTag > 8 then
-		revTag = revTag:sub(1, 7)
-	else
-		revTag = "main"
-	end
+	-- Badge bawah judul: build stage, bukan rev (rev masih ada di log & config).
 	pcall(function()
 		window:Tag({
-			Title = "rev " .. revTag,
+			Title = "Beta Test",
 			Icon = "solar:rocket-bold",
 		})
 	end)

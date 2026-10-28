@@ -10,7 +10,7 @@ return function(ctx)
 	pcall(function()
 		local initFps = math.clamp(math.round(workspace:GetRealPhysicsFPS() or 60), 1, 999)
 		if ctx.wi and ctx.wi.notify then
-			ctx.wi.notify("CeszParadiseHub", "Garden loaded | " .. initFps .. " FPS", 4)
+			ctx.wi.notify("Dopamine | P².Achieve", "Garden loaded | " .. initFps .. " FPS", 4)
 		end
 	end)
 
