@@ -66,6 +66,7 @@ return function(ctx)
 		window = window,
 		tabs   = {},   -- id -> WindUI tab object
 		refreshers = {}, -- fungsi refresh dropdown dinamis (dipanggil tombol List refresh)
+		ddWarmers  = {}, -- snapshot-only warmers (pre-warm cache dropdown, no-UI)
 	}
 
 	-- Bridge warisan buat app.lua (loop selectTab default + auto-resume):

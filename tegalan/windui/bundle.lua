@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 45 modul, di-generate 2026-10-28T11:21:12.036Z
+-- 45 modul, di-generate 2026-10-28T11:25:56.744Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -27700,8 +27700,7 @@ return function(ctx)
 		local control
 		local function fill()
 			local displays, selected = snapshot()
-			local n = dropdownFill(control, displays, selected)
-			if ctx.log then ctx.log(("dropdown '%s' filled (%d options)"):format(title, n)) end
+			dropdownFill(control, displays, selected)
 		end
 		local dis0, sel0 = snapshot()
 		control = parent:Dropdown({
@@ -27739,6 +27738,10 @@ return function(ctx)
 		end
 		if opts.register and W.refreshers then
 			W.refreshers[#W.refreshers + 1] = refresh
+		end
+		-- Warmer (no-UI): snapshot data doang buat pre-warm cache pas boot.
+		if opts.register and W.ddWarmers then
+			W.ddWarmers[#W.ddWarmers + 1] = function() pcall(snapshot) end
 		end
 		return control, refresh
 	end
@@ -27793,17 +27796,10 @@ return function(ctx)
 			MenuWidth = 240,
 			Value = {},
 			Callback = safe(function(sel)
-				if echoGuard then
-					echoGuard = false
-					if ctx.log then ctx.log("[ddx] " .. title .. ": ctor echo IGNORED") end
-					return
-				end
+				if echoGuard then echoGuard = false; return end
 				-- Ekor Refresh() meng-echo Callback dgn Value saat itu — bukan
 				-- klik user; tanpa gate ini set ketimpa & ke-persist kosong.
-				if refreshGate then
-					if ctx.log then ctx.log("[ddx] " .. title .. ": refresh echo IGNORED") end
-					return
-				end
+				if refreshGate then return end
 				if type(sel) == "string" then sel = { sel } end
 				-- Normalisasi dulu, baru wipe+isi: echo Refresh mengirim table
 				-- opsi (ada .v), kadang title string. Tanpa ini, echo berisi
@@ -27820,14 +27816,6 @@ return function(ctx)
 				end
 				for k in pairs(selSet) do selSet[k] = nil end
 				for k in pairs(newSet) do selSet[k] = true end
-				if ctx.log then
-					local kinds = {}
-					for _, t in ipairs(sel or {}) do kinds[#kinds + 1] = type(t) end
-					local kept = 0
-					for _ in pairs(newSet) do kept = kept + 1 end
-					ctx.log(("[ddx] %s: in=%d (%s) kept=%d"):format(
-						title, #sel, table.concat(kinds, ","), kept))
-				end
 				persist()
 				if onChange then onChange() end
 			end),
@@ -27835,11 +27823,7 @@ return function(ctx)
 		-- Constraint menu + wrap Title opsi ditangani patchDropdown() (module level)
 		local function buildRows(p)
 			built = true
-			local n = dropdownFill(control, p.ds, p.sel2)
-			if ctx.log then
-				ctx.log(("dropdown '%s' filled: %d options%s")
-					:format(title, n, p.extra > 0 and (", +" .. p.extra .. " pets not shown") or ""))
-			end
+			dropdownFill(control, p.ds, p.sel2)
 		end
 		-- LAZY: baris dibangun pas menu pertama dibuka. Snapshot datanya sendiri
 		-- jalan 0.5s setelah build di thread sendiri (fetchOptions = cukup 1x
@@ -30232,17 +30216,18 @@ end
 	----------------------------------------------------------------- default tab (pilot)
 	pcall(function() if first and first.Select then first:Select() end end)
 
-	-- PRE-WARM dropdown: semua dropdown dinamis di-snapshot + rows-nya di-pre-
-	-- build di background (antrean serial) BEGITU tabs selesai kebangun, lalu
-	-- re-warm tiap 4 menit biar cache gak pernah dingin. Hasilnya: dropdown
-	-- kebuka INSTAN lengkap — paritas sama dengan build lama (data udah ready
-	-- pas menu muncul), tanpa "scan" yang kerasa pas klik.
+	-- PRE-WARM cache dropdown (NO-UI): snapshot data semua dropdown dinamis
+	-- pas boot (beberapa kali buat kejar data game yang lambat masuk) + tiap
+	-- 4 menit biar cache gak pernah dingin. Baris dropdown tetap dibangun saat
+	-- menu pertama dibuka — pre-build ratusan baris UI di background = frame
+	-- drop (udah dicoba, tau rasanya).
 	task.spawn(function()
-		task.wait(1.5)
 		local function warm()
-			for _, r in ipairs(W.refreshers or {}) do pcall(r) end
+			for _, w in ipairs(W.ddWarmers or {}) do pcall(w) end
 		end
-		warm()
+		task.wait(1.5); warm()
+		task.wait(15);   warm()
+		task.wait(45);   warm()
 		while ctx.alive() do
 			task.wait(240)
 			if ctx.alive() then warm() end
@@ -30399,6 +30384,7 @@ return function(ctx)
 		window = window,
 		tabs   = {},   -- id -> WindUI tab object
 		refreshers = {}, -- fungsi refresh dropdown dinamis (dipanggil tombol List refresh)
+		ddWarmers  = {}, -- snapshot-only warmers (pre-warm cache dropdown, no-UI)
 	}
 
 	-- Bridge warisan buat app.lua (loop selectTab default + auto-resume):
