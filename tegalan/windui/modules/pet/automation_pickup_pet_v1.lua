@@ -183,16 +183,9 @@ return function(ctx)
 					end
 				end
 				-- Wait sadar-cd: cd masih panjang -> poll pelan (maks 1s),
-				-- hemat RPC; cd <= 10s -> poll rapet 0.15s (jendela "ready"
-				-- pet team-loop pendek, gak boleh kelewat); cd habis -> scan normal.
-				local w
-				if mainCd and mainCd > READY_TH and mainCd <= 10 then
-					w = 0.15
-				elseif mainCd and mainCd > READY_TH then
-					w = math.min(math.max(mainCd, 0.1), 1)
-				else
-					w = math.max(0.01, tonumber(CFG.pnpScanInterval) or 0.05)
-				end
+				-- hemat RPC; cd mau habis / gak ada -> scan normal.
+				local w = (mainCd and mainCd > READY_TH) and math.min(math.max(mainCd, 0.1), 1)
+					or (math.max(0.01, tonumber(CFG.pnpScanInterval) or 0.05))
 				task.wait(w)
 			end
 		end
