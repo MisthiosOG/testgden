@@ -1,7 +1,12 @@
---[[ automation_pickup_pet_v1.lua — PnP V1 (POLLING).
-     Tiap pet target punya thread sendiri: query GetPetCooldown -> kalau ready pickup-place.
-     Langsung & simpel, tapi kena JITTER latency server (round-trip tiap cek).
+--[[ automation_pickup_pet_v1.lua — PnP V1 (SKILL-RESET DETECTION).
+     Trick skip-animasi: pickup pet TEPAT SETELAH skill keluar, lalu langsung place lagi.
+     Deteksi "skill keluar" = cooldown salah satu passive LOMPAT NAIK (reset ke durasi penuh),
+     BUKAN cd == 0 (cd 0 = skill belum keluar; pickup di situ malah ngebatalin skill).
+     Sumber cd: event PetCooldownsUpdated (push instan) + polling GetPetCooldown (cadangan).
      Config SENDIRI: pnpUuids, pickupDelay, equipDelay, pnpScanInterval, pnpEnabled.
+       pickupDelay     = jeda setelah place sebelum boleh pickup lagi (anti spam)
+       equipDelay      = jeda unequip -> equip
+       pnpScanInterval = interval polling cd cadangan
      Fungsi: ctx.startPnpV1 / ctx.stopPnpV1. Juga expose ctx.inventoryPetOptions (dipakai V1 & V2). ]]
 return function(ctx)
 	local DataService = ctx.deps.DataService
@@ -14,40 +19,97 @@ return function(ctx)
 
 	local cdMap = ctx.state.cdMap or {}
 	ctx.state.cdMap = cdMap
-	local READY_TH = 0
 
-	local GetPetCooldown = RS:WaitForChild("GameEvents"):WaitForChild("GetPetCooldown")
+	local RESET_JUMP     = 1    -- cd naik > ini (detik) = skill baru keluar
+	local MIN_EQUIP_GAP  = 0.05 -- unequip->equip minimal; lebih cepat dari ini server sering nolak
+	local MIN_POLL       = 0.1  -- polling cadangan minimal (anti throttle)
+	local VERIFY_WAIT    = 0.6  -- tunggu pet muncul lagi di EquippedPets sebelum retry
+	local EQUIP_RETRIES  = 3
 
-	local function readMainCd(uuid)
-		local ok, cd = pcall(function() return GetPetCooldown:InvokeServer(uuid) end)
-		if not ok or type(cd) ~= "table" then return nil end
-		local data, mainCd = {}, 0
+	local GameEvents          = RS:WaitForChild("GameEvents")
+	local GetPetCooldown      = GameEvents:WaitForChild("GetPetCooldown")
+	local PetCooldownsUpdated = GameEvents:FindFirstChild("PetCooldownsUpdated")
+
+	-------------------------------------------------------------- state per pet
+	local prevCd      = {} -- uuid -> { [passiveKey] = time } (sampel terakhir)
+	local pending     = {} -- uuid -> true kalau skill baru keluar & belum di-PnP
+	local busy        = {} -- uuid -> true selama proses pickup/place
+	local ignoreUntil = {} -- uuid -> os.clock(); abaikan lompatan cd akibat place kita sendiri
+
+	-- Ubah tabel cd server jadi { key = time }. Tabel kosong/invalid -> nil (BUKAN "ready").
+	local function parseCd(cd)
+		if type(cd) ~= "table" or #cd == 0 then return nil end
+		local map, data, seen = {}, {}, {}
 		for _, e in ipairs(cd) do
+			local name = tostring(e.Passive or "?")
 			local t = tonumber(e.Time) or 0
 			data[#data + 1] = { Passive = e.Passive, Time = t }
-			if not tostring(e.Passive or ""):find("Mutation") then
-				if t > mainCd then mainCd = t end
+			seen[name] = (seen[name] or 0) + 1
+			map[name .. "#" .. seen[name]] = t
+		end
+		return map, data
+	end
+
+	local function onCd(uuid, cd)
+		local cur, data = parseCd(cd)
+		if not cur then return end
+		cdMap[uuid] = { data = data }
+		local prev = prevCd[uuid]
+		prevCd[uuid] = cur
+		if not prev or busy[uuid] or os.clock() < (ignoreUntil[uuid] or 0) then return end
+		for key, t in pairs(cur) do
+			if not key:find("Mutation") then
+				local p = prev[key]
+				if p and t > p + RESET_JUMP then
+					pending[uuid] = true
+					return
+				end
 			end
 		end
-		cdMap[uuid] = { data = data }
-		return mainCd
+	end
+
+	do
+		local g = (getgenv and getgenv()) or _G
+		if g.__pnpV1CdConn then pcall(function() g.__pnpV1CdConn:Disconnect() end) end
+		g.__pnpV1CdConn = nil
+		if PetCooldownsUpdated then
+			g.__pnpV1CdConn = PetCooldownsUpdated.OnClientEvent:Connect(function(uuid, cdTable)
+				if type(uuid) == "string" and CFG.pnpEnabled then onCd(uuid, cdTable) end
+			end)
+		end
+	end
+
+	local function pollCd(uuid)
+		local ok, cd = pcall(function() return GetPetCooldown:InvokeServer(uuid) end)
+		if ok then onCd(uuid, cd) end
+	end
+
+	-------------------------------------------------------------- data helpers
+	local function equippedSet()
+		local ok, d = pcall(function() return DataService:GetData() end)
+		local eq = ok and d and d.PetsData and d.PetsData.EquippedPets
+		local set = {}
+		if eq then for _, u in ipairs(eq) do set[u] = true end end
+		return set, ok and d or nil
 	end
 
 	local function targetPets()
 		local out = {}
-		local ok, d = pcall(function() return DataService:GetData() end)
-		if not ok or not d then return out end
-		local eq  = d.PetsData and d.PetsData.EquippedPets
+		local eqSet, d = equippedSet()
+		if not d then return out end
 		local inv = d.PetsData and d.PetsData.PetInventory and d.PetsData.PetInventory.Data
-		if not eq then return out end
 		local sel = CFG.pnpUuids or {}
-		for _, uuid in ipairs(eq) do
-			local pt = inv and inv[uuid] and inv[uuid].PetType
+		for _, uuid in ipairs(d.PetsData.EquippedPets or {}) do
 			if (not next(sel)) or sel[uuid] then
-				out[#out + 1] = { uuid = uuid, petType = pt }
+				out[#out + 1] = { uuid = uuid, petType = inv and inv[uuid] and inv[uuid].PetType }
 			end
 		end
 		return out
+	end
+
+	local function isTarget(uuid)
+		local sel = CFG.pnpUuids or {}
+		return (not next(sel)) or sel[uuid] == true
 	end
 
 	-- daftar pet dari INVENTORY buat dropdown Select Pets (SHARED: dipakai V1 & V2).
@@ -102,29 +164,57 @@ return function(ctx)
 		return hrp and hrp.Position or nil
 	end
 
-	----------------------------------------------------------------- loop (polling, paralel per-pet)
+	-------------------------------------------------------------- pickup & place
+	local function alive(myId)
+		return CFG.pnpEnabled and ctx.alive() and ctx.state.pnpV1Id == myId
+	end
+
+	-- return true kalau pet sukses balik ke kebun
+	local function doPnp(uuid, myId)
+		local pos = placePos()
+		if not pos then return true end
+		busy[uuid] = true
+		pending[uuid] = nil
+
+		pcall(function() PetsService:FireServer("UnequipPet", uuid) end)
+		task.wait(math.max(MIN_EQUIP_GAP, tonumber(CFG.equipDelay) or 0))
+
+		-- Equip + verifikasi. Pet WAJIB balik walau PnP dimatiin di tengah jalan.
+		local placed = false
+		for _ = 1, EQUIP_RETRIES do
+			pcall(function() PetsService:FireServer("EquipPet", uuid, CFrame.new(pos)) end)
+			local t0 = os.clock()
+			repeat task.wait(0.1) until equippedSet()[uuid] or os.clock() - t0 > VERIFY_WAIT
+			if equippedSet()[uuid] then placed = true; break end
+		end
+
+		-- baseline cd baru; lompatan cd sesaat setelah place bukan skill
+		prevCd[uuid] = nil
+		ignoreUntil[uuid] = os.clock() + math.max(0.25, tonumber(CFG.pickupDelay) or 0.3)
+		busy[uuid] = nil
+		if alive(myId) then pollCd(uuid) end
+		return placed
+	end
+
 	local petThreads = {}
 	local function runPetThread(uuid, myId)
 		petThreads[uuid] = true
-		while CFG.pnpEnabled and ctx.alive() and ctx.state.pnpV1Id == myId do
-			local stillTarget = false
-			for _, p in ipairs(targetPets()) do
-				if p.uuid == uuid then stillTarget = true; break end
-			end
-			if not stillTarget then break end
+		local lastPoll, polling = 0, false
+		while alive(myId) do
+			if not isTarget(uuid) or not equippedSet()[uuid] then break end
 
-			local mainCd = readMainCd(uuid)
-			local pos = placePos()
-			if pos and mainCd ~= nil and mainCd <= READY_TH then
-				if (CFG.pickupDelay or 0) > 0 then task.wait(CFG.pickupDelay) end
-				if not (CFG.pnpEnabled and ctx.state.pnpV1Id == myId) then break end
-				pcall(function() PetsService:FireServer("UnequipPet", uuid) end)
-				task.wait(math.max(0.01, CFG.equipDelay or 0.03))
-				if not (CFG.pnpEnabled and ctx.state.pnpV1Id == myId) then break end
-				pcall(function() PetsService:FireServer("EquipPet", uuid, CFrame.new(pos)) end)
+			if pending[uuid] then
+				if not doPnp(uuid, myId) then
+					setStatus("PNP V1: gagal place ulang pet #" .. uuid:sub(2, 5) .. " (cek backpack)")
+					break
+				end
+			elseif not polling and os.clock() - lastPoll >= math.max(MIN_POLL, tonumber(CFG.pnpScanInterval) or 0) then
+				lastPoll, polling = os.clock(), true
+				task.spawn(function() pollCd(uuid); polling = false end)
 			end
-			task.wait(math.max(0.01, tonumber(CFG.pnpScanInterval) or 0.05))
+			task.wait(0.03)
 		end
+		pending[uuid], prevCd[uuid] = nil, nil
 		petThreads[uuid] = nil
 	end
 
@@ -132,7 +222,7 @@ return function(ctx)
 		ctx.state.pnpV1Id = (ctx.state.pnpV1Id or 0) + 1
 		local myId = ctx.state.pnpV1Id
 		ctx.elevate()
-		while CFG.pnpEnabled and ctx.alive() and ctx.state.pnpV1Id == myId do
+		while alive(myId) do
 			local pets = targetPets()
 			if #pets == 0 then
 				setStatus("PNP V1: tidak ada pet target (equip pet dulu)")
@@ -140,12 +230,12 @@ return function(ctx)
 				for _, p in ipairs(pets) do
 					if not petThreads[p.uuid] then task.spawn(runPetThread, p.uuid, myId) end
 				end
-				setStatus(("PNP V1 (polling): %d pet"):format(#pets))
+				setStatus(("PNP V1: %d pet (tunggu skill keluar)"):format(#pets))
 			end
 			task.wait(1)
 		end
 	end
 
 	function ctx.startPnpV1() task.spawn(pnpLoop) end
-	function ctx.stopPnpV1() ctx.state.pnpV1Id = (ctx.state.pnpV1Id or 0) + 1 end -- bump id -> loop lama mati
+	function ctx.stopPnpV1() ctx.state.pnpV1Id = (ctx.state.pnpV1Id or 0) + 1 end
 end
