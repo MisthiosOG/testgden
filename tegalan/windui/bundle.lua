@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 45 modul, di-generate 2026-10-28T10:42:52.827Z
+-- 45 modul, di-generate 2026-10-28T10:57:24.682Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -26235,7 +26235,9 @@ return function(ctx)
 
 	local cdMap = ctx.state.cdMap or {}
 	ctx.state.cdMap = cdMap
-	local READY_TH = 0
+	-- Ready = cd habis. 0.05 buat noleransi residual cd tipis (server kadang
+	-- masih ngasih 0.001 padahal skill udah ready).
+	local READY_TH = 0.05
 
 	local GetPetCooldown = RS:WaitForChild("GameEvents"):WaitForChild("GetPetCooldown")
 
@@ -26330,6 +26332,16 @@ return function(ctx)
 	end
 
 	----------------------------------------------------------------- loop (polling, paralel per-pet)
+	-- Pet masih di papan? true/false; nil = data gak kebaca (anggep oke).
+	local function inEquipped(uuid)
+		local ok, d = pcall(function() return DataService:GetData() end)
+		if not ok or not d then return nil end
+		local eq = d.PetsData and d.PetsData.EquippedPets
+		if not eq then return nil end
+		for _, u in ipairs(eq) do if u == uuid then return true end end
+		return false
+	end
+
 	local petThreads = {}
 	local function runPetThread(uuid, myId)
 		petThreads[uuid] = true
@@ -26350,8 +26362,15 @@ return function(ctx)
 					if not (CFG.pnpEnabled and ctx.state.pnpV1Id == myId) then break end
 					pcall(function() PetsService:FireServer("UnequipPet", uuid) end)
 					task.wait(math.max(0.01, CFG.equipDelay or 0.03))
-					if not (CFG.pnpEnabled and ctx.state.pnpV1Id == myId) then break end
-					pcall(function() PetsService:FireServer("EquipPet", uuid, CFrame.new(pos)) end)
+					-- Re-place retry sampai pet beneran balik ke papan. Kalo
+					-- ditinggal di inventory, dia ilang dari daftar target &
+					-- gak pernah dikerjain lagi (pickup gagal total diam-diam).
+					for _ = 1, 5 do
+						if not (CFG.pnpEnabled and ctx.state.pnpV1Id == myId) then break end
+						pcall(function() PetsService:FireServer("EquipPet", uuid, CFrame.new(pos)) end)
+						task.wait(0.4)
+						if inEquipped(uuid) ~= false then break end
+					end
 				end
 				-- Wait sadar-cd: cd masih panjang -> poll pelan (maks 1s),
 				-- hemat RPC; cd mau habis / gak ada -> scan normal.
@@ -26402,7 +26421,9 @@ return function(ctx)
 
 	local cdMap = ctx.state.cdMap or {}
 	ctx.state.cdMap = cdMap
-	local READY_TH = 0
+	-- Ready = cd habis. 0.05 buat noleransi residual cd tipis (server kadang
+	-- masih ngasih 0.001 padahal skill udah ready).
+	local READY_TH = 0.05
 
 	local GameEvents = RS:WaitForChild("GameEvents")
 	local GetPetCooldown = GameEvents:WaitForChild("GetPetCooldown")           -- seed awal
@@ -26469,12 +26490,34 @@ return function(ctx)
 		return hrp and hrp.Position or nil
 	end
 
+	-- Pet masih di papan? true/false; nil = data gak kebaca (anggep oke, jangan loop).
+	local function inEquipped(uuid)
+		local ok, d = pcall(function() return DataService:GetData() end)
+		if not ok or not d then return nil end
+		local eq = d.PetsData and d.PetsData.EquippedPets
+		if not eq then return nil end
+		for _, u in ipairs(eq) do if u == uuid then return true end end
+		return false
+	end
+
 	----------------------------------------------------------------- loop (event-driven, paralel per-pet)
 	local petThreads = {}
 	local lastPlace = {}
+	local lastSeed  = {}
+	-- seed ulang cd kalau masih nil (gagal) tiap 3s; kalau udah ada, refresh
+	-- periodik tiap 10s sebagai jaring pengaman — push event gak selalu dateng
+	-- buat pet yang cd-nya "diam" di server (kasus Lion gak pernah kepickup).
+	local SEED_RETRY, SEED_PERIOD = 3, 10
+	local function ensureCd(uuid)
+		local due = (cdLive[uuid] == nil) and SEED_RETRY or SEED_PERIOD
+		if os.clock() - (lastSeed[uuid] or 0) < due then return end
+		lastSeed[uuid] = os.clock()
+		seedCd(uuid)
+	end
+
 	local function runPetThread(uuid, myId)
 		petThreads[uuid] = true
-		if cdLive[uuid] == nil then seedCd(uuid) end
+		ensureCd(uuid)
 		while CFG.pnpV2Enabled and ctx.alive() and ctx.state.pnpV2Id == myId do
 			local target = nil
 			for _, p in ipairs(targetPets()) do
@@ -26482,6 +26525,7 @@ return function(ctx)
 			end
 			if not target then break end
 
+			ensureCd(uuid)
 			local pos = placePos()
 			local cd = cdLive[uuid]
 			if not pos then
@@ -26491,8 +26535,15 @@ return function(ctx)
 				if not (CFG.pnpV2Enabled and ctx.state.pnpV2Id == myId) then break end
 				pcall(function() PetsService:FireServer("UnequipPet", uuid) end)
 				task.wait(math.max(0.01, CFG.pnpV2EquipDelay or 0.03))
-				if not (CFG.pnpV2Enabled and ctx.state.pnpV2Id == myId) then break end
-				pcall(function() PetsService:FireServer("EquipPet", uuid, CFrame.new(pos)) end)
+				-- Re-place retry sampai pet beneran balik ke papan. Kalo ditinggal
+				-- di inventory, dia ilang dari daftar target & gak pernah
+				-- dikerjain lagi (pickup gagal total diam-diam).
+				for _ = 1, 5 do
+					if not (CFG.pnpV2Enabled and ctx.state.pnpV2Id == myId) then break end
+					pcall(function() PetsService:FireServer("EquipPet", uuid, CFrame.new(pos)) end)
+					task.wait(0.4)
+					if inEquipped(uuid) ~= false then break end
+				end
 				lastPlace[uuid] = os.clock()
 			end
 			task.wait(math.max(0.02, tonumber(CFG.pnpV2ScanInterval) or 0.05))

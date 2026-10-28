@@ -14,7 +14,9 @@ return function(ctx)
 
 	local cdMap = ctx.state.cdMap or {}
 	ctx.state.cdMap = cdMap
-	local READY_TH = 0
+	-- Ready = cd habis. 0.05 buat noleransi residual cd tipis (server kadang
+	-- masih ngasih 0.001 padahal skill udah ready).
+	local READY_TH = 0.05
 
 	local GetPetCooldown = RS:WaitForChild("GameEvents"):WaitForChild("GetPetCooldown")
 
@@ -109,6 +111,16 @@ return function(ctx)
 	end
 
 	----------------------------------------------------------------- loop (polling, paralel per-pet)
+	-- Pet masih di papan? true/false; nil = data gak kebaca (anggep oke).
+	local function inEquipped(uuid)
+		local ok, d = pcall(function() return DataService:GetData() end)
+		if not ok or not d then return nil end
+		local eq = d.PetsData and d.PetsData.EquippedPets
+		if not eq then return nil end
+		for _, u in ipairs(eq) do if u == uuid then return true end end
+		return false
+	end
+
 	local petThreads = {}
 	local function runPetThread(uuid, myId)
 		petThreads[uuid] = true
@@ -129,8 +141,15 @@ return function(ctx)
 					if not (CFG.pnpEnabled and ctx.state.pnpV1Id == myId) then break end
 					pcall(function() PetsService:FireServer("UnequipPet", uuid) end)
 					task.wait(math.max(0.01, CFG.equipDelay or 0.03))
-					if not (CFG.pnpEnabled and ctx.state.pnpV1Id == myId) then break end
-					pcall(function() PetsService:FireServer("EquipPet", uuid, CFrame.new(pos)) end)
+					-- Re-place retry sampai pet beneran balik ke papan. Kalo
+					-- ditinggal di inventory, dia ilang dari daftar target &
+					-- gak pernah dikerjain lagi (pickup gagal total diam-diam).
+					for _ = 1, 5 do
+						if not (CFG.pnpEnabled and ctx.state.pnpV1Id == myId) then break end
+						pcall(function() PetsService:FireServer("EquipPet", uuid, CFrame.new(pos)) end)
+						task.wait(0.4)
+						if inEquipped(uuid) ~= false then break end
+					end
 				end
 				-- Wait sadar-cd: cd masih panjang -> poll pelan (maks 1s),
 				-- hemat RPC; cd mau habis / gak ada -> scan normal.
