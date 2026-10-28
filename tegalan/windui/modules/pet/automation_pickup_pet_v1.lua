@@ -20,9 +20,40 @@ return function(ctx)
 
 	local GetPetCooldown = RS:WaitForChild("GameEvents"):WaitForChild("GetPetCooldown")
 
+	-- InvokeServer bisa MACET (server gak balas) -> thread pet mati selamanya
+	-- (petThreads stuck, gak pernah respown). Wrap: timeout 5s + cancel thread.
+	-- Shared via ctx.state (V2 punya implementasi sama).
+	local invokeCd = ctx.state.pnpInvokeCdTimeout
+	if not invokeCd then
+		invokeCd = function(remote, uuid, timeoutS)
+			local result, done = nil, false
+			local th = task.spawn(function()
+				local ok, cd = pcall(function() return remote:InvokeServer(uuid) end)
+				result = (ok and type(cd) == "table") and cd or false
+				done = true
+			end)
+			local t0 = os.clock()
+			while not done and os.clock() - t0 < (timeoutS or 5) do task.wait(0.05) end
+			if not done then
+				pcall(function() task.cancel(th) end)
+				return nil, true
+			end
+			return (result == false) and nil or result, false
+		end
+		ctx.state.pnpInvokeCdTimeout = invokeCd
+	end
+
 	local function readMainCd(uuid)
-		local ok, cd = pcall(function() return GetPetCooldown:InvokeServer(uuid) end)
-		if not ok or type(cd) ~= "table" then return nil end
+		local cd, timedOut = invokeCd(GetPetCooldown, uuid, 5)
+		if timedOut then
+			local okd, d = pcall(function() return DataService:GetData() end)
+			local pt = okd and d and d.PetsData and d.PetsData.PetInventory
+				and d.PetsData.PetInventory.Data and d.PetsData.PetInventory.Data[uuid]
+			ctx.log(("PnP V1 %s: read cd TIMEOUT (server gak balas)")
+				:format(pt and tostring(pt.PetType) or uuid:sub(2, 9)))
+			return nil
+		end
+		if type(cd) ~= "table" then return nil end
 		local data, mainCd = {}, 0
 		for _, e in ipairs(cd) do
 			local t = tonumber(e.Time) or 0
@@ -181,4 +212,21 @@ return function(ctx)
 
 	function ctx.startPnpV1() task.spawn(pnpLoop) end
 	function ctx.stopPnpV1() ctx.state.pnpV1Id = (ctx.state.pnpV1Id or 0) + 1 end -- bump id -> loop lama mati
+
+	-- Force pickup: langsung cycle semua pet target di papan, abaikan cd.
+	function ctx.forcePickupPets()
+		local pets = targetPets()
+		for _, p in ipairs(pets) do
+			task.spawn(function()
+				local pos = placePos()
+				if pos then
+					pcall(function() PetsService:FireServer("UnequipPet", p.uuid) end)
+					task.wait(math.max(0.01, CFG.equipDelay or 0.03))
+					pcall(function() PetsService:FireServer("EquipPet", p.uuid, CFrame.new(pos)) end)
+					ctx.log(("PnP V1 %s: force pickup"):format(p.petType or p.uuid:sub(2, 9)))
+				end
+			end)
+		end
+		return #pets
+	end
 end

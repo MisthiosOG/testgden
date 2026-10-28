@@ -678,12 +678,19 @@ end
 					if v then
 						CFG.pnpV2Enabled = false; persist()
 						if ctx.stopPnpV2 then pcall(function() ctx.stopPnpV2() end) end
-						if v2Ctrl then pcall(function() v2Ctrl:Set(false) end) end
 						if ctx.startPnpV1 then pcall(function() ctx.startPnpV1() end) end
 					else
 						if ctx.stopPnpV1 then pcall(function() ctx.stopPnpV1() end) end
 					end
 				end)
+			sec:Button({
+				Title = "Force Pickup Now",
+				Desc = "Pickup + re-place semua pet target di papan sekarang (abaikan cd). Baca hasilnya di Settings > Logs.",
+				Callback = safe(function()
+					local n = ctx.forcePickupPets and ctx.forcePickupPets() or 0
+					W.notify("Pickup V1", n == 0 and "No pet on board" or ("Force pickup " .. tostring(n) .. " pet(s)"))
+				end),
+			})
 			addRefresh(sec)
 		end)
 
@@ -716,6 +723,14 @@ end
 						if ctx.stopPnpV2 then pcall(function() ctx.stopPnpV2() end) end
 					end
 				end)
+			sec:Button({
+				Title = "Force Pickup Now",
+				Desc = "Pickup + re-place semua pet target di papan sekarang (abaikan cd). Baca hasilnya di Settings > Logs.",
+				Callback = safe(function()
+					local n = ctx.forcePickupPets and ctx.forcePickupPets() or 0
+					W.notify("Pickup V2", n == 0 and "No pet on board" or ("Force pickup " .. tostring(n) .. " pet(s)"))
+				end),
+			})
 			addRefresh(sec)
 		end)
 
