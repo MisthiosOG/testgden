@@ -17,14 +17,23 @@ return function(ctx)
 	end)
 
 	----------------------------------------------------------------- load WindUI
+	-- Lib di-vendor ke repo (patched: drag pakai Position langsung, bukan
+	-- Tween per mousemove — versi upstream bikin window nge-lag saat digeser).
+	-- Fallback: rilis upstream Footagesus kalau raw repo gagal.
 	local compile = loadstring or load
-	local WindUI
-	local okLib, errLib = pcall(function()
-		WindUI = compile(game:HttpGet(
-			"https://github.com/Footagesus/WindUI/releases/download/1.6.66/main.lua"
-		))()
-	end)
-	if not okLib or not (WindUI and WindUI.CreateWindow) then
+	local LIB_URLS = {
+		"https://raw.githubusercontent.com/MisthiosOG/testgden/main/tegalan/windui/lib/windui-1.6.66.lua",
+		"https://github.com/Footagesus/WindUI/releases/download/1.6.66/main.lua",
+	}
+	local WindUI, errLib
+	for _, libUrl in ipairs(LIB_URLS) do
+		local ok = pcall(function()
+			WindUI = compile(game:HttpGet(libUrl))()
+		end)
+		if ok and WindUI and WindUI.CreateWindow then break end
+		WindUI = nil
+	end
+	if not (WindUI and WindUI.CreateWindow) then
 		warn("[WindUIHub] gagal load WindUI library: " .. tostring(errLib))
 		error("[WindUIHub] WindUI failed to load — hub berhenti.", 0)
 	end

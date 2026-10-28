@@ -2418,212 +2418,242 @@ end
 
 	----------------------------------------------------------------- TAB: SETTINGS
 	local function buildSettingsTab(tab)
-		local sec = section(tab, "General")
 		local persist = ctx.persistState
 
-		sec:Paragraph({
-			Title = "Dopamine | P².Achieve",
-			Desc = ("Build: %s\nToggle UI: click the logo open button or press K.\nConfig file: state_%s.json in the executor workspace (auto-saves on every change + every 10s).")
-				:format(
-					tostring((getgenv and getgenv().GAG_REVISION) or ctx.BASE or "-"),
-					tostring(ctx.LP.UserId)),
-		})
-
-		-- Live config status: what got loaded at boot + FS probe verdict.
-		local fsDiag = sec:Paragraph({
-			Title = "Config Status",
-			Desc = "Checking...",
-		})
-		task.spawn(function()
-			local last = ""
-			while ctx.alive() do
-				pcall(function()
-					local info = tostring(ctx.state.cfgLoadInfo
-						or "No config loaded this session yet")
-					local fs = tostring(ctx.state.fsStatus or "")
-					local txt = info .. (fs ~= "" and ("\n" .. fs) or "")
-					if txt ~= last then last = txt; fsDiag:SetDesc(txt) end
-				end)
-				task.wait(3)
-			end
-		end)
-		sec:Paragraph({
-			Title = "Config Storage",
-			Desc = "Run Config Storage Test to check every path.",
-		})
-		sec:Button({
-			Title = "Config Storage Test",
-			Desc = "Test writefile + readfile on every candidate path, live.",
-			Callback = safe(function()
-				local cands = ctx.CFG_STATE_CANDIDATES or {}
-				local lines = {}
-				if type(writefile) ~= "function" or type(readfile) ~= "function" then
-					lines[1] = "Executor has NO writefile/readfile, config persistence impossible"
-				elseif #cands == 0 then
-					lines[1] = "No candidate paths registered"
-				else
-					for _, p in ipairs(cands) do
-						local errOut = nil
-						local okPing = pcall(function()
-							local pf = p .. ".probe"
-							writefile(pf, "1")
-							if readfile(pf) ~= "1" then errOut = "readback mismatch" end
-							pcall(delfile, pf)
-						end)
-						if not okPing then errOut = "executor rejected the path" end
-						if errOut then
-							lines[#lines + 1] = p .. "  FAIL (" .. errOut .. ")"
-						else
-							lines[#lines + 1] = p .. "  OK"
-						end
-					end
-				end
-				pcall(function() fsDiag:SetDesc(table.concat(lines, "\n")) end)
-				ctx.log("[config] storage test: " .. tostring(#lines) .. " path(s) checked")
-			end),
-		})
-
-		sec:Button({
-			Title = "Restore Config Backup",
-			Desc = "Copy the last good config (.bak) over the main file, then re-exec.",
-			Callback = safe(function()
-				local mainP = tostring(ctx.CFG_STATE_PATH or "")
-				local bakP = mainP .. ".bak"
-				local okr, detail = pcall(function()
-					local data = readfile(bakP)
-					assert(data and #data > 0, "backup empty")
-					writefile(mainP, data)
-					pcall(function()
-						local gp = "garden_state_" .. tostring(ctx.LP.UserId) .. ".json"
-						if isfile(gp) then writefile(gp, data) end
-					end)
-					return #data
-				end)
-				if okr then
-					W.notify("Config", "Backup restored (" .. tostring(detail) .. " bytes), re-exec the script now")
-					ctx.log("[config] backup restored -> " .. mainP)
-				else
-					W.notify("Config", "No backup file found")
-					ctx.log("[config] restore FAILED: " .. tostring(detail))
-				end
-			end),
-		})
-
-		sec:Button({
-			Title = "Save Config Now",
-			Desc = "Force-save all settings to the state file.",
-			Callback = safe(function()
-				persist()
-				local okr, info = pcall(function()
-					local path = tostring(ctx.CFG_STATE_PATH or "")
-					return path .. " (" .. tostring(#readfile(path)) .. " bytes)"
-				end)
-				if okr then
-					W.notify("Settings", "Saved -> " .. info)
-					ctx.log("Settings: manual save -> " .. info)
-				else
-					W.notify("Settings", "Save FAILED, read the log")
-					ctx.log("Settings: save FAILED (readfile/writefile rejected)")
-				end
-			end),
-		})
-
-		-- STOP ALL: matiin SEMUA automation (sweep flag *Enabled) + player/perf
-		-- mods dibalikin ke default + stop function yg tersedia. Loop automation
-		-- semuanya nge-flag CFG tiap tick -> flag mati = loop berhenti sendiri.
-		local function doStopAll()
-			for k, v in pairs(CFG) do
-				if type(v) == "boolean" and tostring(k):find("Enabled", 1, true) then CFG[k] = false end
-			end
-			CFG.autoReconnect  = false
-			CFG.hideMyPlants   = false
-			CFG.hideOtherPlants= false
-			CFG.autoRemoveWebFx= false
-			CFG.disable3d      = false
-			for _, fn in ipairs({ "stopPnpV1", "stopPnpV2", "stopTrade", "stopHatch",
-				"stopAutoFavorite", "stopAutoUnfavorite", "stopEggMinusWatcher", "stopReclaim",
-				"stopGrowth", "stopLeveling", "stopLevelingV2", "stopElephant", "stopElephantV2",
-				"stopMutation", "stopCleanse", "stopBoostPet", "stopReconnect" }) do
-				if ctx[fn] then pcall(ctx[fn]) end
-			end
-			if ctx.setNoclip then pcall(function() ctx.setNoclip(false) end) end
-			if ctx.setWalkSpeed then pcall(function() ctx.setWalkSpeed(false) end) end
-			if ctx.setInfJump then pcall(function() ctx.setInfJump(false) end) end
-			if ctx.setHidePlants then
-				pcall(function() ctx.setHidePlants("mine", false) end)
-				pcall(function() ctx.setHidePlants("other", false) end)
-			end
-			if ctx.setAutoRemoveWeb then pcall(function() ctx.setAutoRemoveWeb(false) end) end
-			if ctx.setDisable3d then pcall(function() ctx.setDisable3d(false) end) end
-			if ctx.setPerfMode then pcall(function() ctx.setPerfMode("off") end) end
-			persist()
-			ctx.log("Settings: ALL automation stopped.")
-			W.notify("Settings", "All automation STOPPED.")
+		local DEFS = {
+			general = { name = "General" },
+			config  = { name = "Config" },
+			control = { name = "Control" },
+			logs    = { name = "Logs" },
+		}
+		local ORDER = { "general", "config", "control", "logs" }
+		local secs = {}
+		local function miniTab(id, buildFn)
+			local sec = section(tab, DEFS[id].name)
+			buildFn(sec)
+			secs[id] = sec
 		end
 
-		sec:Button({
-			Title = "STOP ALL Automation",
-			Desc = "Turn off all automation + player/perf mods (asks for confirmation first).",
-			Callback = safe(function()
-				local okd = pcall(function()
-					window:Dialog({
-						Title = "Stop All Automation?",
-						Content = "All automation, player mods, and perf mode will be turned off.",
-						Buttons = {
-							{ Title = "Yes, Stop All", Variant = "Primary", Callback = doStopAll },
-							{ Title = "Cancel", Variant = "Secondary", Callback = function() end },
-						},
-					})
-				end)
-				if not okd then doStopAll() end -- dist tanpa Dialog -> langsung eksekusi
-			end),
-		})
+		--------------------------------------------------- panel 1: General
+		miniTab("general", function(sec)
+			sec:Paragraph({
+				Title = "Dopamine | P².Achieve",
+				Desc = ("Build: %s\nToggle UI: click the logo open button or press K.\nConfig file: state_%s.json in the executor workspace (auto-saves on every change + every 10s).")
+					:format(
+						tostring((getgenv and getgenv().GAG_REVISION) or ctx.BASE or "-"),
+						tostring(ctx.LP.UserId)),
+			})
 
-		-- Log live: 8 baris terakhir ctx.state.logLines.
-		local logs = sec:Paragraph({ Title = "Logs", Desc = "-" })
-		task.spawn(function()
-			task.wait(3)
-			while ctx.alive() do
-				pcall(function()
-					local n = #ctx.state.logLines
-					local from = math.max(1, n - 7)
-					local t = {}
-					for i = from, n do t[#t + 1] = ctx.state.logLines[i] end
-					logs:SetDesc(table.concat(t, "\n"))
-				end)
-				task.wait(3)
+			-- Theme WindUI (bawaan lib; ganti tanpa reload).
+			local themes = {}
+			pcall(function()
+				local th = W.windui.GetThemes and W.windui:GetThemes()
+				if th then for nm in pairs(th) do themes[#themes + 1] = tostring(nm) end end
+			end)
+			table.sort(themes)
+			if #themes == 0 then themes = { "Dark", "Light" } end
+			local curTheme = nil
+			pcall(function() curTheme = W.windui.GetCurrentTheme and W.windui:GetCurrentTheme() end)
+			makeSingleW(sec, "Theme WindUI", "Built-in WindUI theme, applies instantly.",
+				function() return themes end,
+				function() return curTheme or themes[1] end,
+				function(v)
+					pcall(function() if W.windui.SetTheme then W.windui:SetTheme(v) end end)
+					W.notify("Settings", "Theme: " .. tostring(v))
+				end, { fillDelay = 2.2 })
+
+			sec:Button({
+				Title = "Reload Hub",
+				Desc = "Re-run the loader (pulls the latest build from the repo).",
+				Callback = safe(function()
+					local rev = (getgenv and getgenv().GAG_REVISION) or "main"
+					pcall(function()
+						loadstring(game:HttpGet("https://raw.githubusercontent.com/MisthiosOG/testgden/"
+							.. tostring(rev) .. "/tegalan/init.lua?t=" .. os.time()))()
+					end)
+				end),
+			})
+		end)
+
+		--------------------------------------------------- panel 2: Config
+		miniTab("config", function(sec)
+			-- Live config status: what got loaded at boot + FS probe verdict.
+			local fsDiag = sec:Paragraph({
+				Title = "Config Status",
+				Desc = "Checking...",
+			})
+			task.spawn(function()
+				local last = ""
+				while ctx.alive() do
+					pcall(function()
+						local info = tostring(ctx.state.cfgLoadInfo
+							or "No config loaded this session yet")
+						local fs = tostring(ctx.state.fsStatus or "")
+						local txt = info .. (fs ~= "" and ("\n" .. fs) or "")
+						if txt ~= last then last = txt; fsDiag:SetDesc(txt) end
+					end)
+					task.wait(3)
+				end
+			end)
+			sec:Paragraph({
+				Title = "Config Storage",
+				Desc = "Run Config Storage Test to check every path.",
+			})
+			sec:Button({
+				Title = "Save Config Now",
+				Desc = "Force-save all settings to the state file.",
+				Callback = safe(function()
+					persist()
+					local okr, info = pcall(function()
+						local path = tostring(ctx.CFG_STATE_PATH or "")
+						return path .. " (" .. tostring(#readfile(path)) .. " bytes)"
+					end)
+					if okr then
+						W.notify("Settings", "Saved -> " .. info)
+						ctx.log("Settings: manual save -> " .. info)
+					else
+						W.notify("Settings", "Save FAILED, read the log")
+						ctx.log("Settings: save FAILED (readfile/writefile rejected)")
+					end
+				end),
+			})
+			sec:Button({
+				Title = "Config Storage Test",
+				Desc = "Test writefile + readfile on every candidate path, live.",
+				Callback = safe(function()
+					local cands = ctx.CFG_STATE_CANDIDATES or {}
+					local lines = {}
+					if type(writefile) ~= "function" or type(readfile) ~= "function" then
+						lines[1] = "Executor has NO writefile/readfile, config persistence impossible"
+					elseif #cands == 0 then
+						lines[1] = "No candidate paths registered"
+					else
+						for _, p in ipairs(cands) do
+							local errOut = nil
+							local okPing = pcall(function()
+								local pf = p .. ".probe"
+								writefile(pf, "1")
+								if readfile(pf) ~= "1" then errOut = "readback mismatch" end
+								pcall(delfile, pf)
+							end)
+							if not okPing then errOut = "executor rejected the path" end
+							if errOut then
+								lines[#lines + 1] = p .. "  FAIL (" .. errOut .. ")"
+							else
+								lines[#lines + 1] = p .. "  OK"
+							end
+						end
+					end
+					pcall(function() fsDiag:SetDesc(table.concat(lines, "\n")) end)
+					ctx.log("[config] storage test: " .. tostring(#lines) .. " path(s) checked")
+				end),
+			})
+			sec:Button({
+				Title = "Restore Config Backup",
+				Desc = "Copy the last good config (.bak) over the main file, then re-exec.",
+				Callback = safe(function()
+					local mainP = tostring(ctx.CFG_STATE_PATH or "")
+					local bakP = mainP .. ".bak"
+					local okr, detail = pcall(function()
+						local data = readfile(bakP)
+						assert(data and #data > 0, "backup empty")
+						writefile(mainP, data)
+						pcall(function()
+							local gp = "garden_state_" .. tostring(ctx.LP.UserId) .. ".json"
+							if isfile(gp) then writefile(gp, data) end
+						end)
+						return #data
+					end)
+					if okr then
+						W.notify("Config", "Backup restored (" .. tostring(detail) .. " bytes), re-exec the script now")
+						ctx.log("[config] backup restored -> " .. mainP)
+					else
+						W.notify("Config", "No backup file found")
+						ctx.log("[config] restore FAILED: " .. tostring(detail))
+					end
+				end),
+			})
+		end)
+
+		--------------------------------------------------- panel 3: Control
+		miniTab("control", function(sec)
+			sec:Paragraph({
+				Title = "Automation Control",
+				Desc = "STOP ALL turns off every automation + player/perf mods in one go. Toggles snap back to OFF and persist to the config.",
+			})
+
+			-- STOP ALL: matiin SEMUA automation (sweep flag *Enabled) + player/perf
+			-- mods dibalikin ke default + stop function yg tersedia. Loop automation
+			-- semuanya nge-flag CFG tiap tick -> flag mati = loop berhenti sendiri.
+			local function doStopAll()
+				for k, v in pairs(CFG) do
+					if type(v) == "boolean" and tostring(k):find("Enabled", 1, true) then CFG[k] = false end
+				end
+				CFG.autoReconnect  = false
+				CFG.hideMyPlants   = false
+				CFG.hideOtherPlants= false
+				CFG.autoRemoveWebFx= false
+				CFG.disable3d      = false
+				for _, fn in ipairs({ "stopPnpV1", "stopPnpV2", "stopTrade", "stopHatch",
+					"stopAutoFavorite", "stopAutoUnfavorite", "stopEggMinusWatcher", "stopReclaim",
+					"stopGrowth", "stopLeveling", "stopLevelingV2", "stopElephant", "stopElephantV2",
+					"stopMutation", "stopCleanse", "stopBoostPet", "stopReconnect" }) do
+					if ctx[fn] then pcall(ctx[fn]) end
+				end
+				if ctx.setNoclip then pcall(function() ctx.setNoclip(false) end) end
+				if ctx.setWalkSpeed then pcall(function() ctx.setWalkSpeed(false) end) end
+				if ctx.setInfJump then pcall(function() ctx.setInfJump(false) end) end
+				if ctx.setHidePlants then
+					pcall(function() ctx.setHidePlants("mine", false) end)
+					pcall(function() ctx.setHidePlants("other", false) end)
+				end
+				if ctx.setAutoRemoveWeb then pcall(function() ctx.setAutoRemoveWeb(false) end) end
+				if ctx.setDisable3d then pcall(function() ctx.setDisable3d(false) end) end
+				if ctx.setPerfMode then pcall(function() ctx.setPerfMode("off") end) end
+				persist()
+				ctx.log("Settings: ALL automation stopped.")
+				W.notify("Settings", "All automation STOPPED.")
 			end
+
+			sec:Button({
+				Title = "STOP ALL Automation",
+				Desc = "Turn off all automation + player/perf mods (asks for confirmation first).",
+				Callback = safe(function()
+					local okd = pcall(function()
+						window:Dialog({
+							Title = "Stop All Automation?",
+							Content = "All automation, player mods, and perf mode will be turned off.",
+							Buttons = {
+								{ Title = "Yes, Stop All", Variant = "Primary", Callback = doStopAll },
+								{ Title = "Cancel", Variant = "Secondary", Callback = function() end },
+							},
+						})
+					end)
+					if not okd then doStopAll() end -- dist tanpa Dialog -> langsung eksekusi
+				end),
+			})
 		end)
 
-		-- Theme WindUI (bawaan lib; ganti tanpa reload).
-		local themes = {}
-		pcall(function()
-			local th = W.windui.GetThemes and W.windui:GetThemes()
-			if th then for nm in pairs(th) do themes[#themes + 1] = tostring(nm) end end
+		--------------------------------------------------- panel 4: Logs
+		miniTab("logs", function(sec)
+			-- Log live: 8 baris terakhir ctx.state.logLines.
+			local logs = sec:Paragraph({ Title = "Logs", Desc = "-" })
+			task.spawn(function()
+				task.wait(3)
+				while ctx.alive() do
+					pcall(function()
+						local n = #ctx.state.logLines
+						local from = math.max(1, n - 7)
+						local t = {}
+						for i = from, n do t[#t + 1] = ctx.state.logLines[i] end
+						logs:SetDesc(table.concat(t, "\n"))
+					end)
+					task.wait(3)
+				end
+			end)
 		end)
-		table.sort(themes)
-		if #themes == 0 then themes = { "Dark", "Light" } end
-		local curTheme = nil
-		pcall(function() curTheme = W.windui.GetCurrentTheme and W.windui:GetCurrentTheme() end)
-		makeSingleW(sec, "Theme WindUI", "Built-in WindUI theme, applies instantly.",
-			function() return themes end,
-			function() return curTheme or themes[1] end,
-			function(v)
-				pcall(function() if W.windui.SetTheme then W.windui:SetTheme(v) end end)
-				W.notify("Settings", "Theme: " .. tostring(v))
-			end, { fillDelay = 2.2 })
 
-		sec:Button({
-			Title = "Reload Hub",
-			Desc = "Re-run the loader (pulls the latest build from the repo).",
-			Callback = safe(function()
-				local rev = (getgenv and getgenv().GAG_REVISION) or "main"
-				pcall(function()
-					loadstring(game:HttpGet("https://raw.githubusercontent.com/MisthiosOG/testgden/"
-						.. tostring(rev) .. "/tegalan/init.lua?t=" .. os.time()))()
-				end)
-			end),
-		})
+		miniBar(secs, ORDER, DEFS, "general")
 	end
 
 	----------------------------------------------------------------- REGISTRY TAB
