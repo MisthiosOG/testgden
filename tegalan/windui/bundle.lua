@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 43 modul, di-generate 2026-10-28T09:28:25.557Z
+-- 43 modul, di-generate 2026-10-28T09:47:14.469Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -11602,7 +11602,11 @@ return function(ctx)
 	-- (freeze 4.5-23s kalau 3 dropdown fetch serial). Caller pertama fetch,
 	-- caller lain nunggu hasilnya -> cukup SATU GetData per cacheKey per TTL.
 	local optCache = {}
-	local function fetchOptions(cacheKey, getOptions)
+	-- Cache opsi 5 menit: dropdown gak perlu re-scan tiap buka (dulu TTL 5s ->
+	-- tiap klik Mindahin freeze). "Update Pet List" satu-satunya yang force
+	-- re-scan (klik eksplisit user, jadi wajar nunggu sekali).
+	local TTL_OPTIONS = 300
+	local function fetchOptions(cacheKey, getOptions, force)
 		if not cacheKey then
 			local ok, list = pcall(getOptions)
 			return (ok and type(list) == "table") and list or {}
@@ -11615,7 +11619,7 @@ return function(ctx)
 				local fc = optCache[cacheKey]
 				return (fc and fc.done) and fc.list or {}
 			end
-			if os.clock() - c.at < 5 then return c.list end
+			if not force and os.clock() - c.at < TTL_OPTIONS then return c.list end
 		end
 		optCache[cacheKey] = { done = false }
 		local ok, list = pcall(getOptions)
@@ -11821,10 +11825,11 @@ return function(ctx)
 			if cut then return d:sub(1, cut - 1), d:sub(cut + 3) end
 			return d, nil
 		end
-		local function snapshot()
-			-- fetchOptions: cache+dedupe (GetData). Cap opts.max: inventory GAG
-			-- bisa ribuan pet -> Refresh dist bangun baris sinkron = freeze.
-			local list = fetchOptions(opts.cacheKey, getOptions)
+		local function snapshot(force)
+			-- fetchOptions: cache+dedupe (GetData). force=true = tombol refresh
+			-- eksplisit, lewatin cache. Cap opts.max: inventory GAG bisa ribuan
+			-- pet -> Refresh dist bangun baris sinkron = freeze.
+			local list = fetchOptions(opts.cacheKey, getOptions, force)
 			local max = opts.max or 250
 			local displays, selected = {}, {}
 			table.clear(title2v)
@@ -11923,17 +11928,30 @@ return function(ctx)
 				end)
 			end)
 		end)
+		local fillPending = false
 		local function fill()
-			local t0 = os.clock()
-			while not pendingDone and os.clock() - t0 < 25 do task.wait(0.1) end
-			if pending then buildRows(pending) end
+			-- GAK blocking jalur klik: menu kebuka INSTAN walau snapshot belum
+			-- siap. Rows nanggung dibangun di thread sendiri begitu data datang
+			-- (Refresh saat menu terbuka) — dulu: klik nunggu sampai 25s = freeze.
+			if pendingDone then
+				if pending then buildRows(pending) end
+				return
+			end
+			if fillPending then return end
+			fillPending = true
+			task.spawn(function()
+				local t0 = os.clock()
+				while not pendingDone and os.clock() - t0 < 25 do task.wait(0.1) end
+				fillPending = false
+				if pending then buildRows(pending) end
+			end)
 		end
 		lazyOpen(control, fill)
 		local function refresh()
-			-- Tombol "Update Pet List": rebuild penuh (aksi eksplisit user);
-			-- via queueRebuild -> antar dropdown serial, gak freeze barengan.
+			-- Tombol "Update Pet List": re-scan PAKSA (cache 5 menit dilewati)
+			-- + rebuild rows via queueRebuild -> antar dropdown serial.
 			queueRebuild(function()
-				local ds, sel2, extra = snapshot()
+				local ds, sel2, extra = snapshot(true)
 				buildRows({ ds = ds, sel2 = sel2, extra = extra })
 			end)
 		end
