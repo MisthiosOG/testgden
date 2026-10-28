@@ -56,12 +56,14 @@ return function(ctx)
 			local function scan(t)
 				for k, v in pairs(t) do
 					if type(v) == "table" then
-					if v.Data and v.Data.BaseWeight then
-						bwCache[tostring(k)] = v.Data.BaseWeight
-						eggTimer[tostring(k)] = tonumber(v.Data.TimeToHatch) or nil
-					else
+						local dd = v.Data
+						if type(dd) == "table" then
+							-- Pet = punya BaseWeight. Egg yang masih CD cuma
+							-- punya TimeToHatch di data (pet belum di-roll).
+							if dd.BaseWeight then bwCache[tostring(k)] = dd.BaseWeight end
+							if dd.TimeToHatch then eggTimer[tostring(k)] = tonumber(dd.TimeToHatch) end
+						end
 						scan(v)
-					end
 					end
 				end
 			end
@@ -276,7 +278,10 @@ return function(ctx)
 				local isReady = not (tl and tl > 0)
 				if egg:GetAttribute("READY") ~= nil or tl then
 					local bw = getBW(uuid)
-					if bw then
+					-- Egg yang masih CD gak punya BaseWeight di data (pet
+					-- belum di-roll) — tetep render name + countdown.
+					-- BaseWeight cuma ada di egg ready.
+					if bw or not isReady then
 						entries[#entries + 1] = {
 							egg = egg,
 							eggName = egg:GetAttribute("EggName") or egg.Name,
@@ -304,7 +309,7 @@ return function(ctx)
 			if not e.ready then
 				rows[#rows + 1] = {
 					name = ('<font color="#FFD400">%s</font>'):format(e.eggName),
-					kg = ('<font color="#33C1FF">BW: %skg</font>'):format(tostring(e.bw)),
+					kg = e.bw and ('<font color="#33C1FF">BW: %skg</font>'):format(tostring(e.bw)) or nil,
 					tail = ('<font color="#FF5E00">%s</font>'):format(formatTime(e.timeLeft)),
 				}
 			else
@@ -327,12 +332,20 @@ return function(ctx)
 				local petName = eggPets[e.uuid] or "Pet"
 				local text
 				if not e.ready then
-					text = string.format(
-						'<font color="#FFD400">%s</font>\n<font color="#FF5E00">%s</font>\n<font size="12" color="#BBBBBB">BW: %skg</font>',
-						e.eggName,
-						formatTime(e.timeLeft),
-						tostring(e.bw)
-					)
+					-- BW line cuma kalo datanya udah ada (egg ready biasanya);
+					-- egg CD udah cukup nama + countdown.
+					text = e.bw
+						and string.format(
+							'<font color="#FFD400">%s</font>\n<font color="#FF5E00">%s</font>\n<font size="12" color="#BBBBBB">BW: %skg</font>',
+							e.eggName,
+							formatTime(e.timeLeft),
+							tostring(e.bw)
+						)
+						or string.format(
+							'<font color="#FFD400">%s</font>\n<font color="#FF5E00">%s</font>',
+							e.eggName,
+							formatTime(e.timeLeft)
+						)
 				else
 					local est = round(e.bw * WEIGHT_MULT, 2)
 					local size, color = getSizeInfo(est)
