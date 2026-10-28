@@ -33,6 +33,9 @@ return function(ctx)
 	local eggPets = {}
 	-- Cache BaseWeight per uuid (scan data game — NEBULA buildBW).
 	local bwCache = {}
+	-- Sisa hatch per uuid dari data egg (fallback countdown kalau attribute
+	-- TimeToHatch-nya gak direplikasi ke client / absen).
+	local eggTimer = {}
 	local lastMode
 
 	local function updateEggPets()
@@ -53,11 +56,12 @@ return function(ctx)
 			local function scan(t)
 				for k, v in pairs(t) do
 					if type(v) == "table" then
-						if v.Data and v.Data.BaseWeight then
-							bwCache[tostring(k)] = v.Data.BaseWeight
-						else
-							scan(v)
-						end
+					if v.Data and v.Data.BaseWeight then
+						bwCache[tostring(k)] = v.Data.BaseWeight
+						eggTimer[tostring(k)] = tonumber(v.Data.TimeToHatch) or nil
+					else
+						scan(v)
+					end
 					end
 				end
 			end
@@ -68,6 +72,18 @@ return function(ctx)
 	local function getBW(uuid)
 		if not bwCache[uuid] then buildBW() end
 		return bwCache[uuid]
+	end
+
+	-- Sisa detik hatch: attribute live > data egg. Attr <=0 = kondisi live
+	-- ready — GAK ditimpa data, yang bisa basi (sisa hatch lama).
+	local function resolveTimer(uuid, tlAttr)
+		if tlAttr then
+			if tlAttr > 0 then return tlAttr end
+			return 0
+		end
+		if not bwCache[uuid] then buildBW() end
+		local dt = eggTimer[uuid]
+		return (dt and dt > 0) and dt or 0
 	end
 
 	local function round(n, d)
@@ -249,13 +265,16 @@ return function(ctx)
 		local entries = {}
 		for _, egg in ipairs(CS:GetTagged("PetEggServer")) do
 			if egg:GetAttribute("OWNER") == LP.Name then
-				local tl = tonumber(egg:GetAttribute("TimeToHatch"))
-				-- Countdown jalan kapan pun TimeToHatch > 0. READY dipercaya
-				-- cuma kalo timer habis/absen — game ngeset READY=true duluan
-				-- sebelum egg beneran siap.
+				local uuid = tostring(egg:GetAttribute("OBJECT_UUID"))
+				-- Sisa waktu: attribute TimeToHatch live dulu; kalo absen,
+				-- fallback ke data egg (SavedObjects.Data.TimeToHatch via
+				-- GetData — attribute model kadang gak direplikasi).
+				local tl = resolveTimer(uuid, tonumber(egg:GetAttribute("TimeToHatch")))
+				-- Countdown jalan selama tl > 0. READY dipercaya cuma kalo
+				-- timer habis/absen — game ngeset READY=true duluan sebelum
+				-- egg beneran siap.
 				local isReady = not (tl and tl > 0)
 				if egg:GetAttribute("READY") ~= nil or tl then
-					local uuid = tostring(egg:GetAttribute("OBJECT_UUID"))
 					local bw = getBW(uuid)
 					if bw then
 						entries[#entries + 1] = {
