@@ -10,7 +10,7 @@
      Pet yang ketahuan punya zone: CD0/ADV cuma nunggu event ZONE (fallback kalau event nggak datang).
      Setelah pemicu: tunggu PICKUP_DELAY -> Unequip -> tunggu server ack -> Equip -> verifikasi.
 
-     Timing dikunci di konstanta (PICKUP_DELAY 0.5 / EQUIP_DELAY 1E-20 / SCAN_INTERVAL 0.5).
+     Timing dikunci di konstanta (PICKUP_DELAY 0.5 / EQUIP_DELAY 1E-20 / SCAN_INTERVAL 0.15).
      Config: pnpUuids, pnpEnabled.
      Fungsi: ctx.startPnpV1 / ctx.stopPnpV1 / ctx.forcePickupPets. Expose ctx.inventoryPetOptions (V1 & V2). ]]
 return function(ctx)
@@ -28,7 +28,7 @@ return function(ctx)
 	-- Timing DIKUNCI (hasil tes in-game, nggak dibaca dari CFG / UI lagi)
 	local PICKUP_DELAY   = 0.5   -- jeda setelah skill mulai sebelum pet ditarik
 	local EQUIP_DELAY    = 1e-20 -- jeda tambahan unequip -> equip setelah server ack (praktis 0)
-	local SCAN_INTERVAL  = 0.5   -- polling cd cadangan (sinyal utama = push server)
+	local SCAN_INTERVAL  = 0.15  -- polling cd cadangan (sinyal utama = push server)
 	local CD0_MIN        = 0.6  -- jeda minimal abis cd 0 natural (Pandora tercepat ~0.63 s)
 	local ZONE_FALLBACK  = 2.0  -- pet zone: kalau event ZONE nggak datang segini setelah CD0, tetap tarik
 	local ADV_DROP       = 10   -- cd turun >= ini dalam 1 update = di-advance pet lain
