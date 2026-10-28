@@ -893,8 +893,10 @@ end
 			care    = { name = "Care" },
 			shovel  = { name = "Shovel" },
 			harvest = { name = "Harvest" },
+			fav     = { name = "Favorite" },
+			reclaim = { name = "Reclaim" },
 		}
-		local forder = { "plants", "care", "shovel", "harvest" }
+		local forder = { "plants", "care", "shovel", "harvest", "fav", "reclaim" }
 		local fsecs = {}
 
 		local function miniTab(id, buildFn)
@@ -1018,7 +1020,7 @@ end
 			addRefresh(sec)
 		end)
 
-		--------------------------------------------------- panel 4: Harvest (Collect + Favorite + Reclaimer)
+		--------------------------------------------------- panel 4: Harvest (Collect)
 		miniTab("harvest", function(sec)
 			makeInputW(sec, "Delay To Collect", "Extra delay (sec) per collect cycle.",
 				function() return tostring(CFG.collectDelay) end,
@@ -1071,6 +1073,20 @@ end
 					CFG.collectCombEnabled = v
 					if v and ctx.startCollect then pcall(function() ctx.startCollect() end) end
 				end)
+			makeMultiDynW(sec, "Select Blacklist Mutations", "Mutations to SKIP. Every other mutated fruit is collected (non-mutated fruits are never collected).",
+				function() return ctx.getCollectBlMutOptions() end,
+				CFG.collectBlMutNames, function() persist() end, { register = true, fillDelay = 3.7 })
+			makeToggleW(sec, "Auto Collect Mutated (Blacklist)", "Collect all mutated fruits except the blacklisted mutations.",
+				function() return CFG.collectBlMutEnabled end,
+				function(v)
+					CFG.collectBlMutEnabled = v
+					if v and ctx.startCollect then pcall(function() ctx.startCollect() end) end
+				end)
+			addRefresh(sec)
+		end)
+
+		--------------------------------------------------- panel 5: Favorite
+		miniTab("fav", function(sec)
 			makeMultiDynW(sec, "Select Fruits [Fav]", "Garden fruit types to favorite (empty = any).",
 				function() return ctx.getFavFruitOptions() end,
 				CFG.favFruitNames, function() persist() end, { register = true, fillDelay = 3.8 })
@@ -1099,6 +1115,11 @@ end
 					CFG.unfavEnabled = v
 					if v and ctx.startFavorite then pcall(function() ctx.startFavorite() end) end
 				end)
+			addRefresh(sec)
+		end)
+
+		--------------------------------------------------- panel 6: Reclaim
+		miniTab("reclaim", function(sec)
 			makeMultiDynW(sec, "Select Plants [Reclaim]", "Pick plants to reclaim. 'All' = everything.",
 				function() return ctx.getReclaimPlantOptions() end,
 				CFG.reclaimPlantNames, function() persist() end, { register = true, fillDelay = 4.4 })
@@ -1111,7 +1132,8 @@ end
 			addRefresh(sec)
 		end)
 
-		miniBar(fsecs, forder, fdefs, "plants")
+		miniBar(fsecs, forder, fdefs, "plants",
+			{ { "plants", "care", "shovel" }, { "harvest", "fav", "reclaim" } })
 	end
 
 	----------------------------------------------------------------- TAB: HATCH (Auto Hatch + Auto Sell)

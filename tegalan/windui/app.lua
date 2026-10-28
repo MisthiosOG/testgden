@@ -243,7 +243,7 @@ return function(ctx)
 	if CFG.waterEnabled and ctx.startWater then ctx.startWater(); ctx.log("Auto-resume: Auto Water ON.") end
 	if CFG.shovelTreeEnabled and ctx.startShovelTree then ctx.startShovelTree(); ctx.log("Auto-resume: Auto Shovel Tree ON.") end
 	if CFG.shovelFruitEnabled and ctx.startShovelFruit then ctx.startShovelFruit(); ctx.log("Auto-resume: Auto Shovel Fruit ON.") end
-	if (CFG.collectWlFruitEnabled or CFG.collectWlMutEnabled or CFG.collectCombEnabled) and ctx.startCollect then
+	if (CFG.collectWlFruitEnabled or CFG.collectWlMutEnabled or CFG.collectCombEnabled or CFG.collectBlMutEnabled) and ctx.startCollect then
 		ctx.startCollect(); ctx.log("Auto-resume: Auto Collect ON.")
 	end
 	if (CFG.favEnabled or CFG.unfavEnabled) and ctx.startFavorite then

@@ -6,7 +6,9 @@
      3 mode (bisa barengan), collect fruit yang cocok SALAH SATU mode aktif:
        1) Whitelist Fruit   : tipe fruit terpilih
        2) Whitelist Mutation: fruit punya mutasi terpilih
-       3) Combined          : fruit + mutasi + variant + berat (SEMUA kriteria) ]]
+       3) Combined          : fruit + mutasi + variant + berat (SEMUA kriteria)
+       4) Blacklist Mutation: SEMUA buah bermutasi, kecuali yang punya mutasi di blacklist
+                              (buah tanpa mutasi nggak di-collect) ]]
 return function(ctx)
 	local RS  = game:GetService("ReplicatedStorage")
 	local CFG = ctx.CFG
@@ -103,6 +105,14 @@ return function(ctx)
 		return optionsFrom(names, "All (semua mutasi)")
 	end
 	function ctx.getCollectModeOptions() return { ">= (berat minimal)", "<= (berat maksimal)" } end
+	-- opsi blacklist: semua mutasi TANPA "All" (blacklist All = nggak ada yang ke-harvest)
+	function ctx.getCollectBlMutOptions()
+		local out = {}
+		for _, o in ipairs(ctx.getCollectMutationOptions()) do
+			if o.value ~= "All" then out[#out + 1] = o end
+		end
+		return out
+	end
 
 	----------------------------------------------------------------- match per-mode
 	local function hasSelMut(f, muts)
@@ -143,11 +153,52 @@ return function(ctx)
 		return true
 	end
 
+	-- mode 4: blacklist mutation — collect SEMUA buah yang punya mutasi, kecuali yang punya
+	-- salah satu mutasi di blacklist. Buah tanpa mutasi = skip.
+	local mutNameSet
+	local function getMutNameSet()
+		if mutNameSet then return mutNameSet end
+		local set = {}
+		pcall(function()
+			local MH = require(RS.Modules.MutationHandler)
+			local mn = MH and MH.MutationNames
+			if type(mn) == "table" then
+				if mn[1] ~= nil then for _, v in ipairs(mn) do set[tostring(v)] = true end
+				else for k in pairs(mn) do set[tostring(k)] = true end end
+			end
+		end)
+		if next(set) then mutNameSet = set end -- registry belum siap -> coba lagi nanti
+		return set
+	end
+	-- daftar mutasi yang nempel di buah (atribut boolean true)
+	local function fruitMutations(f)
+		local out = {}
+		local names = getMutNameSet()
+		local useRegistry = next(names) ~= nil
+		for k, v in pairs(f:GetAttributes()) do
+			if v == true and not NOT_MUTATION[k] and ((not useRegistry) or names[k]) then
+				out[#out + 1] = k
+			end
+		end
+		return out
+	end
+	local function matchBlMut(f)
+		if not CFG.collectBlMutEnabled then return false end
+		local muts = fruitMutations(f)
+		if #muts == 0 then return false end -- buah non-mutasi nggak di-harvest
+		local bl = CFG.collectBlMutNames or {}
+		for _, m in ipairs(muts) do
+			if bl[m] then return false end
+		end
+		return true
+	end
+
 	local function shouldCollect(f)
-		return matchWlFruit(f) or matchWlMut(f) or matchCombined(f)
+		return matchWlFruit(f) or matchWlMut(f) or matchCombined(f) or matchBlMut(f)
 	end
 	local function anyEnabled()
 		return CFG.collectWlFruitEnabled or CFG.collectWlMutEnabled or CFG.collectCombEnabled
+			or CFG.collectBlMutEnabled
 	end
 
 	----------------------------------------------------------------- loop

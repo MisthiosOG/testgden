@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 44 modul, di-generate 2026-10-28T19:40:19.712Z
+-- 44 modul, di-generate 2026-10-28T20:27:14.356Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -248,7 +248,7 @@ return function(ctx)
 	if CFG.waterEnabled and ctx.startWater then ctx.startWater(); ctx.log("Auto-resume: Auto Water ON.") end
 	if CFG.shovelTreeEnabled and ctx.startShovelTree then ctx.startShovelTree(); ctx.log("Auto-resume: Auto Shovel Tree ON.") end
 	if CFG.shovelFruitEnabled and ctx.startShovelFruit then ctx.startShovelFruit(); ctx.log("Auto-resume: Auto Shovel Fruit ON.") end
-	if (CFG.collectWlFruitEnabled or CFG.collectWlMutEnabled or CFG.collectCombEnabled) and ctx.startCollect then
+	if (CFG.collectWlFruitEnabled or CFG.collectWlMutEnabled or CFG.collectCombEnabled or CFG.collectBlMutEnabled) and ctx.startCollect then
 		ctx.startCollect(); ctx.log("Auto-resume: Auto Collect ON.")
 	end
 	if (CFG.favEnabled or CFG.unfavEnabled) and ctx.startFavorite then
@@ -16140,6 +16140,10 @@ return function(ctx)
 		collectCombMode       = ">= (berat minimal)",
 		collectCombWeight     = 0,
 		collectCombEnabled    = false,
+		-- Blacklist Mutation: collect SEMUA buah bermutasi kecuali mutasi yang di-blacklist
+		-- (buah tanpa mutasi nggak di-collect)
+		collectBlMutNames     = {},
+		collectBlMutEnabled   = false,
 
 		-- Automation Favorite (favorite/unfavorite fruit via Favorite Tool)
 		favFruitNames = {},
@@ -16518,6 +16522,8 @@ return function(ctx)
 			CFG.collectCombMode       = st.collectCombMode or ">= (berat minimal)"
 			CFG.collectCombWeight     = tonumber(st.collectCombWeight) or 0
 			CFG.collectCombEnabled    = st.collectCombEnabled or false
+			CFG.collectBlMutNames     = (type(st.collectBlMutNames) == "table") and st.collectBlMutNames or {}
+			CFG.collectBlMutEnabled   = st.collectBlMutEnabled or false
 
 			CFG.favFruitNames = (type(st.favFruitNames) == "table") and st.favFruitNames or {}
 			CFG.favMutNames   = (type(st.favMutNames) == "table") and st.favMutNames or {}
@@ -18669,7 +18675,9 @@ end
      3 mode (bisa barengan), collect fruit yang cocok SALAH SATU mode aktif:
        1) Whitelist Fruit   : tipe fruit terpilih
        2) Whitelist Mutation: fruit punya mutasi terpilih
-       3) Combined          : fruit + mutasi + variant + berat (SEMUA kriteria) ]]
+       3) Combined          : fruit + mutasi + variant + berat (SEMUA kriteria)
+       4) Blacklist Mutation: SEMUA buah bermutasi, kecuali yang punya mutasi di blacklist
+                              (buah tanpa mutasi nggak di-collect) ]]
 return function(ctx)
 	local RS  = game:GetService("ReplicatedStorage")
 	local CFG = ctx.CFG
@@ -18766,6 +18774,14 @@ return function(ctx)
 		return optionsFrom(names, "All (semua mutasi)")
 	end
 	function ctx.getCollectModeOptions() return { ">= (berat minimal)", "<= (berat maksimal)" } end
+	-- opsi blacklist: semua mutasi TANPA "All" (blacklist All = nggak ada yang ke-harvest)
+	function ctx.getCollectBlMutOptions()
+		local out = {}
+		for _, o in ipairs(ctx.getCollectMutationOptions()) do
+			if o.value ~= "All" then out[#out + 1] = o end
+		end
+		return out
+	end
 
 	----------------------------------------------------------------- match per-mode
 	local function hasSelMut(f, muts)
@@ -18806,11 +18822,52 @@ return function(ctx)
 		return true
 	end
 
+	-- mode 4: blacklist mutation — collect SEMUA buah yang punya mutasi, kecuali yang punya
+	-- salah satu mutasi di blacklist. Buah tanpa mutasi = skip.
+	local mutNameSet
+	local function getMutNameSet()
+		if mutNameSet then return mutNameSet end
+		local set = {}
+		pcall(function()
+			local MH = require(RS.Modules.MutationHandler)
+			local mn = MH and MH.MutationNames
+			if type(mn) == "table" then
+				if mn[1] ~= nil then for _, v in ipairs(mn) do set[tostring(v)] = true end
+				else for k in pairs(mn) do set[tostring(k)] = true end end
+			end
+		end)
+		if next(set) then mutNameSet = set end -- registry belum siap -> coba lagi nanti
+		return set
+	end
+	-- daftar mutasi yang nempel di buah (atribut boolean true)
+	local function fruitMutations(f)
+		local out = {}
+		local names = getMutNameSet()
+		local useRegistry = next(names) ~= nil
+		for k, v in pairs(f:GetAttributes()) do
+			if v == true and not NOT_MUTATION[k] and ((not useRegistry) or names[k]) then
+				out[#out + 1] = k
+			end
+		end
+		return out
+	end
+	local function matchBlMut(f)
+		if not CFG.collectBlMutEnabled then return false end
+		local muts = fruitMutations(f)
+		if #muts == 0 then return false end -- buah non-mutasi nggak di-harvest
+		local bl = CFG.collectBlMutNames or {}
+		for _, m in ipairs(muts) do
+			if bl[m] then return false end
+		end
+		return true
+	end
+
 	local function shouldCollect(f)
-		return matchWlFruit(f) or matchWlMut(f) or matchCombined(f)
+		return matchWlFruit(f) or matchWlMut(f) or matchCombined(f) or matchBlMut(f)
 	end
 	local function anyEnabled()
 		return CFG.collectWlFruitEnabled or CFG.collectWlMutEnabled or CFG.collectCombEnabled
+			or CFG.collectBlMutEnabled
 	end
 
 	----------------------------------------------------------------- loop
@@ -28233,8 +28290,10 @@ end
 			care    = { name = "Care" },
 			shovel  = { name = "Shovel" },
 			harvest = { name = "Harvest" },
+			fav     = { name = "Favorite" },
+			reclaim = { name = "Reclaim" },
 		}
-		local forder = { "plants", "care", "shovel", "harvest" }
+		local forder = { "plants", "care", "shovel", "harvest", "fav", "reclaim" }
 		local fsecs = {}
 
 		local function miniTab(id, buildFn)
@@ -28358,7 +28417,7 @@ end
 			addRefresh(sec)
 		end)
 
-		--------------------------------------------------- panel 4: Harvest (Collect + Favorite + Reclaimer)
+		--------------------------------------------------- panel 4: Harvest (Collect)
 		miniTab("harvest", function(sec)
 			makeInputW(sec, "Delay To Collect", "Extra delay (sec) per collect cycle.",
 				function() return tostring(CFG.collectDelay) end,
@@ -28411,6 +28470,20 @@ end
 					CFG.collectCombEnabled = v
 					if v and ctx.startCollect then pcall(function() ctx.startCollect() end) end
 				end)
+			makeMultiDynW(sec, "Select Blacklist Mutations", "Mutations to SKIP. Every other mutated fruit is collected (non-mutated fruits are never collected).",
+				function() return ctx.getCollectBlMutOptions() end,
+				CFG.collectBlMutNames, function() persist() end, { register = true, fillDelay = 3.7 })
+			makeToggleW(sec, "Auto Collect Mutated (Blacklist)", "Collect all mutated fruits except the blacklisted mutations.",
+				function() return CFG.collectBlMutEnabled end,
+				function(v)
+					CFG.collectBlMutEnabled = v
+					if v and ctx.startCollect then pcall(function() ctx.startCollect() end) end
+				end)
+			addRefresh(sec)
+		end)
+
+		--------------------------------------------------- panel 5: Favorite
+		miniTab("fav", function(sec)
 			makeMultiDynW(sec, "Select Fruits [Fav]", "Garden fruit types to favorite (empty = any).",
 				function() return ctx.getFavFruitOptions() end,
 				CFG.favFruitNames, function() persist() end, { register = true, fillDelay = 3.8 })
@@ -28439,6 +28512,11 @@ end
 					CFG.unfavEnabled = v
 					if v and ctx.startFavorite then pcall(function() ctx.startFavorite() end) end
 				end)
+			addRefresh(sec)
+		end)
+
+		--------------------------------------------------- panel 6: Reclaim
+		miniTab("reclaim", function(sec)
 			makeMultiDynW(sec, "Select Plants [Reclaim]", "Pick plants to reclaim. 'All' = everything.",
 				function() return ctx.getReclaimPlantOptions() end,
 				CFG.reclaimPlantNames, function() persist() end, { register = true, fillDelay = 4.4 })
@@ -28451,7 +28529,8 @@ end
 			addRefresh(sec)
 		end)
 
-		miniBar(fsecs, forder, fdefs, "plants")
+		miniBar(fsecs, forder, fdefs, "plants",
+			{ { "plants", "care", "shovel" }, { "harvest", "fav", "reclaim" } })
 	end
 
 	----------------------------------------------------------------- TAB: HATCH (Auto Hatch + Auto Sell)

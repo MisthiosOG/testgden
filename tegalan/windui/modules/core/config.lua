@@ -216,6 +216,10 @@ return function(ctx)
 		collectCombMode       = ">= (berat minimal)",
 		collectCombWeight     = 0,
 		collectCombEnabled    = false,
+		-- Blacklist Mutation: collect SEMUA buah bermutasi kecuali mutasi yang di-blacklist
+		-- (buah tanpa mutasi nggak di-collect)
+		collectBlMutNames     = {},
+		collectBlMutEnabled   = false,
 
 		-- Automation Favorite (favorite/unfavorite fruit via Favorite Tool)
 		favFruitNames = {},
@@ -594,6 +598,8 @@ return function(ctx)
 			CFG.collectCombMode       = st.collectCombMode or ">= (berat minimal)"
 			CFG.collectCombWeight     = tonumber(st.collectCombWeight) or 0
 			CFG.collectCombEnabled    = st.collectCombEnabled or false
+			CFG.collectBlMutNames     = (type(st.collectBlMutNames) == "table") and st.collectBlMutNames or {}
+			CFG.collectBlMutEnabled   = st.collectBlMutEnabled or false
 
 			CFG.favFruitNames = (type(st.favFruitNames) == "table") and st.favFruitNames or {}
 			CFG.favMutNames   = (type(st.favMutNames) == "table") and st.favMutNames or {}
