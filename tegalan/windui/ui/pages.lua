@@ -1567,7 +1567,7 @@ end
 			makeMultiW(sec, "V1 Target Pet Types", "Select pet types to auto-elephant (all pets in game)",
 				reg.PET_OPTIONS, CFG.elephantPetTypes, function() persist() end,
 				{ fillDelay = 0.8 })
-			makeInputW(sec, "Target Weight (KG)", "Max weight before being replaced (e.g. 5.5)",
+			makeInputW(sec, "Target Weight (KG)", "Release pets at this weight — ANY value, decimals OK (e.g. 3.5, 4.7, 6.2). No presets.",
 				function() return CFG.elephantTargetWeight end,
 				function(t) CFG.elephantTargetWeight = tonumber(t) or 5.5 end)
 			makeInputW(sec, "Max Target Pets", "How many target pets are active at once",
@@ -1622,7 +1622,7 @@ end
 				function() return CFG.elephantV2Switch end,
 				function(uuid) CFG.elephantV2Switch = uuid end,
 				{ fillDelay = 1.4 })
-			makeInputW(sec, "Target Weight (KG)", "Max weight of a target before being released (e.g. 5.5)",
+			makeInputW(sec, "Target Weight (KG)", "Release pets at this weight — ANY value, decimals OK (e.g. 3.5, 4.7, 6.2). No presets.",
 				function() return CFG.elephantV2Weight end,
 				function(t) CFG.elephantV2Weight = tonumber(t) or 5.5 end)
 			makeInputW(sec, "Max Target Pets", "How many target pets are active at once in the garden",
