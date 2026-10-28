@@ -84,6 +84,16 @@ return function(ctx)
 		optCache[cacheKey] = { done = false }
 		local ok, list = pcall(getOptions)
 		list = (ok and type(list) == "table") and list or {}
+		if #list == 0 then
+			-- GAK cache hasil kosong (join awal: data game belum siap). Cache
+			-- kosong 5 menit = dropdown mati & retry cuma baca cache yang sama.
+			if c and c.done and #c.list > 0 then
+				optCache[cacheKey] = c
+			else
+				optCache[cacheKey] = { done = true, at = 0, list = {} }
+			end
+			return list
+		end
 		optCache[cacheKey] = { done = true, at = os.clock(), list = list }
 		return list
 	end
@@ -355,6 +365,7 @@ return function(ctx)
 		})
 		-- Constraint menu + wrap Title opsi ditangani patchDropdown() (module level)
 		local function buildRows(p)
+			built = true
 			local n = dropdownFill(control, p.ds, p.sel2)
 			if ctx.log then
 				ctx.log(("dropdown '%s' filled: %d options%s")
@@ -364,7 +375,7 @@ return function(ctx)
 		-- LAZY: baris dibangun pas menu pertama dibuka. Snapshot datanya sendiri
 		-- jalan 0.5s setelah build di thread sendiri (fetchOptions = cukup 1x
 		-- GetData), BARIS gak dibangun pas load/post-load = freeze scan habis.
-		local pendingDone, pending = false, nil
+		local pendingDone, pending, built = false, nil, false
 		task.delay(0.5, function()
 			pcall(function()
 				local ds, sel2, extra = snapshot()
@@ -390,6 +401,8 @@ return function(ctx)
 		end)
 		local fillPending = false
 		local function fill()
+			-- Rows udah ke-pre-build pas boot (pre-warm)? Gak perlu rebuild.
+			if built then return end
 			-- GAK blocking jalur klik: menu kebuka INSTAN walau snapshot belum
 			-- siap. Rows nanggung dibangun di thread sendiri begitu data datang
 			-- (Refresh saat menu terbuka) — dulu: klik nunggu sampai 25s = freeze.
@@ -2749,6 +2762,23 @@ end
 
 	----------------------------------------------------------------- default tab (pilot)
 	pcall(function() if first and first.Select then first:Select() end end)
+
+	-- PRE-WARM dropdown: semua dropdown dinamis di-snapshot + rows-nya di-pre-
+	-- build di background (antrean serial) BEGITU tabs selesai kebangun, lalu
+	-- re-warm tiap 4 menit biar cache gak pernah dingin. Hasilnya: dropdown
+	-- kebuka INSTAN lengkap — paritas sama dengan build lama (data udah ready
+	-- pas menu muncul), tanpa "scan" yang kerasa pas klik.
+	task.spawn(function()
+		task.wait(1.5)
+		local function warm()
+			for _, r in ipairs(W.refreshers or {}) do pcall(r) end
+		end
+		warm()
+		while ctx.alive() do
+			task.wait(240)
+			if ctx.alive() then warm() end
+		end
+	end)
 
 	ctx.log("WindUI pages dibangun: SEMUA TAB (Pet, Farm, Hatch, Elephant, Flow, Leveling, Mutation, Inventory, Shop, Misc, Settings).")
 end
