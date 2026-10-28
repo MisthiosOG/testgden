@@ -1240,6 +1240,18 @@ end
 			ctx.ui.rHatchToggle = function()
 				pcall(function() masterCtrl:Set(CFG.hatchEnabled) end)
 			end
+			makeToggleW(sec, "Auto GM Sprinkler",
+				"Keep a Grandmaster Sprinkler placed — re-places when it's about to expire (lasts ~10 min).",
+				function() return CFG.gmSprinklerEnabled end,
+				function(v)
+					CFG.gmSprinklerEnabled = v
+					if v then
+						if ctx.startGmSprinkler then pcall(function() ctx.startGmSprinkler() end) end
+					else
+						if ctx.stopGmSprinkler then pcall(function() ctx.stopGmSprinkler() end) end
+					end
+					persist()
+				end)
 			makeToggleW(sec, "Auto Sell Pets", "Auto sell backpack pets per your settings.",
 				function() return CFG.autoSellEnabled end,
 				function(v) CFG.autoSellEnabled = v end)

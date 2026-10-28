@@ -119,6 +119,12 @@ return function(ctx)
 		ctx.log("Auto-resume: Auto Shovel Sprinkler ON.")
 	end
 
+	-- auto-resume Auto GM Sprinkler (tab Hatch)
+	if CFG.gmSprinklerEnabled and ctx.startGmSprinkler then
+		ctx.startGmSprinkler()
+		ctx.log("Auto-resume: Auto GM Sprinkler ON.")
+	end
+
 	-- auto-resume Auto Reconnect (biar loop rejoin lanjut tiap masuk server)
 	if CFG.reconnectEnabled and ctx.startReconnect then
 		ctx.startReconnect()

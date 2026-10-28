@@ -205,6 +205,7 @@ local MODULES = {
 	"modules/farm/automation_reclaimer.lua",
 	"modules/farm/automation_plants.lua",
 	"modules/farm/automation_sprinkler.lua",
+	"modules/farm/automation_gm_sprinkler.lua",
 	"modules/farm/automation_water.lua",
 	"modules/farm/automation_shovel.lua",
 	"modules/farm/automation_collect.lua",

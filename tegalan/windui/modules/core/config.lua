@@ -254,6 +254,9 @@ return function(ctx)
 		shovelSprinklerDelay  = 0,
 		shovelSprinklerEnabled = false,
 
+		-- Auto GM Sprinkler (tab Hatch): jaga 1 Grandmaster Sprinkler terpasang
+		gmSprinklerEnabled     = false,
+
 		-- Auto-Reconnect (Misc): auto rejoin kalau ke-kick / disconnect (seperti di Trade)
 		autoReconnect     = true,
 
@@ -629,6 +632,7 @@ return function(ctx)
 			CFG.shovelSprinklerNames  = (type(st.shovelSprinklerNames) == "table") and st.shovelSprinklerNames or {}
 			CFG.shovelSprinklerDelay  = tonumber(st.shovelSprinklerDelay) or 0
 			CFG.shovelSprinklerEnabled = st.shovelSprinklerEnabled or false
+			CFG.gmSprinklerEnabled    = st.gmSprinklerEnabled or false
 			if st.autoReconnect ~= nil then CFG.autoReconnect = st.autoReconnect end
 			CFG.reconnectEnabled  = st.reconnectEnabled or false
 			CFG.reconnectInterval = tonumber(st.reconnectInterval) or 5
