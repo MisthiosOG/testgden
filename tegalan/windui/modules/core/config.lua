@@ -96,9 +96,9 @@ return function(ctx)
 		pnpPetTypes = {},     -- (lama) filter per-tipe; kosong = semua equipped
 		-- PnP V1 (polling)
 		pnpUuids    = {},     -- filter per-UUID pet equipped; kosong = semua equipped
-		pickupDelay = 0.3,    -- jeda setelah place sebelum siklus berikutnya
-		equipDelay  = 1e-20,  -- jeda antara unequip -> equip (1E-20 = near-zero instant)
-		pnpScanInterval = 0.05, -- jeda antar-scan loop PNP (makin kecil = makin sering cek)
+		pickupDelay = 0.5,    -- jeda setelah skill mulai sebelum pet ditarik
+		equipDelay  = 1e-20,  -- jeda tambahan unequip -> equip setelah server konfirmasi (1E-20 = tanpa jeda)
+		pnpScanInterval = 0.15, -- polling cd cadangan (sinyal utama = push server)
 		pnpEnabled  = false,
 		-- PnP V2 (event-driven, config terpisah dari V1)
 		pnpV2Uuids       = {},
@@ -490,7 +490,7 @@ return function(ctx)
 			CFG.favoritePetTypes = migratePetSet(st.favoritePetTypes)
 			CFG.pnpPetTypes = (type(st.pnpPetTypes) == "table") and st.pnpPetTypes or {}
 			CFG.pnpUuids    = (type(st.pnpUuids) == "table") and st.pnpUuids or {}
-			CFG.pickupDelay = tonumber(st.pickupDelay) or 0.3
+			CFG.pickupDelay = tonumber(st.pickupDelay) or 0.5
 			CFG.equipDelay  = tonumber(st.equipDelay) or 1e-20
 			CFG.pnpScanInterval = tonumber(st.pnpScanInterval) or 0.05
 			CFG.pnpEnabled  = st.pnpEnabled or false
