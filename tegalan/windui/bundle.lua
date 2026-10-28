@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 44 modul, di-generate 2026-10-28T10:29:29.687Z
+-- 44 modul, di-generate 2026-10-28T10:34:09.095Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -10609,15 +10609,12 @@ return function(ctx)
 		return mainCd
 	end
 
-	-- Target = pet yang UDAH di papan + pet kepilihan yang MASIH DI INVENTORY
-	-- (needEquip). Dulu kandidat cuma dari EquippedPets -> pet kepilih di
-	-- dropdown tapi belum di-equip gak pernah jadi target (serta-lion gak
-	-- kepickup). Pet inventory kepilihan dianggap target & di tempatkan otomatis
-	-- oleh thread-nya (cek cd baru relevan SETELAH pet beneran di papan).
-	local equippedSet = {}
+	-- Target CUMA pet yang udah di papan (EquippedPets). Pet yang masih di
+	-- inventory GAK dipapanin otomatis — pickup harus diem kalo board kosong;
+	-- naruh pet manual itu urusan user. Pilihan dropdown cuma ngefilter pet
+	-- yang ada di papan.
 	local function targetPets()
 		local out = {}
-		table.clear(equippedSet)
 		local ok, d = pcall(function() return DataService:GetData() end)
 		if not ok or not d then return out end
 		local eq  = d.PetsData and d.PetsData.EquippedPets
@@ -10625,17 +10622,8 @@ return function(ctx)
 		if not eq then return out end
 		local sel = CFG.pnpUuids or {}
 		for _, uuid in ipairs(eq) do
-			equippedSet[uuid] = true
-			local pt = inv and inv[uuid] and inv[uuid].PetType
 			if (not next(sel)) or sel[uuid] then
-				out[#out + 1] = { uuid = uuid, petType = pt }
-			end
-		end
-		if next(sel) and inv then
-			for uuid in pairs(sel) do
-				if not equippedSet[uuid] and inv[uuid] then
-					out[#out + 1] = { uuid = uuid, petType = inv[uuid].PetType, needEquip = true }
-				end
+				out[#out + 1] = { uuid = uuid, petType = inv and inv[uuid] and inv[uuid].PetType }
 			end
 		end
 		return out
@@ -10698,8 +10686,7 @@ return function(ctx)
 
 	----------------------------------------------------------------- loop (polling, paralel per-pet)
 	local petThreads = {}
-	local lastEquipTry = {}
-	local function runPetThread(uuid, myId, needEquip)
+	local function runPetThread(uuid, myId)
 		petThreads[uuid] = true
 		while CFG.pnpEnabled and ctx.alive() and ctx.state.pnpV1Id == myId do
 			local target = nil
@@ -10711,18 +10698,9 @@ return function(ctx)
 			local pos = placePos()
 			if not pos then
 				task.wait(1)
-			elseif target.needEquip then
-				-- Pilihan pet belum di papan (masih inventory): tempatkan
-				-- langsung, jangan nunggu cd (cd baru ada setelah ditempatkan).
-				-- Guard 1.5s: kalau place gagal (papan penuh), gak spam RPC.
-				if os.clock() - (lastEquipTry[uuid] or 0) >= 1.5 then
-					lastEquipTry[uuid] = os.clock()
-					pcall(function() PetsService:FireServer("EquipPet", uuid, CFrame.new(pos)) end)
-				end
-				task.wait(0.5)
 			else
 				local mainCd = readMainCd(uuid)
-				if pos and mainCd ~= nil and mainCd <= READY_TH then
+				if mainCd ~= nil and mainCd <= READY_TH then
 					if (CFG.pickupDelay or 0) > 0 then task.wait(CFG.pickupDelay) end
 					if not (CFG.pnpEnabled and ctx.state.pnpV1Id == myId) then break end
 					pcall(function() PetsService:FireServer("UnequipPet", uuid) end)
@@ -10747,16 +10725,12 @@ return function(ctx)
 		while CFG.pnpEnabled and ctx.alive() and ctx.state.pnpV1Id == myId do
 			local pets = targetPets()
 			if #pets == 0 then
-				setStatus("PNP V1: tidak ada pet target (equip pet dulu)")
+				setStatus("PNP V1: board kosong — idle (place pet manual)")
 			else
-				local neq = 0
 				for _, p in ipairs(pets) do
-					if p.needEquip then neq = neq + 1 end
-					if not petThreads[p.uuid] then task.spawn(runPetThread, p.uuid, myId, p.needEquip) end
+					if not petThreads[p.uuid] then task.spawn(runPetThread, p.uuid, myId) end
 				end
-				setStatus(neq > 0
-					and ("PNP V1: %d pet (%d sedang dipapanin otomatis)"):format(#pets, neq)
-					or ("PNP V1 (polling): %d pet"):format(#pets))
+				setStatus(("PNP V1 (polling): %d pet di papan"):format(#pets))
 			end
 			task.wait(1)
 		end
@@ -10820,12 +10794,12 @@ return function(ctx)
 		if m ~= nil then cdLive[uuid] = m; cdMap[uuid] = { data = data } end
 	end
 
-	-- Target = pet di papan + pet kepilihan yang masih di inventory (needEquip) —
-	-- sama kayak V1: pilihan dropdown gak boleh diabaikan cuma karena belum equip.
-	local equippedSet = {}
+	-- Target CUMA pet yang udah di papan (EquippedPets). Pet yang masih di
+	-- inventory GAK pernah dipapanin otomatis — pickup harus Diam saat board
+	-- kosong, samayang naruh pet manual adalah tugas pengguna. Pilihan dropdown
+	-- hanya memfilter pet yang sedang berada di papan.
 	local function targetPets()
 		local out = {}
-		table.clear(equippedSet)
 		local ok, d = pcall(function() return DataService:GetData() end)
 		if not ok or not d then return out end
 		local eq  = d.PetsData and d.PetsData.EquippedPets
@@ -10833,17 +10807,8 @@ return function(ctx)
 		if not eq then return out end
 		local sel = CFG.pnpV2Uuids or {}
 		for _, uuid in ipairs(eq) do
-			equippedSet[uuid] = true
-			local pt = inv and inv[uuid] and inv[uuid].PetType
 			if (not next(sel)) or sel[uuid] then
-				out[#out + 1] = { uuid = uuid, petType = pt }
-			end
-		end
-		if next(sel) and inv then
-			for uuid in pairs(sel) do
-				if not equippedSet[uuid] and inv[uuid] then
-					out[#out + 1] = { uuid = uuid, petType = inv[uuid].PetType, needEquip = true }
-				end
+				out[#out + 1] = { uuid = uuid, petType = inv and inv[uuid] and inv[uuid].PetType }
 			end
 		end
 		return out
@@ -10862,10 +10827,9 @@ return function(ctx)
 	----------------------------------------------------------------- loop (event-driven, paralel per-pet)
 	local petThreads = {}
 	local lastPlace = {}
-	local lastEquipTry = {}
-	local function runPetThread(uuid, myId, needEquip)
+	local function runPetThread(uuid, myId)
 		petThreads[uuid] = true
-		if not needEquip and cdLive[uuid] == nil then seedCd(uuid) end
+		if cdLive[uuid] == nil then seedCd(uuid) end
 		while CFG.pnpV2Enabled and ctx.alive() and ctx.state.pnpV2Id == myId do
 			local target = nil
 			for _, p in ipairs(targetPets()) do
@@ -10877,15 +10841,7 @@ return function(ctx)
 			local cd = cdLive[uuid]
 			if not pos then
 				task.wait(1)
-			elseif target.needEquip then
-				-- Belum di papan (masih inventory): tempatkan langsung tanpa
-				-- nunggu cd; guard 1.5s biar gagal place (papan penuh) gak spam.
-				if os.clock() - (lastEquipTry[uuid] or 0) >= 1.5 then
-					lastEquipTry[uuid] = os.clock()
-					pcall(function() PetsService:FireServer("EquipPet", uuid, CFrame.new(pos)) end)
-				end
-				task.wait(0.5)
-			elseif pos and cd ~= nil and cd <= READY_TH and (os.clock() - (lastPlace[uuid] or 0)) > 0.25 then
+			elseif cd ~= nil and cd <= READY_TH and (os.clock() - (lastPlace[uuid] or 0)) > 0.25 then
 				if (CFG.pnpV2PickupDelay or 0) > 0 then task.wait(CFG.pnpV2PickupDelay) end
 				if not (CFG.pnpV2Enabled and ctx.state.pnpV2Id == myId) then break end
 				pcall(function() PetsService:FireServer("UnequipPet", uuid) end)
@@ -10906,16 +10862,12 @@ return function(ctx)
 		while CFG.pnpV2Enabled and ctx.alive() and ctx.state.pnpV2Id == myId do
 			local pets = targetPets()
 			if #pets == 0 then
-				setStatus("PNP V2: tidak ada pet target (equip pet dulu)")
+				setStatus("PNP V2: board kosong — idle (place pet manual)")
 			else
-				local neq = 0
 				for _, p in ipairs(pets) do
-					if p.needEquip then neq = neq + 1 end
-					if not petThreads[p.uuid] then task.spawn(runPetThread, p.uuid, myId, p.needEquip) end
+					if not petThreads[p.uuid] then task.spawn(runPetThread, p.uuid, myId) end
 				end
-				setStatus(neq > 0
-					and ("PNP V2: %d pet (%d sedang dipapanin otomatis)"):format(#pets, neq)
-					or ("PNP V2 (event-driven): %d pet"):format(#pets))
+				setStatus(("PNP V2 (event-driven): %d pet di papan"):format(#pets))
 			end
 			task.wait(1)
 		end
