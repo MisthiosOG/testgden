@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 45 modul, di-generate 2026-10-28T17:10:29.089Z
+-- 44 modul, di-generate 2026-10-28T19:40:19.712Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -136,15 +136,11 @@ return function(ctx)
 		ctx.log("Auto-resume: Auto Reconnect ON.")
 	end
 
-	-- auto-resume PNP kalau sebelumnya aktif (V1 polling / V2 event-driven, mutually exclusive)
+	-- auto-resume PNP V1 kalau sebelumnya aktif
 	if CFG.pnpEnabled and ctx.startPnpV1 then
 		task.wait(1)
 		ctx.startPnpV1()
 		ctx.log("Auto-resume: PNP V1 ON.")
-	elseif CFG.pnpV2Enabled and ctx.startPnpV2 then
-		task.wait(1)
-		ctx.startPnpV2()
-		ctx.log("Auto-resume: PNP V2 ON.")
 	end
 
 	-- auto-resume kalau sebelumnya aktif
@@ -8722,6 +8718,21 @@ end
 end
 end
 
+-- [patch] pilihan yang lagi ke-select naik ke baris paling atas (dipanggil tiap
+-- menu dibuka & abis Refresh). Cuma ganti LayoutOrder, nggak bangun ulang row.
+function as.SortSelectedFirst(au)
+for aw,ax in next,ap.Tabs do
+local ti=ax and ax.UIElements and ax.UIElements.TabItem
+if ti then
+local base=typeof(aw)=="number"and aw or 0
+ti.LayoutOrder=(ax.Selected and 0 or 1000000)+base
+end
+end
+pcall(function()
+ap.UIElements.Menu.Frame.ScrollingFrame.CanvasPosition=Vector2.new(0,0)
+end)
+end
+
 function as.Refresh(au,av)
 if ao.Window.Destroyed then
 return
@@ -8738,15 +8749,13 @@ ap.Tabs={}
 if ap.SearchBarEnabled then
 if not at then
 at=aj("Search...","search",ap.UIElements.Menu,nil,function(aw)
+local q=string.lower(aw)
 for ax,ay in next,ap.Tabs do
-if string.find(string.lower(ay.Name),string.lower(aw),1,true)then
-ay.UIElements.TabItem.Visible=true
-else
-ay.UIElements.TabItem.Visible=false
+ay.UIElements.TabItem.Visible=string.find(string.lower(ay.Name),q,1,true)~=nil
 end
+-- [patch] recalc SEKALI setelah loop (dulu per-row = O(n^2) + layout paksa tiap row)
 RecalculateListSize()
 RecalculateCanvasSize()
-end
 end,true)
 at.Size=UDim2.new(1,0,0,aq.SearchBarHeight)
 at.Position=UDim2.new(0,0,0,0)
@@ -8927,8 +8936,8 @@ end
 end
 
 ap.Tabs[aw]=ay
-
-as:Display()
+-- [patch] urutan eksplisit (dipakai SortSelectedFirst); Display dipindah ke luar loop
+if typeof(aw)=="number"then ay.UIElements.TabItem.LayoutOrder=aw end
 
 if ar=="Dropdown"then
 ak.AddSignal(ay.UIElements.TabItem.MouseButton1Click,function()
@@ -9010,13 +9019,16 @@ end
 Callback(ax.Callback or function()end)
 end)
 end
-
-RecalculateCanvasSize()
-RecalculateListSize()
 else a.load'M'
 :New{Parent=ap.UIElements.Menu.Frame.ScrollingFrame}
 end
 end
+
+-- [patch] Display + recalc SEKALI (dulu tiap row: O(n^2) & layout paksa -> freeze)
+as:Display()
+if ar=="Dropdown"then as:SortSelectedFirst()end
+RecalculateCanvasSize()
+RecalculateListSize()
 
 
 
@@ -9058,6 +9070,7 @@ RecalculateCanvasSize()
 
 function as.Open(au)
 if not ap.Locked then
+if ar=="Dropdown"then pcall(as.SortSelectedFirst,as)end
 ap.UIElements.Menu.Visible=true
 ap.UIElements.MenuCanvas.Visible=true
 ap.UIElements.MenuCanvas.Active=true
@@ -16011,12 +16024,6 @@ return function(ctx)
 		equipDelay  = 1e-20,  -- jeda tambahan unequip -> equip setelah server konfirmasi (1E-20 = tanpa jeda)
 		pnpScanInterval = 0.5,  -- (nggak dipakai V1 lagi; timing dikunci di modul)
 		pnpEnabled  = false,
-		-- PnP V2 (event-driven, config terpisah dari V1)
-		pnpV2Uuids       = {},
-		pnpV2PickupDelay = 0.05,
-		pnpV2EquipDelay  = 0.03,
-		pnpV2ScanInterval = 0.05,
-		pnpV2Enabled     = false,
 		espEnabled  = false, -- ESP Label pet (label melayang di dunia)
 		espMode     = "target", -- tampilan ESP pet: "target" (billboard di objek) / "screen" (panel di layar)
 		espEggEnabled = false, -- ESP Egg (style NEBULA) — terpisah dari ESP pet
@@ -16405,11 +16412,6 @@ return function(ctx)
 			CFG.equipDelay  = tonumber(st.equipDelay) or 1e-20
 			CFG.pnpScanInterval = tonumber(st.pnpScanInterval) or 0.5
 			CFG.pnpEnabled  = st.pnpEnabled or false
-			CFG.pnpV2Uuids       = (type(st.pnpV2Uuids) == "table") and st.pnpV2Uuids or {}
-			CFG.pnpV2PickupDelay = tonumber(st.pnpV2PickupDelay) or 0.05
-			CFG.pnpV2EquipDelay  = tonumber(st.pnpV2EquipDelay) or 0.03
-			CFG.pnpV2ScanInterval = tonumber(st.pnpV2ScanInterval) or 0.05
-			CFG.pnpV2Enabled     = st.pnpV2Enabled or false
 			CFG.espEnabled = st.espEnabled or false
 			CFG.espMode = st.espMode or "target"
 			CFG.espEggEnabled = st.espEggEnabled or false
@@ -26566,136 +26568,6 @@ return function(ctx)
 	end
 end
 ]=],
-	["modules/pet/automation_pickup_pet_v2.lua"] = [=[
---[[ automation_pickup_pet_v2.lua — PnP V2 (EVENT-DRIVEN).
-     BUKAN polling. Dengerin RemoteEvent server `PetCooldownsUpdated` yang PUSH cooldown tiap
-     berubah (nol round-trip -> nol jitter -> stabil). Actor act dari cd real-time di memori.
-     Config SENDIRI: pnpV2Uuids, pnpV2PickupDelay, pnpV2EquipDelay, pnpV2ScanInterval, pnpV2Enabled.
-     Fungsi: ctx.startPnpV2 / ctx.stopPnpV2. Dropdown pakai ctx.inventoryPetOptions (dari V1). ]]
-return function(ctx)
-	local DataService = ctx.deps.DataService
-	local PetsService = ctx.deps.PetsService
-	local CFG         = ctx.CFG
-	local function setStatus(s) ctx.setStatus(s) end
-
-	local RS = game:GetService("ReplicatedStorage")
-	local LP = ctx.LP
-
-	local cdMap = ctx.state.cdMap or {}
-	ctx.state.cdMap = cdMap
-	local READY_TH = 0
-
-	local GameEvents = RS:WaitForChild("GameEvents")
-	local GetPetCooldown = GameEvents:WaitForChild("GetPetCooldown")
-	local PetCooldownsUpdated = GameEvents:WaitForChild("PetCooldownsUpdated")
-
-	local function computeMainCd(cd)
-		if type(cd) ~= "table" then return nil end
-		local data, mainCd = {}, 0
-		for _, e in ipairs(cd) do
-			local t = tonumber(e.Time) or 0
-			data[#data + 1] = { Passive = e.Passive, Time = t }
-			if not tostring(e.Passive or ""):find("Mutation") then
-				if t > mainCd then mainCd = t end
-			end
-		end
-		return mainCd, data
-	end
-
-	local cdLive = {}
-	ctx.state.pnpV2CdLive = cdLive
-	do
-		local g = (getgenv and getgenv()) or _G
-		if g.__pnpV2CdConn then pcall(function() g.__pnpV2CdConn:Disconnect() end) end
-		g.__pnpV2CdConn = PetCooldownsUpdated.OnClientEvent:Connect(function(uuid, cdTable)
-			if type(uuid) ~= "string" then return end
-			local m, data = computeMainCd(cdTable)
-			if m ~= nil then cdLive[uuid] = m; cdMap[uuid] = { data = data } end
-		end)
-	end
-	local function seedCd(uuid)
-		local ok, cd = pcall(function() return GetPetCooldown:InvokeServer(uuid) end)
-		local m, data = computeMainCd(ok and cd or nil)
-		if m ~= nil then cdLive[uuid] = m; cdMap[uuid] = { data = data } end
-	end
-
-	local function targetPets()
-		local out = {}
-		local ok, d = pcall(function() return DataService:GetData() end)
-		if not ok or not d then return out end
-		local eq  = d.PetsData and d.PetsData.EquippedPets
-		local inv = d.PetsData and d.PetsData.PetInventory and d.PetsData.PetInventory.Data
-		if not eq then return out end
-		local sel = CFG.pnpV2Uuids or {}
-		for _, uuid in ipairs(eq) do
-			local pt = inv and inv[uuid] and inv[uuid].PetType
-			if (not next(sel)) or sel[uuid] then
-				out[#out + 1] = { uuid = uuid, petType = pt }
-			end
-		end
-		return out
-	end
-
-	local GetFarm = require(RS.Modules.GetFarm)
-	local function placePos()
-		local farm = GetFarm and GetFarm(LP)
-		local pa = farm and farm:FindFirstChild("PetArea")
-		if pa then return pa.Position end
-		local char = LP.Character
-		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		return hrp and hrp.Position or nil
-	end
-
-	local petThreads = {}
-	local lastPlace = {}
-	local function runPetThread(uuid, myId)
-		petThreads[uuid] = true
-		if cdLive[uuid] == nil then seedCd(uuid) end
-		while CFG.pnpV2Enabled and ctx.alive() and ctx.state.pnpV2Id == myId do
-			local stillTarget = false
-			for _, p in ipairs(targetPets()) do
-				if p.uuid == uuid then stillTarget = true; break end
-			end
-			if not stillTarget then break end
-
-			local cd = cdLive[uuid]
-			local pos = placePos()
-			if pos and cd ~= nil and cd <= READY_TH and (os.clock() - (lastPlace[uuid] or 0)) > 0.25 then
-				if (CFG.pnpV2PickupDelay or 0) > 0 then task.wait(CFG.pnpV2PickupDelay) end
-				if not (CFG.pnpV2Enabled and ctx.state.pnpV2Id == myId) then break end
-				pcall(function() PetsService:FireServer("UnequipPet", uuid) end)
-				task.wait(math.max(0.01, CFG.pnpV2EquipDelay or 0.03))
-				if not (CFG.pnpV2Enabled and ctx.state.pnpV2Id == myId) then break end
-				pcall(function() PetsService:FireServer("EquipPet", uuid, CFrame.new(pos)) end)
-				lastPlace[uuid] = os.clock()
-			end
-			task.wait(math.max(0.02, tonumber(CFG.pnpV2ScanInterval) or 0.05))
-		end
-		petThreads[uuid] = nil
-	end
-
-	local function pnpLoop()
-		ctx.state.pnpV2Id = (ctx.state.pnpV2Id or 0) + 1
-		local myId = ctx.state.pnpV2Id
-		ctx.elevate()
-		while CFG.pnpV2Enabled and ctx.alive() and ctx.state.pnpV2Id == myId do
-			local pets = targetPets()
-			if #pets == 0 then
-				setStatus("PNP V2: tidak ada pet target (equip pet dulu)")
-			else
-				for _, p in ipairs(pets) do
-					if not petThreads[p.uuid] then task.spawn(runPetThread, p.uuid, myId) end
-				end
-				setStatus(("PNP V2 (event-driven): %d pet"):format(#pets))
-			end
-			task.wait(1)
-		end
-	end
-
-	function ctx.startPnpV2() task.spawn(pnpLoop) end
-	function ctx.stopPnpV2() ctx.state.pnpV2Id = (ctx.state.pnpV2Id or 0) + 1 end
-end
-]=],
 	["modules/shop/automation_merchant.lua"] = [=[
 --[[ automation_merchant.lua — Auto Buy Merchant (Traveling Merchant + Event/Night Shop).
 
@@ -27625,48 +27497,30 @@ return function(ctx)
 		return (values and #values) or 0
 	end
 
-	-- Antrian rebuild dropdown: tombol "Update Pet List" nge-refresh 4+ dropdown
-	-- dgn list ratusan baris — kalau dibangun BARENGAN (task.spawn paralel),
-	-- UI threadfreeze gila. Serial: satu job per 0.2s, frame tetap hidup.
-	local rebuildQueue, rebuilding = {}, false
-	local function queueRebuild(job)
-		rebuildQueue[#rebuildQueue + 1] = job
-		if rebuilding then return end
-		rebuilding = true
-		task.spawn(function()
-			while #rebuildQueue > 0 do
-				local j = table.remove(rebuildQueue, 1)
-				pcall(j)
-				task.wait(0.2)
-			end
-			rebuilding = false
-		end)
-	end
-
 	-- ponytail: prebuild rows di background pernah dicoba (anti-freeze klik) —
 	-- DIBATALK: ribuan row instance hidup = FPS drop parah. Kembali lazy: click
 	-- pertama ngehitch sekali (0.5-2s), sisanya instan & FPS aman. Upgrade path =
 	-- list virtualisasi per-row di level library.
 
-	-- Lazy open: dist ngebind klik ke <menuTabel>:Open() (bukan selalu table
-	-- yang kitaa hold) -> hook dipasang di KEDUA sink: menu.Open & control.Open.
+	-- Open hook: fillFn dipanggil TIAP menu dibuka (fillFn sendiri yang ngecek
+	-- udah ke-build atau belum -> murah). Dulu cuma sekali, jadi "Update Pet
+	-- List" harus rebuild semua dropdown langsung = freeze lama.
+	-- dist ngebind klik ke <menuTabel>:Open() (bukan selalu table yang kita
+	-- hold) -> hook dipasang di KEDUA sink: menu.Open & control.Open.
 	local function lazyOpen(control, fillFn)
 		local menu = control.DropdownMenu or control
-		local done = false
-		local function once()
-			if done then return end
-			done = true
+		local function onOpen()
 			pcall(fillFn)
 		end
 		local o1, o2 = menu.Open, control.Open
 		menu.Open = function(self, ...)
 			if o1 then pcall(o1, self, ...) end
-			once()
+			onOpen()
 		end
 		if control ~= menu and o2 then
 			control.Open = function(self, ...)
 				if o2 then pcall(o2, self, ...) end
-				once()
+				onOpen()
 			end
 		end
 	end
@@ -27697,7 +27551,10 @@ return function(ctx)
 			return displays, selected
 		end
 		local control
+		local built = false
 		local function fill()
+			if built then return end
+			built = true
 			local displays, selected = snapshot()
 			dropdownFill(control, displays, selected)
 		end
@@ -27733,7 +27590,8 @@ return function(ctx)
 		-- masih ngehitch — upgrade path = list virtualisasi.
 		lazyOpen(control, fill)
 		local function refresh()
-			queueRebuild(function() pcall(fill) end)
+			-- "Update Pet List": cuma tandain basi; rows dibangun ulang pas dibuka lagi.
+			built = false
 		end
 		if opts.register and W.refreshers then
 			W.refreshers[#W.refreshers + 1] = refresh
@@ -27774,7 +27632,12 @@ return function(ctx)
 			local max = opts.max or 250
 			local displays, selected = {}, {}
 			table.clear(title2v)
-			for i, o in ipairs(list) do
+			-- Yang ke-select DULUAN (cache dipakai bareng banyak dropdown, urutan
+			-- aslinya ngikut dropdown lain) + biar nggak kepotong cap max.
+			local ordered = {}
+			for _, o in ipairs(list) do if selSet[o.value] then ordered[#ordered + 1] = o end end
+			for _, o in ipairs(list) do if not selSet[o.value] then ordered[#ordered + 1] = o end end
+			for i, o in ipairs(ordered) do
 				if i > max then break end
 				local t, rest = splitDisplay(o.display)
 				displays[#displays + 1] = { Title = t, Desc = rest, v = o.value }
@@ -27820,6 +27683,8 @@ return function(ctx)
 			end),
 		})
 		-- Constraint menu + wrap Title opsi ditangani patchDropdown() (module level)
+		-- (local dideklarasi SEBELUM buildRows — dulu `built` di buildRows nulis global)
+		local pendingDone, pending, built = false, nil, false
 		local function buildRows(p)
 			built = true
 			dropdownFill(control, p.ds, p.sel2)
@@ -27827,7 +27692,6 @@ return function(ctx)
 		-- LAZY: baris dibangun pas menu pertama dibuka. Snapshot datanya sendiri
 		-- jalan 0.5s setelah build di thread sendiri (fetchOptions = cukup 1x
 		-- GetData), BARIS gak dibangun pas load/post-load = freeze scan habis.
-		local pendingDone, pending, built = false, nil, false
 		task.delay(0.5, function()
 			pcall(function()
 				local ds, sel2, extra = snapshot()
@@ -27873,11 +27737,19 @@ return function(ctx)
 		end
 		lazyOpen(control, fill)
 		local function refresh()
-			-- Tombol "Update Pet List": re-scan PAKSA (cache 5 menit dilewati)
-			-- + rebuild rows via queueRebuild -> antar dropdown serial.
-			queueRebuild(function()
-				local ds, sel2, extra = snapshot(true)
-				buildRows({ ds = ds, sel2 = sel2, extra = extra })
+			-- Tombol "Update Pet List": JANGAN rebuild rows di sini (dulu rebuild
+			-- semua dropdown x 250 row = freeze lama). Cukup ambil data baru di
+			-- background (cache udah dikosongin addRefresh -> 1x GetData buat
+			-- semua), update label, rows dibangun ulang pas dropdown dibuka lagi.
+			built, pendingDone, pending = false, false, nil
+			task.spawn(function()
+				local ds, sel2, extra = snapshot()
+				pendingDone, pending = true, { ds = ds, sel2 = sel2, extra = extra }
+				pcall(function()
+					control.Values = ds
+					control.Value = sel2
+					control:Display()
+				end)
 			end)
 		end
 		if opts.register then
@@ -27930,7 +27802,10 @@ return function(ctx)
 		-- dibangun sinkron (ctor/fill) = freeze berdetik; menu kebuka instan,
 		-- baris menyusul. ponytail: open pertama list besar ngehitch sekali —
 		-- upgrade path = list virtualisasi buat dropdown dist.
+		local built = false
 		local function fill()
+			if built then return end
+			built = true
 			local n = dropdownFill(control, options, savedTitles())
 			if ctx.log then
 				ctx.log(("dropdown '%s' filled (%d options)"):format(title, n))
@@ -27967,10 +27842,14 @@ local function addRefresh(sec)
 		Title = "Update Pet List",
 		Desc = "Re-read the inventory and refresh dynamic dropdowns",
 		Callback = safe(function()
+			-- Kosongin cache sekali -> refresher pertama fetch, sisanya nunggu hasil
+			-- yang sama (1x GetData). Rows nggak dibangun di sini -> nggak freeze.
+			table.clear(optCache)
 			for _, fn in ipairs(W.refreshers) do
 				pcall(fn)
 			end
 			ctx.log("Pet list refreshed.")
+			W.notify("Pet List", "Updated - dropdown baru kebaca pas dibuka")
 		end),
 	})
 end
@@ -28090,18 +27969,15 @@ end
 
 	-- (hrow/HStack dibuang: element WindUI ngelewat padding halaman -> bar kepotong kanan)
 
-	----------------------------------------------------------------- TAB: PET (pilot — PnP V1/V2 + Boost)
-	local v2Ctrl -- sync mutual exclusion
-
+	----------------------------------------------------------------- TAB: PET (Pickup V1 + Boost)
 	local function buildPetTab(tab)
-	-- Mini-tab [Pickup V1][Pickup V2][Boost]: miniBar() — bar native beku + panel
+	-- Mini-tab [Pickup V1][Boost]: miniBar() — bar native beku + panel
 	-- section auto-size (bukan HStack WindUI: element-nya ngelewat padding halaman).
 	local DEFS = {
 		v1    = { name = "Pickup V1" },
-		v2    = { name = "Pickup V2" },
 		boost = { name = "Boost" },
 	}
-	local ORDER = { "v1", "v2", "boost" }
+	local ORDER = { "v1", "boost" }
 	local secs = {}
 
 	local function miniTab(id, buildFn)
@@ -28117,15 +27993,13 @@ end
 				function() return ctx.inventoryPetOptions(CFG.pnpUuids) end,
 				CFG.pnpUuids, function() persist() end,
 				{ register = true, cacheKey = "inv_pets", fillDelay = 0.3, max = 250 })
-			-- Timing V1 dikunci di modul (pickup 0.5 / equip 1E-20 / scan 0.5), nggak ada input.
+			-- Timing V1 dikunci di modul (pickup 0.5 / equip 1E-20 / scan 0.20), nggak ada input.
 			makeToggleW(sec, "Enable Automation Pickup V1",
-				"Pickup right after the skill starts (zone/cd/advance), re-place instantly. Enabling this turns V2 off.",
+				"Pickup right after the skill starts, re-place instantly.",
 				function() return CFG.pnpEnabled end,
 				function(v)
 					CFG.pnpEnabled = v; persist()
 					if v then
-						CFG.pnpV2Enabled = false; persist()
-						if ctx.stopPnpV2 then pcall(function() ctx.stopPnpV2() end) end
 						if ctx.startPnpV1 then pcall(function() ctx.startPnpV1() end) end
 					else
 						if ctx.stopPnpV1 then pcall(function() ctx.stopPnpV1() end) end
@@ -28134,47 +28008,7 @@ end
 			addRefresh(sec)
 		end)
 
-		--------------------------------------------------- panel 2: Pickup Pet V2
-		miniTab("v2", function(sec)
-			makeMultiDynW(sec, "Select Pets for Pickup [V2]",
-				"Pick pets from your backpack (empty = every pet in the garden)",
-				function() return ctx.inventoryPetOptions(CFG.pnpV2Uuids) end,
-				CFG.pnpV2Uuids, function() persist() end,
-				{ register = true, cacheKey = "inv_pets", fillDelay = 1.3, max = 250 })
-			makeInputW(sec, "Pickup Delay (sec)", "Delay before each pickup",
-				function() return CFG.pnpV2PickupDelay end,
-				function(t) CFG.pnpV2PickupDelay = tonumber(t) or 0.05 end)
-			makeInputW(sec, "Equip Delay (sec)", "Delay between unequip -> equip",
-				function() return CFG.pnpV2EquipDelay end,
-				function(t) CFG.pnpV2EquipDelay = tonumber(t) or 0.03 end)
-			makeInputW(sec, "Scan Interval (sec)", "CD check frequency via the event cache (min 0.02)",
-				function() return CFG.pnpV2ScanInterval end,
-				function(t) CFG.pnpV2ScanInterval = math.max(0.02, tonumber(t) or 0.05) end)
-			v2Ctrl = makeToggleW(sec, "Enable Automation Pickup V2",
-				"Event-driven (PetCooldownsUpdated), stable. Enabling this turns V1 off.",
-				function() return CFG.pnpV2Enabled end,
-				function(v)
-					CFG.pnpV2Enabled = v; persist()
-					if v then
-						CFG.pnpEnabled = false; persist()
-						if ctx.stopPnpV1 then pcall(function() ctx.stopPnpV1() end) end
-						if ctx.startPnpV2 then pcall(function() ctx.startPnpV2() end) end
-					else
-						if ctx.stopPnpV2 then pcall(function() ctx.stopPnpV2() end) end
-					end
-				end)
-			sec:Button({
-				Title = "Force Pickup Now",
-				Desc = "Pickup + re-place semua pet target di papan sekarang (abaikan cd). Baca hasilnya di Settings > Logs.",
-				Callback = safe(function()
-					local n = ctx.forcePickupPets and ctx.forcePickupPets() or 0
-					W.notify("Pickup V2", n == 0 and "No pet on board" or ("Force pickup " .. tostring(n) .. " pet(s)"))
-				end),
-			})
-			addRefresh(sec)
-		end)
-
-		--------------------------------------------------- panel 3: Boost Pet
+		--------------------------------------------------- panel 2: Boost Pet
 		miniTab("boost", function(sec)
 			makeMultiDynW(sec, "Select Pets to Boost", "Pets to boost (active in the garden)",
 				function() return ctx.inventoryPetOptions(CFG.boostPetUuids) end,
@@ -29013,9 +28847,6 @@ end
 			makeInputW(sec, "Target Weight (KG)", "Release pets at this weight — ANY value, decimals OK (e.g. 3.5, 4.7, 6.2). No presets.",
 				function() return CFG.elephantTargetWeight end,
 				function(t) CFG.elephantTargetWeight = tonumber(t) or 5.5 end)
-			makeInputW(sec, "Max Target Pets", "How many target pets are active at once",
-				function() return CFG.elephantMaxPets end,
-				function(t) CFG.elephantMaxPets = math.max(1, math.floor(tonumber(t) or 2)) end)
 			makeToggleW(sec, "Enable Automation Elephant",
 				"Rotate target pets automatically. OFF = removes all target pets from the garden.",
 				function() return CFG.elephantEnabled end,
@@ -29068,9 +28899,6 @@ end
 			makeInputW(sec, "Target Weight (KG)", "Release pets at this weight — ANY value, decimals OK (e.g. 3.5, 4.7, 6.2). No presets.",
 				function() return CFG.elephantV2Weight end,
 				function(t) CFG.elephantV2Weight = tonumber(t) or 5.5 end)
-			makeInputW(sec, "Max Target Pets", "How many target pets are active at once in the garden",
-				function() return CFG.elephantV2MaxPets end,
-				function(t) CFG.elephantV2MaxPets = math.max(1, math.floor(tonumber(t) or 3)) end)
 			makeInputW(sec, "Trigger Level", "Target level to send the Elephant in (default 40)",
 				function() return CFG.elephantV2Level end,
 				function(t) CFG.elephantV2Level = math.floor(tonumber(t) or 40) end)
@@ -30049,7 +29877,7 @@ end
 				CFG.hideOtherPlants= false
 				CFG.autoRemoveWebFx= false
 				CFG.disable3d      = false
-				for _, fn in ipairs({ "stopPnpV1", "stopPnpV2", "stopTrade", "stopHatch",
+				for _, fn in ipairs({ "stopPnpV1", "stopTrade", "stopHatch",
 					"stopAutoFavorite", "stopAutoUnfavorite", "stopEggMinusWatcher", "stopReclaim",
 					"stopGrowth", "stopLeveling", "stopLevelingV2", "stopElephant", "stopElephantV2",
 					"stopMutation", "stopCleanse", "stopBoostPet", "stopReconnect" }) do

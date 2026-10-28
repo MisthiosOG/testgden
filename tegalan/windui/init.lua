@@ -189,7 +189,6 @@ local MODULES = {
 	"modules/inventory/automation_trade.lua",
 	"modules/inventory/automation_accept.lua",
 	"modules/pet/automation_pickup_pet_v1.lua",
-	"modules/pet/automation_pickup_pet_v2.lua",
 	"modules/pet/automation_boost_pet.lua",
 	"modules/shop/automation_shop.lua",
 	"modules/shop/automation_merchant.lua",

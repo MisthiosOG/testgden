@@ -100,12 +100,6 @@ return function(ctx)
 		equipDelay  = 1e-20,  -- jeda tambahan unequip -> equip setelah server konfirmasi (1E-20 = tanpa jeda)
 		pnpScanInterval = 0.5,  -- (nggak dipakai V1 lagi; timing dikunci di modul)
 		pnpEnabled  = false,
-		-- PnP V2 (event-driven, config terpisah dari V1)
-		pnpV2Uuids       = {},
-		pnpV2PickupDelay = 0.05,
-		pnpV2EquipDelay  = 0.03,
-		pnpV2ScanInterval = 0.05,
-		pnpV2Enabled     = false,
 		espEnabled  = false, -- ESP Label pet (label melayang di dunia)
 		espMode     = "target", -- tampilan ESP pet: "target" (billboard di objek) / "screen" (panel di layar)
 		espEggEnabled = false, -- ESP Egg (style NEBULA) — terpisah dari ESP pet
@@ -494,11 +488,6 @@ return function(ctx)
 			CFG.equipDelay  = tonumber(st.equipDelay) or 1e-20
 			CFG.pnpScanInterval = tonumber(st.pnpScanInterval) or 0.5
 			CFG.pnpEnabled  = st.pnpEnabled or false
-			CFG.pnpV2Uuids       = (type(st.pnpV2Uuids) == "table") and st.pnpV2Uuids or {}
-			CFG.pnpV2PickupDelay = tonumber(st.pnpV2PickupDelay) or 0.05
-			CFG.pnpV2EquipDelay  = tonumber(st.pnpV2EquipDelay) or 0.03
-			CFG.pnpV2ScanInterval = tonumber(st.pnpV2ScanInterval) or 0.05
-			CFG.pnpV2Enabled     = st.pnpV2Enabled or false
 			CFG.espEnabled = st.espEnabled or false
 			CFG.espMode = st.espMode or "target"
 			CFG.espEggEnabled = st.espEggEnabled or false

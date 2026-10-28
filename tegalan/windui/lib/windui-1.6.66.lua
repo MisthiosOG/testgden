@@ -8456,6 +8456,21 @@ end
 end
 end
 
+-- [patch] pilihan yang lagi ke-select naik ke baris paling atas (dipanggil tiap
+-- menu dibuka & abis Refresh). Cuma ganti LayoutOrder, nggak bangun ulang row.
+function as.SortSelectedFirst(au)
+for aw,ax in next,ap.Tabs do
+local ti=ax and ax.UIElements and ax.UIElements.TabItem
+if ti then
+local base=typeof(aw)=="number"and aw or 0
+ti.LayoutOrder=(ax.Selected and 0 or 1000000)+base
+end
+end
+pcall(function()
+ap.UIElements.Menu.Frame.ScrollingFrame.CanvasPosition=Vector2.new(0,0)
+end)
+end
+
 function as.Refresh(au,av)
 if ao.Window.Destroyed then
 return
@@ -8472,15 +8487,13 @@ ap.Tabs={}
 if ap.SearchBarEnabled then
 if not at then
 at=aj("Search...","search",ap.UIElements.Menu,nil,function(aw)
+local q=string.lower(aw)
 for ax,ay in next,ap.Tabs do
-if string.find(string.lower(ay.Name),string.lower(aw),1,true)then
-ay.UIElements.TabItem.Visible=true
-else
-ay.UIElements.TabItem.Visible=false
+ay.UIElements.TabItem.Visible=string.find(string.lower(ay.Name),q,1,true)~=nil
 end
+-- [patch] recalc SEKALI setelah loop (dulu per-row = O(n^2) + layout paksa tiap row)
 RecalculateListSize()
 RecalculateCanvasSize()
-end
 end,true)
 at.Size=UDim2.new(1,0,0,aq.SearchBarHeight)
 at.Position=UDim2.new(0,0,0,0)
@@ -8661,8 +8674,8 @@ end
 end
 
 ap.Tabs[aw]=ay
-
-as:Display()
+-- [patch] urutan eksplisit (dipakai SortSelectedFirst); Display dipindah ke luar loop
+if typeof(aw)=="number"then ay.UIElements.TabItem.LayoutOrder=aw end
 
 if ar=="Dropdown"then
 ak.AddSignal(ay.UIElements.TabItem.MouseButton1Click,function()
@@ -8744,13 +8757,16 @@ end
 Callback(ax.Callback or function()end)
 end)
 end
-
-RecalculateCanvasSize()
-RecalculateListSize()
 else a.load'M'
 :New{Parent=ap.UIElements.Menu.Frame.ScrollingFrame}
 end
 end
+
+-- [patch] Display + recalc SEKALI (dulu tiap row: O(n^2) & layout paksa -> freeze)
+as:Display()
+if ar=="Dropdown"then as:SortSelectedFirst()end
+RecalculateCanvasSize()
+RecalculateListSize()
 
 
 
@@ -8792,6 +8808,7 @@ RecalculateCanvasSize()
 
 function as.Open(au)
 if not ap.Locked then
+if ar=="Dropdown"then pcall(as.SortSelectedFirst,as)end
 ap.UIElements.Menu.Visible=true
 ap.UIElements.MenuCanvas.Visible=true
 ap.UIElements.MenuCanvas.Active=true
