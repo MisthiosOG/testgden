@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 45 modul, di-generate 2026-10-28T11:59:53.890Z
+-- 45 modul, di-generate 2026-10-28T12:09:55.842Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -19245,14 +19245,14 @@ return function(ctx)
 		return Vector3.new(hrp.Position.X, y, hrp.Position.Z)
 	end
 
-	-- Good Position: BARISAN DETERMINISTIK BERBASIS PATOKAN (request user):
-	-- plant PERTAMA yang beneran direkam server = patokan koordinat
-	-- (anchor). Cell berikutnya = anchor + GOOD_STEP ke kanan terus, mentok
-	-- batas lahan -> baris baru 1 GOOD_STEP di bawahnya, kaya biasanya.
-	-- Semua offset RELATIF ke pivot server, jadi snap/pergeseran server
-	-- kenanya rata — barisan ga pernah miring walau delay 0. Cell yang
-	-- dipegang plant lama DIBERSIHKAN dulu (Remove_Item dgn Shovel,
-	-- toggle "Shovel Penghalang"); gagal -> skip 1 cell.
+	-- Good Position (request user: "god mode kaya grid egg"): SEL-SEL grid
+	-- DIBUTAKIN DITENGAH lahan — simetris kiri-kanan & atas-bawah, baris rata
+	-- kiri->kanan (sama geometrinya sama grid egg di automation_hatch, cuma
+	-- spacing 2.5 karena server min jarak tanaman lebih rapet dari egg).
+	-- Anchor tetap = pivot server plant pertama (anti snap server); semua
+	-- offset RELATIF ke patokan, jadi snap kenanya rata — barisan ga miring.
+	-- Cell yang dipegang plant lama DIBERSIHKAN dulu (toggle "Shovel
+	-- Penghalang"); gagal -> skip 1 cell.
 	local GOOD_STEP   = 2.5
 	local GOOD_TAKE_R = GOOD_STEP - 0.1
 	local RemoveItem = RS:WaitForChild("GameEvents"):WaitForChild("Remove_Item")
@@ -19305,25 +19305,30 @@ return function(ctx)
 		local halfX = p.Size.X / 2 - 0.75
 		local halfZ = p.Size.Z / 2 - 1
 		if goodCursor.part ~= p then goodCursor = { part = p, col = 0, row = 0 }; anchorPos = nil end
+		-- Grid CENTERED di lahan (kayak gridPositions egg): sisa tepi kiri =
+		-- sisa tepi kanan, baris rata. Cursor jalan baris-per-baris full plot.
+		local cols = math.max(1, math.floor((halfX * 2) / GOOD_STEP) + 1)
+		local originX = p.Position.X - ((cols - 1) * GOOD_STEP) / 2
+		local originZ = p.Position.Z - (math.floor((halfZ * 2) / GOOD_STEP) * GOOD_STEP) / 2
 		for _ = 1, 800 do -- cap sweep; lahan beneran keblokir -> coba lagi tik depan
 			local x, z
 			if anchorPos then -- grid RELATIF pivot plant pertama (patokan)
 				x = anchorPos.X + goodCursor.col * GOOD_STEP
 				z = anchorPos.Z + goodCursor.row * GOOD_STEP
 			else
-				x = p.Position.X - halfX + GOOD_STEP + goodCursor.col * GOOD_STEP
-				z = p.Position.Z - halfZ + goodCursor.row * GOOD_STEP
+				x = originX + goodCursor.col * GOOD_STEP
+				z = originZ + goodCursor.row * GOOD_STEP
 			end
 			if x > p.Position.X + halfX then -- mentok kanan -> baris baru di bawah
 				goodCursor.col, goodCursor.row = 0, goodCursor.row + 1
-				x = anchorPos and anchorPos.X or (p.Position.X - halfX + GOOD_STEP)
+				x = anchorPos and anchorPos.X or originX
 				z = anchorPos and (anchorPos.Z + goodCursor.row * GOOD_STEP)
-					or (p.Position.Z - halfZ + goodCursor.row * GOOD_STEP)
+					or (originZ + goodCursor.row * GOOD_STEP)
 			end
 			if z > p.Position.Z + halfZ then -- lahan penuh -> mulai baris awal lagi
 				goodCursor.col, goodCursor.row = 0, 0
-				x = anchorPos and anchorPos.X or (p.Position.X - halfX + GOOD_STEP)
-				z = anchorPos and anchorPos.Z or (p.Position.Z - halfZ)
+				x = anchorPos and anchorPos.X or originX
+				z = anchorPos and anchorPos.Z or originZ
 			end
 			local bl = blockersAt(plantsFolder(), x, z)
 			local free = (#bl == 0)
