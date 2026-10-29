@@ -2450,7 +2450,7 @@ end
 				end, { fillDelay = 2.2 })
 
 			makeToggleW(sec, "Flow Notifications",
-				"Popup bottom-right every time a feature moves to its next step (hatch team swap, elephant Blessing, leveling phase, etc.).",
+				"Popup bottom-right for pet features only: Hatch steps (team swap, sell) and Elephant (Blessing, pet done, elephant in/out).",
 				function() return CFG.flowNotifyEnabled ~= false end,
 				function(v) CFG.flowNotifyEnabled = v end)
 
