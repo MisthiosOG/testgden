@@ -131,8 +131,18 @@ local ctx = {
 	deps = {},
 }
 
+-- Generasi hub: tiap execute naikin angka global. Instance lama (execute sebelumnya) jadi
+-- "mati" -> semua loop-nya (PnP, elephant, dll.) berhenti sendiri. Dulu instance lama tetap
+-- hidup -> 2 PnP jalan bareng -> pet ditarik 2x / di-equip 2x -> skill ilang.
+local HUB_GEN
+do
+	local g = (getgenv and getgenv()) or _G
+	g.__GAG_HUB_GEN = (g.__GAG_HUB_GEN or 0) + 1
+	HUB_GEN = g.__GAG_HUB_GEN
+end
 function ctx.alive()
-	return ctx.state.isAlive ~= false
+	local g = (getgenv and getgenv()) or _G
+	return ctx.state.isAlive ~= false and g.__GAG_HUB_GEN == HUB_GEN
 end
 function ctx.elevate()
 	pcall(function()
