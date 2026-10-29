@@ -81,7 +81,24 @@ else
 end
 
 -- IN: semua RemoteEvent dari server (kecuali cd push, udah di atas). Rate-limit per remote.
+-- ANIM: state animasi skill pet (DataStream ActivePetStates/.../CustomAnimationState), TANPA limit.
 local inCount = {}
+local DS = GE:FindFirstChild("DataStream")
+if DS then
+	local prefix = "ROOT/ActivePetStates/" .. game:GetService("Players").LocalPlayer.Name .. "/"
+	conns[#conns + 1] = DS.OnClientEvent:Connect(function(kind, channel, list)
+		if type(list) ~= "table" then return end
+		for _, e in ipairs(list) do
+			local path = type(e) == "table" and e[1]
+			if type(path) == "string" and path:sub(1, #prefix) == prefix then
+				local uuid, field = path:sub(#prefix + 1):match("^([^/]+)/([^/]+)$")
+				if field == "CustomAnimationState" then
+					log(("ANIM %s  '%s'"):format(ser(uuid), tostring(e[2] or "")))
+				end
+			end
+		end
+	end)
+end
 for _, r in ipairs(RS:GetDescendants()) do
 	if r:IsA("RemoteEvent") and r ~= CdPush then
 		local name = r:GetFullName():gsub("^ReplicatedStorage%.", "")

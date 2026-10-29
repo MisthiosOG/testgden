@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 43 modul, di-generate 2026-10-29T11:27:58.208Z
+-- 43 modul, di-generate 2026-10-29T11:45:44.620Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua — init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -9479,7 +9479,13 @@ return function(ctx)
 	local PICKUP_DELAY   = 0.5   -- jeda setelah skill mulai sebelum pet ditarik
 	local EQUIP_DELAY    = 1e-20 -- jeda tambahan unequip -> equip setelah server ack (praktis 0)
 	local SCAN_INTERVAL  = 0.20  -- polling cd cadangan (sinyal utama = push server)
-	local CD0_MIN        = 0.8  -- ancang-ancang abis cd 0 (Pandora narik Dilo/Hotdog ~0.6-1.3 s abis cd 0)
+	local CD0_MIN        = 0.8  -- (fallback) ancang-ancang abis cd 0 kalau sinyal animasi nggak kebaca
+	-- Pet non-zone: tarik pas ANIMASI SKILL mulai (CustomAnimationState di ActivePetStates,
+	-- mis. Dilo "Frill", Hotdog "Pee"), bukan pas cd 0. Dari log: cd 0 != skill mulai —
+	-- Dilo kadang baru ancang-ancang beberapa detik abis cd 0 -> narik pas cd0+0.8 = skill ilang.
+	local ANIM_DELAY     = 0.3  -- tarik segini abis animasi skill mulai (Hotdog +0.24 s = puddle tetap jatuh)
+	local ANIM_WAIT      = 8    -- abis cd 0, tunggu animasi maksimal segini (lewat = batal, siklus berikutnya)
+	local ANIM_CD_MAX    = 2    -- animasi dihitung skill cuma kalau cd passive non-zone <= ini
 	local ZONE_FALLBACK  = 2.0  -- pet zone: kalau event ZONE nggak datang segini setelah CD0, tetap tarik
 	local ADV_DROP, ADV_LOW = nil, nil -- (trigger ADV dihapus)
 	local PLACE_GRACE    = 1.5  -- abis place: sampel cd pertama yang 0 nggak dihitung CD0 (anti loop).
@@ -9493,6 +9499,16 @@ return function(ctx)
 	local GetPetCooldown      = GameEvents:WaitForChild("GetPetCooldown")
 	local PetCooldownsUpdated = GameEvents:FindFirstChild("PetCooldownsUpdated")
 	local PetZoneAbility      = GameEvents:FindFirstChild("PetZoneAbility")
+	local DataStream          = GameEvents:FindFirstChild("DataStream")
+
+	-- Kunci lintas-instance: kalau ada 2 hub hidup (re-execute tanpa rejoin), cuma 1 yang
+	-- boleh narik pet yang sama -> nggak ada lagi unequip/equip dobel.
+	local LOCK
+	do
+		local g = (getgenv and getgenv()) or _G
+		g.__pnpLock = g.__pnpLock or {}
+		LOCK = g.__pnpLock
+	end
 
 	-------------------------------------------------------------- state per pet
 	local prevCd      = {} -- uuid -> { [passiveKey] = time }
@@ -9526,6 +9542,10 @@ return function(ctx)
 	-------------------------------------------------------------- sumber sinyal
 	local pendingKey = {} -- uuid -> passive key yang lagi ditunggu (CD0 non-zone)
 	local CANCEL_MAX = 10 -- cd balik naik tapi <= ini = bacaan 0 tadi palsu (bukan reset skill)
+	local animOn     = {} -- uuid -> os.clock() animasi skill mulai (nil = nggak animasi)
+	local waitAnim   = {} -- uuid -> deadline nunggu animasi abis cd 0
+	local animSeen   = false -- pernah nerima state animasi (kalau nggak -> fallback CD0_MIN)
+	local onAnim
 
 	local function onCd(uuid, cd)
 		if type(cd) ~= "table" then return end
@@ -9555,6 +9575,13 @@ return function(ctx)
 
 		-- Pickup CD0 yang lagi nunggu: verifikasi pakai sampel berikutnya.
 		local pk = pendingKey[uuid]
+		if pk and waitAnim[uuid] and not fireAt[uuid] then
+			local t = cur[pk]
+			if t and t > 0 then
+				-- cd naik lagi tanpa animasi kebaca: skill udah lewat / 0 palsu -> jangan tarik
+				waitAnim[uuid], pendingKey[uuid] = nil, nil
+			end
+		end
 		if pk and fireAt[uuid] and not busy[uuid] then
 			local t = cur[pk]
 			if t and t > CANCEL_MAX then
@@ -9588,11 +9615,48 @@ return function(ctx)
 		if isZone then
 			-- skill zone baru "keluar" pas event ZONE; tunggu itu (dengan fallback)
 			if not fireAt[uuid] and not waitZone[uuid] then waitZone[uuid] = now + ZONE_FALLBACK end
+		elseif animSeen then
+			-- cd 0 BELUM berarti skill mulai. Tunggu animasi skill (onAnim). Kalau animasinya
+			-- udah nyala duluan (kadang datang sebelum push cd 0), langsung jadwalin.
+			if not fireAt[uuid] then
+				if animOn[uuid] and now - animOn[uuid] < 3 then
+					fireAt[uuid] = math.max(now, animOn[uuid] + ANIM_DELAY)
+					fireReason[uuid] = "ANIM"
+				else
+					waitAnim[uuid] = now + ANIM_WAIT
+					pendingKey[uuid] = rKey
+				end
+			end
 		else
-			-- CD0 natural: skill butuh ~0.8 s buat "nempel" sebelum aman ditarik (ancang-ancang)
+			-- fallback: game belum pernah ngirim state animasi -> pakai jeda tetap abis cd 0
 			if not fireAt[uuid] then pendingKey[uuid] = rKey end
 			schedule(uuid, reason, false, CD0_MIN)
 		end
+	end
+
+	-- Animasi skill (ancang-ancang) dari DataStream ActivePetsService_Replicator:
+	--   {"ROOT/ActivePetStates/<player>/<uuid>/CustomAnimationState", "<nama anim>"}
+	-- value nil/"" = animasi selesai.
+	function onAnim(uuid, anim)
+		local now = os.clock()
+		if anim == nil or anim == "" then animOn[uuid] = nil; return end
+		animSeen = true
+		if animOn[uuid] then return end -- masih animasi yang sama
+		animOn[uuid] = now
+		if not CFG.pnpEnabled or busy[uuid] or fireAt[uuid] then return end
+		-- cuma dihitung skill kalau ada passive NON-zone yang cd-nya ~0 (bukan anim lain)
+		local cur = prevCd[uuid]
+		if not cur then return end
+		local ok = false
+		for key, t in pairs(cur) do
+			if not key:find("Mutation") and not zonePassive[key:gsub("#%d+$", "")] and t <= ANIM_CD_MAX then
+				ok = true; break
+			end
+		end
+		if not ok then return end
+		waitAnim[uuid], pendingKey[uuid] = nil, nil
+		fireAt[uuid] = now + ANIM_DELAY
+		fireReason[uuid] = "ANIM"
 	end
 
 	local function onZone(a1, active, _, model, passiveName)
@@ -9607,9 +9671,25 @@ return function(ctx)
 
 	do
 		local g = (getgenv and getgenv()) or _G
-		for _, k in ipairs({ "__pnpV1CdConn", "__pnpV1ZoneConn" }) do
+		for _, k in ipairs({ "__pnpV1CdConn", "__pnpV1ZoneConn", "__pnpV1AnimConn" }) do
 			if g[k] then pcall(function() g[k]:Disconnect() end) end
 			g[k] = nil
+		end
+		if DataStream then
+			local prefix = "ROOT/ActivePetStates/" .. LP.Name .. "/"
+			g.__pnpV1AnimConn = DataStream.OnClientEvent:Connect(function(kind, channel, list)
+				if kind ~= "UpdateData" or channel ~= "ActivePetsService_Replicator" or type(list) ~= "table" then return end
+				for _, e in ipairs(list) do
+					local path = type(e) == "table" and e[1]
+					if type(path) == "string" and path:sub(1, #prefix) == prefix then
+						local uuid, field = path:sub(#prefix + 1):match("^([^/]+)/([^/]+)$")
+						if uuid and field == "CustomAnimationState" then
+							local v = e[2]
+							pcall(onAnim, uuid, type(v) == "string" and v or nil)
+						end
+					end
+				end
+			end)
 		end
 		if PetCooldownsUpdated then
 			g.__pnpV1CdConn = PetCooldownsUpdated.OnClientEvent:Connect(function(uuid, cdTable)
@@ -9719,8 +9799,12 @@ return function(ctx)
 	-- return true kalau pet sukses balik ke kebun. Pet WAJIB dicoba balik walau PnP dimatiin.
 	local function doPnp(uuid)
 		local pos = placePos()
-		fireAt[uuid], waitZone[uuid], pendingKey[uuid] = nil, nil, nil
+		fireAt[uuid], waitZone[uuid], pendingKey[uuid], waitAnim[uuid] = nil, nil, nil, nil
 		if not pos then return true end
+		-- kunci lintas-instance (anti tarikan dobel)
+		local lk = LOCK[uuid]
+		if lk and os.clock() - lk < 2.5 then return true end
+		LOCK[uuid] = os.clock()
 		busy[uuid] = true
 
 		local tU = os.clock()
@@ -9737,8 +9821,10 @@ return function(ctx)
 		end
 
 		prevCd[uuid] = nil
+		animOn[uuid] = nil -- animasi lama punya pet yang udah ditarik
 		ignoreUntil[uuid] = os.clock() + PLACE_GRACE
 		busy[uuid] = nil
+		LOCK[uuid] = os.clock()
 		return placed
 	end
 
@@ -9757,9 +9843,17 @@ return function(ctx)
 				waitZone[uuid] = nil
 				schedule(uuid, "CD0")
 			end
+			if waitAnim[uuid] and now >= waitAnim[uuid] then
+				-- animasi skill nggak muncul -> jangan tarik (narik = skill ilang)
+				waitAnim[uuid], pendingKey[uuid] = nil, nil
+			end
 
 			if fireAt[uuid] and now >= fireAt[uuid] then
 				local why = fireReason[uuid] or "?"
+				if ctx.log then
+					ctx.log(("[PNP V1] tarik #%s alasan=%s anim=%s"):format(uuid:sub(2, 5), why,
+						animOn[uuid] and ("%.2fs"):format(now - animOn[uuid]) or "-"))
+				end
 				if doPnp(uuid) then
 					setStatus(("PNP V1: #%s ditarik (%s)"):format(uuid:sub(2, 5), why))
 				else
@@ -9774,6 +9868,7 @@ return function(ctx)
 			task.wait(0.03)
 		end
 		fireAt[uuid], waitZone[uuid], prevCd[uuid], pendingKey[uuid] = nil, nil, nil, nil
+		waitAnim[uuid] = nil
 		petThreads[uuid] = nil
 	end
 
