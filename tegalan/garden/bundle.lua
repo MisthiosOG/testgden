@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 43 modul, di-generate 2026-10-29T15:18:25.054Z
+-- 43 modul, di-generate 2026-10-29T15:39:54.921Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua — init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -9483,7 +9483,12 @@ return function(ctx)
 	-- Pet non-zone: tarik pas ANIMASI SKILL mulai (CustomAnimationState di ActivePetStates,
 	-- mis. Dilo "Frill", Hotdog "Pee"), bukan pas cd 0. Dari log: cd 0 != skill mulai —
 	-- Dilo kadang baru ancang-ancang beberapa detik abis cd 0 -> narik pas cd0+0.8 = skill ilang.
-	local ANIM_DELAY     = 0.3  -- tarik segini abis animasi skill mulai (Hotdog +0.24 s = puddle tetap jatuh)
+	local ANIM_DELAY     = 1.2  -- (cadangan) tarik segini abis animasi skill kalau notif skill nggak datang
+	-- Sinyal UTAMA non-zone: notifikasi skill pertama dari pet itu ("Rainbow Dilophosaurus spat
+	-- venom...", "Rainbow Hotdog Daschund just dropped..."). Animasi Frill BELUM berarti skill
+	-- jalan -> narik Frill+0.3 kadang cuma keluar 4 venom. Pandora narik ~0.4-0.9 s abis venom pertama.
+	local NOTIF_DELAY    = 0.8
+	local NOTIF_NAME_POS = 25   -- nama pet harus di awal pesan (bukan "...to Rainbow Hotdog")
 	local ANIM_WAIT      = 8    -- abis cd 0, tunggu animasi maksimal segini (lewat = batal, siklus berikutnya)
 	local ANIM_CD_MAX    = 0    -- animasi dihitung skill cuma kalau cd passive non-zone udah 0
 	                            -- (dulu <= 2: animasi reaksi pas cd 2 bikin Dilo ketarik "mangap doang")
@@ -9546,6 +9551,7 @@ return function(ctx)
 	local CANCEL_MAX = 10 -- cd balik naik tapi <= ini = bacaan 0 tadi palsu (bukan reset skill)
 	local animOn     = {} -- uuid -> os.clock() animasi skill mulai (nil = nggak animasi)
 	local animName   = {} -- uuid -> nama animasi terakhir
+	local notifAt    = {} -- uuid -> os.clock() notif skill pertama siklus ini
 	local waitAnim   = {} -- uuid -> deadline nunggu animasi abis cd 0
 	local animSeen   = false -- pernah nerima state animasi (kalau nggak -> fallback CD0_MIN)
 	local onAnim
@@ -9578,6 +9584,14 @@ return function(ctx)
 
 		-- Pickup CD0 yang lagi nunggu: verifikasi pakai sampel berikutnya.
 		local pk = pendingKey[uuid]
+		if notifAt[uuid] and not fireAt[uuid] and not busy[uuid] then
+			-- siklus selesai tanpa ditarik -> reset biar notif siklus berikutnya kebaca
+			local any0 = false
+			for key, t in pairs(cur) do
+				if not key:find("Mutation") and t <= 0 then any0 = true; break end
+			end
+			if not any0 then notifAt[uuid] = nil end
+		end
 		if pk and waitAnim[uuid] and not fireAt[uuid] then
 			local t = cur[pk]
 			if t and t > 0 then
@@ -9665,6 +9679,41 @@ return function(ctx)
 		fireReason[uuid] = "ANIM"
 	end
 
+	-- Notifikasi skill: pesan diawali nama pet (opsional prefix mutasi). Cuma pet target yang
+	-- cd passive non-zone-nya 0 (lagi nunggu skill) & belum ada notif di siklus ini.
+	local petTypeCache = {}
+	local function petTypeOf(uuid)
+		if petTypeCache[uuid] then return petTypeCache[uuid] end
+		local ok, d = pcall(function() return DataService:GetData() end)
+		local inv = ok and d and d.PetsData and d.PetsData.PetInventory and d.PetsData.PetInventory.Data
+		local pt = inv and inv[uuid] and inv[uuid].PetType
+		if pt then petTypeCache[uuid] = tostring(pt) end
+		return petTypeCache[uuid]
+	end
+	local function onNotif(msg)
+		if type(msg) ~= "string" or not CFG.pnpEnabled then return end
+		local low = msg:lower()
+		local now = os.clock()
+		for uuid, cur in pairs(prevCd) do
+			if not busy[uuid] and not notifAt[uuid] then
+				local waiting = false
+				for key, t in pairs(cur) do
+					if not key:find("Mutation") and not zonePassive[key:gsub("#%d+$", "")] and t <= 0 then
+						waiting = true; break
+					end
+				end
+				local pt = waiting and petTypeOf(uuid)
+				local pos = pt and low:find(pt:lower(), 1, true)
+				if pos and pos <= NOTIF_NAME_POS then
+					notifAt[uuid] = now
+					waitAnim[uuid], pendingKey[uuid] = nil, nil
+					fireAt[uuid] = now + NOTIF_DELAY -- override jadwal Frill: tunggu skill beneran jalan
+					fireReason[uuid] = "NOTIF"
+				end
+			end
+		end
+	end
+
 	local function onZone(a1, active, _, model, passiveName)
 		local uuid = (type(a1) == "string" and a1:sub(1, 1) == "{") and a1
 			or (typeof(model) == "Instance" and model.Name) or nil
@@ -9677,9 +9726,15 @@ return function(ctx)
 
 	do
 		local g = (getgenv and getgenv()) or _G
-		for _, k in ipairs({ "__pnpV1CdConn", "__pnpV1ZoneConn", "__pnpV1AnimConn" }) do
+		for _, k in ipairs({ "__pnpV1CdConn", "__pnpV1ZoneConn", "__pnpV1AnimConn", "__pnpV1NotifConn" }) do
 			if g[k] then pcall(function() g[k]:Disconnect() end) end
 			g[k] = nil
+		end
+		local Notification = GameEvents:FindFirstChild("Notification")
+		if Notification and Notification:IsA("RemoteEvent") then
+			g.__pnpV1NotifConn = Notification.OnClientEvent:Connect(function(msg)
+				pcall(onNotif, msg)
+			end)
 		end
 		if DataStream then
 			local prefix = "ROOT/ActivePetStates/" .. LP.Name .. "/"
@@ -9806,6 +9861,7 @@ return function(ctx)
 	local function doPnp(uuid)
 		local pos = placePos()
 		fireAt[uuid], waitZone[uuid], pendingKey[uuid], waitAnim[uuid] = nil, nil, nil, nil
+		notifAt[uuid] = nil
 		if not pos then return true end
 		-- kunci lintas-instance (anti tarikan dobel)
 		local lk = LOCK[uuid]
