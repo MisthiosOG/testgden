@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 45 modul, di-generate 2026-10-29T16:20:45.225Z
+-- 46 modul, di-generate 2026-10-29T16:47:37.289Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -16178,6 +16178,7 @@ return function(ctx)
 
 		-- Auto GM Sprinkler (tab Hatch): jaga 1 Grandmaster Sprinkler terpasang
 		gmSprinklerEnabled     = false,
+		flowNotifyEnabled      = true, -- notif pojok kanan bawah tiap fitur pindah tahap
 
 		-- Auto-Reconnect (Misc): auto rejoin kalau ke-kick / disconnect (seperti di Trade)
 		autoReconnect     = true,
@@ -16552,6 +16553,7 @@ return function(ctx)
 			CFG.shovelSprinklerDelay  = tonumber(st.shovelSprinklerDelay) or 0
 			CFG.shovelSprinklerEnabled = st.shovelSprinklerEnabled or false
 			CFG.gmSprinklerEnabled    = st.gmSprinklerEnabled or false
+			CFG.flowNotifyEnabled     = st.flowNotifyEnabled ~= false
 			if st.autoReconnect ~= nil then CFG.autoReconnect = st.autoReconnect end
 			CFG.reconnectEnabled  = st.reconnectEnabled or false
 			CFG.reconnectInterval = tonumber(st.reconnectInterval) or 5
@@ -17754,19 +17756,25 @@ return function(ctx)
 end
 ]=],
 	["modules/elephant/elephant_monitor.lua"] = [=[
---[[ elephant_monitor.lua — Monitor injek gajah per pet target.
-     Skill gajah nambah BaseWeight pet +0.1 KG per skill. BaseWeight nggak berubah karena
-     age (berat tampil = BaseWeight * (1 + 0.1*age)), jadi tiap kenaikan BaseWeight = injek gajah.
-     Hitungan: injek = round(kenaikan / 0.1). Dicatat per uuid, awet antar re-execute (getgenv).
-     Fungsi: ctx.elephantMonitorText(typeSet, targetWeight) -> teks buat liveStatus,
-             ctx.resetElephantMonitor(). ]]
+--[[ elephant_monitor.lua — Monitor Blessing gajah per pet target.
+     Skill gajah nambah BaseWeight pet +0.1 KG per skill (= 1 Blessing). BaseWeight nggak berubah
+     karena age (berat tampil = BaseWeight * (1 + 0.1*age)), jadi tiap kenaikan = Blessing.
+     Dicatat per uuid (awet antar re-execute via getgenv):
+       - waktu masuk kebun, Blessing pertama, Blessing terakhir
+       - SELESAI pas berat >= Target Weight atau pet keluar kebun setelah dapet Blessing
+       - riwayat pet yang udah selesai (#1, #2, ...) + durasinya
+     Notif (ctx.flowNotify) tiap Blessing & tiap pet selesai.
+     Fungsi: ctx.elephantMonitorText(typeSet, targetWeight), ctx.resetElephantMonitor(). ]]
 return function(ctx)
 	local DataService = ctx.deps.DataService
-	local STEP = 0.1 -- KG per skill gajah
+	local CFG = ctx.CFG
+	local STEP = 0.1 -- KG per Blessing
 
 	local g = (getgenv and getgenv()) or _G
-	g.__elephantMon = g.__elephantMon or {}
-	local mon = g.__elephantMon -- uuid -> { startW, lastW, hits, lastAt }
+	if type(g.__elephantMon2) ~= "table" then g.__elephantMon2 = { pets = {}, done = {}, seq = 0 } end
+	local M = g.__elephantMon2
+	-- pets[uuid] = { petType, startW, lastW, hits, enterAt, firstAt, lastAt }
+	-- done[i]    = { n, uuid, petType, startW, endW, hits, secs, reason, at }
 
 	local function snapshot()
 		local ok, d = pcall(function() return DataService:GetData() end)
@@ -17775,7 +17783,45 @@ return function(ctx)
 		return pd.EquippedPets or {}, (pd.PetInventory and pd.PetInventory.Data) or {}
 	end
 
-	-- Sampling 1 detik: cuma pet yang lagi di kebun (yang bisa kena skill gajah).
+	local function fmtDur(s)
+		s = math.max(0, math.floor(s or 0))
+		if s >= 3600 then return ("%dj %02dm %02ds"):format(s // 3600, (s % 3600) // 60, s % 60) end
+		return ("%dm %02ds"):format(s // 60, s % 60)
+	end
+
+	local function matches(typeSet, petType, petData)
+		if not typeSet or not next(typeSet) then return false end
+		if ctx.petMatchesType then return ctx.petMatchesType(typeSet, petType, petData) end
+		return typeSet[petType] == true
+	end
+
+	-- target aktif: pet ini kebaca target di V1/V2 yang lagi nyala?
+	local function targetWeightFor(petType, petData)
+		if CFG.elephantV2Enabled and matches(CFG.elephantV2Types, petType, petData) then
+			return tonumber(CFG.elephantV2Weight) or 5.5
+		end
+		if CFG.elephantEnabled and matches(CFG.elephantPetTypes, petType, petData) then
+			return tonumber(CFG.elephantTargetWeight) or 5.5
+		end
+		return nil
+	end
+
+	local function finish(uuid, m, endW, reason)
+		M.seq = M.seq + 1
+		local secs = os.time() - (m.firstAt or m.enterAt or os.time())
+		table.insert(M.done, 1, {
+			n = M.seq, uuid = uuid, petType = m.petType, startW = m.startW, endW = endW,
+			hits = m.hits, secs = secs, reason = reason, at = os.time(),
+		})
+		while #M.done > 15 do table.remove(M.done) end
+		if ctx.flowNotify then
+			ctx.flowNotify("Elephant", ("Pet #%d selesai: %s %.2f → %.2f KG | %d Blessing | %s")
+				:format(M.seq, tostring(m.petType), m.startW, endW, m.hits, fmtDur(secs)), 6)
+		end
+		M.pets[uuid] = nil
+	end
+
+	-- Sampling 1 detik: pet yang lagi di kebun (yang bisa kena skill gajah).
 	g.__elephantMonGen = (g.__elephantMonGen or 0) + 1
 	local myGen = g.__elephantMonGen
 	task.spawn(function()
@@ -17783,20 +17829,35 @@ return function(ctx)
 			pcall(function()
 				local eq, inv = snapshot()
 				if not eq then return end
+				local now, inGarden = os.time(), {}
 				for _, uuid in ipairs(eq) do
+					inGarden[uuid] = true
 					local p = inv[uuid]
-					local w = p and p.PetData and tonumber(p.PetData.BaseWeight)
+					local pd = p and p.PetData
+					local w = pd and tonumber(pd.BaseWeight)
 					if w then
-						local m = mon[uuid]
+						local m = M.pets[uuid]
 						if not m then
-							mon[uuid] = { startW = w, lastW = w, hits = 0, lastAt = 0 }
+							M.pets[uuid] = { petType = p.PetType, startW = w, lastW = w, hits = 0, enterAt = now }
 						elseif w > m.lastW + 1e-4 then
-							local n = math.floor((w - m.lastW) / STEP + 0.5)
-							m.hits = m.hits + math.max(1, n)
-							m.lastW, m.lastAt = w, os.clock()
+							local n = math.max(1, math.floor((w - m.lastW) / STEP + 0.5))
+							m.hits = m.hits + n
+							m.lastW, m.lastAt = w, now
+							m.firstAt = m.firstAt or now
+							if ctx.flowNotify then
+								ctx.flowNotify("Elephant", ("Blessing #%d → %s (%.2f KG)"):format(m.hits, tostring(m.petType), w), 3)
+							end
+							local tw = targetWeightFor(p.PetType, pd)
+							if tw and w >= tw - 1e-4 then finish(uuid, m, w, "target") end
 						elseif w < m.lastW - 1e-4 then
-							m.lastW = w -- berat turun (data aneh) -> ikutin, jangan hitung
+							m.lastW = w -- data aneh -> ikutin, jangan hitung
 						end
+					end
+				end
+				-- pet keluar kebun: kalau udah dapet Blessing, catat selesai (dicabut elephant)
+				for uuid, m in pairs(M.pets) do
+					if not inGarden[uuid] then
+						if m.hits > 0 then finish(uuid, m, m.lastW, "dicabut") else M.pets[uuid] = nil end
 					end
 				end
 			end)
@@ -17804,39 +17865,56 @@ return function(ctx)
 		end
 	end)
 
-	local function matches(typeSet, p)
-		if not typeSet or not next(typeSet) then return false end
-		if ctx.petMatchesType then return ctx.petMatchesType(typeSet, p.PetType, p.PetData) end
-		return typeSet[p.PetType] == true
-	end
-
 	function ctx.elephantMonitorText(typeSet, targetW)
 		local eq, inv = snapshot()
 		if not eq then return nil end
 		targetW = tonumber(targetW) or 5.5
+		local now = os.time()
 		local lines, total = {}, 0
 		for _, uuid in ipairs(eq) do
 			local p = inv[uuid]
-			if p and matches(typeSet, p) then
+			if p and matches(typeSet, p.PetType, p.PetData) then
 				local pd = p.PetData or {}
 				local w = tonumber(pd.BaseWeight) or 0
-				local m = mon[uuid] or { startW = w, hits = 0, lastAt = 0 }
+				local m = M.pets[uuid] or { startW = w, hits = 0, enterAt = now }
 				total = total + m.hits
 				local left = math.max(0, math.ceil((targetW - w) / STEP - 1e-6))
-				local ago = (m.lastAt > 0) and ("%ds lalu"):format(math.floor(os.clock() - m.lastAt)) or "-"
-				lines[#lines + 1] = ("<b>%s</b> #%s | Age %s\n" ..
-					"  %.2f → <font color=\"#f5c82d\">%.2f KG</font> | injek <font color=\"#5acc78\"><b>%dx</b></font>" ..
-					" | sisa %dx | terakhir %s")
-					:format(tostring(p.PetType), uuid:sub(2, 5), tostring(pd.Level or 0),
-						m.startW, w, m.hits, left, ago)
+				local ago = m.lastAt and (fmtDur(now - m.lastAt) .. " lalu") or "-"
+				local run = fmtDur(now - (m.firstAt or m.enterAt or now))
+				-- estimasi selesai dari rata-rata jeda Blessing
+				local eta = "-"
+				if m.hits >= 2 and m.firstAt and m.lastAt and m.lastAt > m.firstAt then
+					local per = (m.lastAt - m.firstAt) / (m.hits - 1)
+					eta = fmtDur(per * left)
+				end
+				lines[#lines + 1] = ("<b>%s</b> #%s | Age %s | jalan <b>%s</b>\n" ..
+					"  %.2f → <font color=\"#f5c82d\">%.2f KG</font> | Blessing <font color=\"#5acc78\"><b>%dx</b></font>" ..
+					" | sisa %dx (~%s) | terakhir %s")
+					:format(tostring(p.PetType), uuid:sub(2, 5), tostring(pd.Level or 0), run,
+						m.startW, w, m.hits, left, eta, ago)
 			end
 		end
-		if #lines == 0 then return "Belum ada pet target di kebun." end
-		return ("Total injek (pet di kebun): <b>%dx</b>\n\n"):format(total) .. table.concat(lines, "\n")
+		local out = {}
+		out[#out + 1] = ("Total Blessing (pet di kebun): <b>%dx</b>"):format(total)
+		out[#out + 1] = #lines > 0 and table.concat(lines, "\n") or "Belum ada pet target di kebun."
+		-- riwayat pet selesai
+		local hist = {}
+		for _, d in ipairs(M.done) do
+			if #hist >= 8 then break end
+			if matches(typeSet, d.petType) then
+				hist[#hist + 1] = ("#%d %s | %.2f → %.2f KG | %dx Blessing | <b>%s</b> | %s | %s")
+					:format(d.n, tostring(d.petType), d.startW, d.endW, d.hits, fmtDur(d.secs),
+						d.reason == "target" and "target" or "dicabut", os.date("%H:%M", d.at))
+			end
+		end
+		if #hist > 0 then
+			out[#out + 1] = "\n<b>Selesai:</b>\n" .. table.concat(hist, "\n")
+		end
+		return table.concat(out, "\n\n")
 	end
 
 	function ctx.resetElephantMonitor()
-		for k in pairs(mon) do mon[k] = nil end
+		M.pets, M.done, M.seq = {}, {}, 0
 	end
 end
 ]=],
@@ -25026,6 +25104,90 @@ return function(ctx)
 	end
 end
 ]=],
+	["modules/misc/flow_notify.lua"] = [=[
+--[[ flow_notify.lua — Notif pojok kanan bawah tiap fitur pindah ke tahap/flow berikutnya.
+     Satu tempat buat SEMUA fitur: mantau field status yang udah ditulis tiap modul
+     (ctx.state.*Status + ctx.setStatus) dan munculin notif WindUI pas tahapnya ganti.
+     - Angka di-strip pas bandingin, jadi countdown / "3/5 aktif" nggak nyepam.
+     - Per fitur min 2.5 s antar notif.
+     - Pesan yang cuma "detak" (PnP narik, countdown GM, placing x/y, dst.) di-skip.
+     Toggle: CFG.flowNotifyEnabled (Settings > General). Notif khusus (mis. Blessing gajah)
+     panggil ctx.flowNotify(title, msg) langsung. ]]
+return function(ctx)
+	local CFG = ctx.CFG
+	if CFG.flowNotifyEnabled == nil then CFG.flowNotifyEnabled = true end
+
+	local FIELDS = {
+		{ key = "hatchStatus",      title = "Hatch" },
+		{ key = "elephantStatus",   title = "Elephant V1" },
+		{ key = "elephantV2Status", title = "Elephant V2" },
+		{ key = "levelingStatus",   title = "Leveling V1" },
+		{ key = "levelingV2Status", title = "Leveling V2" },
+		{ key = "growthStatus",     title = "Flow" },
+		{ key = "mutationStatus",   title = "Mutation Machine" },
+		{ key = "fsStatus",         title = "Status" },
+	}
+
+	-- detak rutin, bukan pindah tahap
+	local SKIP = {
+		"^pnp v1", "gm sprinkler: %d+s left", "^placing", "^boost%.%.%.", "nunggu egg ready",
+		"auto collect: collect", "^idle$", "loading", "^%s*$",
+	}
+
+	local function norm(s)
+		s = tostring(s or ""):lower()
+		s = s:gsub("%d+%.?%d*", "#"):gsub("%s+", " ")
+		return s
+	end
+	local function skipped(s)
+		local low = tostring(s or ""):lower()
+		for _, p in ipairs(SKIP) do if low:find(p) then return true end end
+		return false
+	end
+
+	local lastSent = {} -- title -> os.clock()
+	function ctx.flowNotify(title, msg, dur)
+		if not CFG.flowNotifyEnabled then return end
+		local now = os.clock()
+		if lastSent[title .. "|" .. tostring(msg)] and now - lastSent[title .. "|" .. tostring(msg)] < 2 then return end
+		lastSent[title .. "|" .. tostring(msg)] = now
+		if ctx.wi and ctx.wi.notify then ctx.wi.notify(title, msg, dur or 4) end
+		if ctx.log then ctx.log(("[%s] %s"):format(title, tostring(msg))) end
+	end
+
+	local lastNorm, lastAt = {}, {}
+	local function check(id, title, value)
+		if value == nil then return end
+		local n = norm(value)
+		if lastNorm[id] == nil then lastNorm[id] = n; return end -- baseline pas load, jangan notif
+		if n == lastNorm[id] then return end
+		lastNorm[id] = n
+		if skipped(value) then return end
+		local now = os.clock()
+		if now - (lastAt[id] or 0) < 2.5 then return end
+		lastAt[id] = now
+		ctx.flowNotify(title, tostring(value))
+	end
+
+	task.spawn(function()
+		while ctx.alive() do
+			pcall(function()
+				if CFG.flowNotifyEnabled then
+					local st = ctx.state
+					for _, f in ipairs(FIELDS) do check(f.key, f.title, st[f.key]) end
+					-- status umum (ctx.setStatus): judul = teks sebelum ":" kalau ada
+					local sv = st.statusValue
+					if sv then
+						local head, rest = tostring(sv):match("^([^:]+):%s*(.+)$")
+						check("statusValue:" .. (head or "?"), head or "Status", rest and sv or sv)
+					end
+				end
+			end)
+			task.wait(0.5)
+		end
+	end)
+end
+]=],
 	["modules/misc/perf_mods.lua"] = [=[
 --[[ perf_mods.lua — Performance / Graphics Optimization.
      - Hide My/Other Garden Plants : sembunyiin plant (LocalTransparencyModifier) buat FPS.
@@ -29279,15 +29441,15 @@ end
 					"Target Weight: <font color=\"#f5c82d\"><b>%s</b></font>")
 					:format(col, s.status, s.team, s.types, s.ready, s.maxKg, s.maxTarget, s.targetWeight)
 			end, 1.5)
-			liveStatus(sec, "Elephant Injek Monitor", function()
+			liveStatus(sec, "Elephant Blessing Monitor", function()
 				return ctx.elephantMonitorText and ctx.elephantMonitorText(CFG.elephantPetTypes, CFG.elephantTargetWeight)
 			end, 1.5)
 			sec:Button({
-				Title = "Reset Injek Counter",
-				Desc = "Hitung ulang injek dari 0 (berat sekarang jadi berat awal)",
+				Title = "Reset Blessing Monitor",
+				Desc = "Hapus hitungan Blessing + riwayat pet selesai",
 				Callback = safe(function()
 					if ctx.resetElephantMonitor then ctx.resetElephantMonitor() end
-					W.notify("Elephant", "Injek counter di-reset")
+					W.notify("Elephant", "Blessing monitor di-reset")
 				end),
 			})
 			makeMultiDynW(sec, "V1 Pet Team", "Select elephant pet team (stays in the garden)",
@@ -29332,15 +29494,15 @@ end
 					:format(col, s.status, tostring(s.info), s.team, s.types, s.ready, s.maxKg,
 						s.maxTarget, s.targetWeight, s.gajah, s.switch, s.level)
 			end, 1.5)
-			liveStatus(sec, "Elephant Injek Monitor", function()
+			liveStatus(sec, "Elephant Blessing Monitor", function()
 				return ctx.elephantMonitorText and ctx.elephantMonitorText(CFG.elephantV2Types, CFG.elephantV2Weight)
 			end, 1.5)
 			sec:Button({
-				Title = "Reset Injek Counter",
-				Desc = "Hitung ulang injek dari 0 (berat sekarang jadi berat awal)",
+				Title = "Reset Blessing Monitor",
+				Desc = "Hapus hitungan Blessing + riwayat pet selesai",
 				Callback = safe(function()
 					if ctx.resetElephantMonitor then ctx.resetElephantMonitor() end
-					W.notify("Elephant", "Injek counter di-reset")
+					W.notify("Elephant", "Blessing monitor di-reset")
 				end),
 			})
 			makeMultiDynW(sec, "V2 Elephant Team", "Team standing by in the garden (source of the Pet Switch choice)",
@@ -30208,6 +30370,11 @@ end
 					pcall(function() if W.windui.SetTheme then W.windui:SetTheme(v) end end)
 					W.notify("Settings", "Theme: " .. tostring(v))
 				end, { fillDelay = 2.2 })
+
+			makeToggleW(sec, "Flow Notifications",
+				"Popup bottom-right every time a feature moves to its next step (hatch team swap, elephant Blessing, leveling phase, etc.).",
+				function() return CFG.flowNotifyEnabled ~= false end,
+				function(v) CFG.flowNotifyEnabled = v end)
 
 			sec:Button({
 				Title = "Reload Hub",

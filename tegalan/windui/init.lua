@@ -195,6 +195,7 @@ local MODULES = {
 	"modules/core/services.lua",
 	"modules/core/registry.lua",
 	"modules/core/config.lua",
+	"modules/misc/flow_notify.lua",
 	"ui/theme.lua",
 	"modules/inventory/automation_trade.lua",
 	"modules/inventory/automation_accept.lua",

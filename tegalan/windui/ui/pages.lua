@@ -1519,15 +1519,15 @@ end
 					"Target Weight: <font color=\"#f5c82d\"><b>%s</b></font>")
 					:format(col, s.status, s.team, s.types, s.ready, s.maxKg, s.maxTarget, s.targetWeight)
 			end, 1.5)
-			liveStatus(sec, "Elephant Injek Monitor", function()
+			liveStatus(sec, "Elephant Blessing Monitor", function()
 				return ctx.elephantMonitorText and ctx.elephantMonitorText(CFG.elephantPetTypes, CFG.elephantTargetWeight)
 			end, 1.5)
 			sec:Button({
-				Title = "Reset Injek Counter",
-				Desc = "Hitung ulang injek dari 0 (berat sekarang jadi berat awal)",
+				Title = "Reset Blessing Monitor",
+				Desc = "Hapus hitungan Blessing + riwayat pet selesai",
 				Callback = safe(function()
 					if ctx.resetElephantMonitor then ctx.resetElephantMonitor() end
-					W.notify("Elephant", "Injek counter di-reset")
+					W.notify("Elephant", "Blessing monitor di-reset")
 				end),
 			})
 			makeMultiDynW(sec, "V1 Pet Team", "Select elephant pet team (stays in the garden)",
@@ -1572,15 +1572,15 @@ end
 					:format(col, s.status, tostring(s.info), s.team, s.types, s.ready, s.maxKg,
 						s.maxTarget, s.targetWeight, s.gajah, s.switch, s.level)
 			end, 1.5)
-			liveStatus(sec, "Elephant Injek Monitor", function()
+			liveStatus(sec, "Elephant Blessing Monitor", function()
 				return ctx.elephantMonitorText and ctx.elephantMonitorText(CFG.elephantV2Types, CFG.elephantV2Weight)
 			end, 1.5)
 			sec:Button({
-				Title = "Reset Injek Counter",
-				Desc = "Hitung ulang injek dari 0 (berat sekarang jadi berat awal)",
+				Title = "Reset Blessing Monitor",
+				Desc = "Hapus hitungan Blessing + riwayat pet selesai",
 				Callback = safe(function()
 					if ctx.resetElephantMonitor then ctx.resetElephantMonitor() end
-					W.notify("Elephant", "Injek counter di-reset")
+					W.notify("Elephant", "Blessing monitor di-reset")
 				end),
 			})
 			makeMultiDynW(sec, "V2 Elephant Team", "Team standing by in the garden (source of the Pet Switch choice)",
@@ -2448,6 +2448,11 @@ end
 					pcall(function() if W.windui.SetTheme then W.windui:SetTheme(v) end end)
 					W.notify("Settings", "Theme: " .. tostring(v))
 				end, { fillDelay = 2.2 })
+
+			makeToggleW(sec, "Flow Notifications",
+				"Popup bottom-right every time a feature moves to its next step (hatch team swap, elephant Blessing, leveling phase, etc.).",
+				function() return CFG.flowNotifyEnabled ~= false end,
+				function(v) CFG.flowNotifyEnabled = v end)
 
 			sec:Button({
 				Title = "Reload Hub",
