@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 45 modul, di-generate 2026-10-29T16:13:03.768Z
+-- 45 modul, di-generate 2026-10-29T16:20:45.225Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -26438,6 +26438,31 @@ return function(ctx)
 	local MIN_POLL       = SCAN_INTERVAL
 
 	local GameEvents          = RS:WaitForChild("GameEvents")
+
+	-- DIAGNOSTIK: tiap keputusan PnP dicatat ke file pnp_debug.txt (workspace executor).
+	local dbgLines, dbgT0, dbgDirty = {}, os.clock(), false
+	local function dbg(fmt, ...)
+		local ok, s = pcall(string.format, fmt, ...)
+		dbgLines[#dbgLines + 1] = ("%8.3f  %s"):format(os.clock() - dbgT0, ok and s or fmt)
+		if #dbgLines > 3000 then table.remove(dbgLines, 1) end
+		dbgDirty = true
+	end
+	task.spawn(function()
+		while ctx.alive() do
+			if dbgDirty and writefile then
+				dbgDirty = false
+				pcall(writefile, "pnp_debug.txt", table.concat(dbgLines, "\n"))
+			end
+			task.wait(2)
+		end
+	end)
+	local function short(u) return tostring(u):sub(2, 6) end
+	local function cdStr(cur)
+		if not cur then return "nil" end
+		local p = {}
+		for k, t in pairs(cur) do p[#p + 1] = ("%s=%g"):format(k:gsub("#%d+$", ""), t) end
+		return table.concat(p, ",")
+	end
 	local GetPetCooldown      = GameEvents:WaitForChild("GetPetCooldown")
 	local PetCooldownsUpdated = GameEvents:FindFirstChild("PetCooldownsUpdated")
 	local PetZoneAbility      = GameEvents:FindFirstChild("PetZoneAbility")
@@ -26491,9 +26516,32 @@ return function(ctx)
 	local animSeen   = false -- pernah nerima state animasi (kalau nggak -> fallback CD0_MIN)
 	local onAnim
 
-	local function onCd(uuid, cd)
+	local lastPush = {} -- uuid -> os.clock() terakhir dapet push cd dari server
+	local zeroAt   = {} -- uuid -> os.clock() terakhir passive non-zone kebaca 0
+
+	-- "lagi nunggu skill": passive non-zone 0 sekarang ATAU baru aja (<1.5 s) kebaca 0.
+	local function readyish(uuid, cur)
+		cur = cur or prevCd[uuid]
+		if cur then
+			for key, t in pairs(cur) do
+				if not key:find("Mutation") and not zonePassive[key:gsub("#%d+$", "")] and t <= 0 then
+					return true
+				end
+			end
+		end
+		return zeroAt[uuid] ~= nil and os.clock() - zeroAt[uuid] < 1.5
+	end
+
+	local function onCd(uuid, cd, src)
 		if type(cd) ~= "table" then return end
 		local now = os.clock()
+		if src == "push" then
+			lastPush[uuid] = now
+		elseif now - (lastPush[uuid] or 0) < 2.5 then
+			-- Poll GetPetCooldown kadang ngasih angka BASI abis cd dipotong tim (push =5, poll =53
+			-- di detik yang sama). Kalau push masih jalan, poll diabaikan biar nggak nimpa.
+			return
+		end
 		if #cd == 0 then
 			-- JANGAN hapus prevCd: server kadang kirim {kosong}/inf sesaat walau pet nggak
 			-- dicabut -> sampel berikutnya dianggap "pertama" & 0 -> ketarik tanpa skill.
@@ -26515,6 +26563,11 @@ return function(ctx)
 
 		local prev = prevCd[uuid]
 		prevCd[uuid] = cur
+		for key, t in pairs(cur) do
+			if not key:find("Mutation") and not zonePassive[key:gsub("#%d+$", "")] then
+				if t <= 0 then zeroAt[uuid] = now end
+			end
+		end
 		if not CFG.pnpEnabled then return end
 
 		-- Pickup CD0 yang lagi nunggu: verifikasi pakai sampel berikutnya.
@@ -26529,8 +26582,9 @@ return function(ctx)
 		end
 		if pk and waitAnim[uuid] and not fireAt[uuid] then
 			local t = cur[pk]
-			if t and t > 0 then
-				-- cd naik lagi tanpa animasi kebaca: skill udah lewat / 0 palsu -> jangan tarik
+			if t and t > CANCEL_MAX then
+				-- cd ke-reset tanpa animasi/notif kebaca: skill udah lewat -> jangan tarik
+				dbg("%s BATAL nunggu: cd reset tanpa sinyal (%s)", short(uuid), cdStr(cur))
 				waitAnim[uuid], pendingKey[uuid] = nil, nil
 			end
 		end
@@ -26564,6 +26618,7 @@ return function(ctx)
 			end
 		end
 		if not reason then return end
+		dbg("%s CD0 %s zone=%s src=%s prev=%s", short(uuid), tostring(rKey), tostring(isZone), tostring(src), cdStr(prev))
 		if isZone then
 			-- skill zone baru "keluar" pas event ZONE; tunggu itu (dengan fallback)
 			if not fireAt[uuid] and not waitZone[uuid] then waitZone[uuid] = now + ZONE_FALLBACK end
@@ -26598,17 +26653,16 @@ return function(ctx)
 		-- animasi baru kalau namanya beda atau yang lama udah > 1.5 s.
 		if animOn[uuid] and animName[uuid] == anim and now - animOn[uuid] < 1.5 then return end
 		animOn[uuid], animName[uuid] = now, anim
-		if not CFG.pnpEnabled or busy[uuid] or fireAt[uuid] then return end
-		-- cuma dihitung skill kalau ada passive NON-zone yang cd-nya ~0 (bukan anim lain)
-		local cur = prevCd[uuid]
-		if not cur then return end
-		local ok = false
-		for key, t in pairs(cur) do
-			if not key:find("Mutation") and not zonePassive[key:gsub("#%d+$", "")] and t <= ANIM_CD_MAX then
-				ok = true; break
-			end
+		if not CFG.pnpEnabled or busy[uuid] or fireAt[uuid] then
+			dbg("%s ANIM '%s' diabaikan (busy=%s fireAt=%s)", short(uuid), anim, tostring(busy[uuid]), tostring(fireAt[uuid] ~= nil))
+			return
 		end
-		if not ok then return end
+		-- cuma dihitung skill kalau ada passive NON-zone yang cd-nya 0 (atau baru aja 0)
+		if not readyish(uuid) then
+			dbg("%s ANIM '%s' diabaikan: belum ready (%s)", short(uuid), anim, cdStr(prevCd[uuid]))
+			return
+		end
+		dbg("%s ANIM '%s' -> tarik +%.2fs", short(uuid), anim, ANIM_DELAY)
 		waitAnim[uuid], pendingKey[uuid] = nil, nil
 		fireAt[uuid] = now + ANIM_DELAY
 		fireReason[uuid] = "ANIM"
@@ -26630,16 +26684,15 @@ return function(ctx)
 		local low = msg:lower()
 		local now = os.clock()
 		for uuid, cur in pairs(prevCd) do
-			if not busy[uuid] and not notifAt[uuid] then
-				local waiting = false
-				for key, t in pairs(cur) do
-					if not key:find("Mutation") and not zonePassive[key:gsub("#%d+$", "")] and t <= 0 then
-						waiting = true; break
-					end
-				end
-				local pt = waiting and petTypeOf(uuid)
-				local pos = pt and low:find(pt:lower(), 1, true)
-				if pos and pos <= NOTIF_NAME_POS then
+			local pt = petTypeOf(uuid)
+			local pos = pt and low:find(pt:lower(), 1, true)
+			if pos and pos <= NOTIF_NAME_POS then
+				if busy[uuid] or notifAt[uuid] then
+					-- venom lanjutan di siklus yang sama -> normal, diem aja
+				elseif not readyish(uuid, cur) then
+					dbg("%s NOTIF diabaikan: belum ready (%s) msg=%s", short(uuid), cdStr(cur), msg:sub(1, 50))
+				else
+					dbg("%s NOTIF -> tarik +%.2fs msg=%s", short(uuid), NOTIF_DELAY, msg:sub(1, 50))
 					notifAt[uuid] = now
 					waitAnim[uuid], pendingKey[uuid] = nil, nil
 					fireAt[uuid] = now + NOTIF_DELAY -- override jadwal Frill: tunggu skill beneran jalan
@@ -26689,7 +26742,7 @@ return function(ctx)
 		end
 		if PetCooldownsUpdated then
 			g.__pnpV1CdConn = PetCooldownsUpdated.OnClientEvent:Connect(function(uuid, cdTable)
-				if type(uuid) == "string" then onCd(uuid, cdTable) end
+				if type(uuid) == "string" then onCd(uuid, cdTable, "push") end
 			end)
 		end
 		if PetZoneAbility then
@@ -26807,7 +26860,7 @@ return function(ctx)
 		--  cepet, tarikan di-skip diam-diam. Makin lama main = makin sering kejadian.)
 		local lk = LOCK[uuid]
 		if type(lk) ~= "table" then lk = nil end -- format lama (angka) dari versi sebelumnya
-		if lk and lk.tag ~= HUB_TAG and os.clock() - lk.t < 2.5 then return true end
+		if lk and lk.tag ~= HUB_TAG and os.clock() - lk.t < 2.5 then dbg("%s SKIP: dikunci hub lain", short(uuid)); return true end
 		LOCK[uuid] = { t = os.clock(), tag = HUB_TAG }
 		busy[uuid] = true
 
@@ -26874,11 +26927,13 @@ return function(ctx)
 				end
 				if waitAnim[uuid] and now >= waitAnim[uuid] then
 					-- animasi skill nggak muncul -> jangan tarik (narik = skill ilang)
+					dbg("%s BATAL nunggu: %ds tanpa animasi/notif (%s)", short(uuid), ANIM_WAIT, cdStr(prevCd[uuid]))
 					waitAnim[uuid], pendingKey[uuid] = nil, nil
 				end
 
 				if fireAt[uuid] and now >= fireAt[uuid] then
 					local why = fireReason[uuid] or "?"
+					dbg("%s TARIK alasan=%s (%s)", short(uuid), why, cdStr(prevCd[uuid]))
 					if ctx.log then
 						ctx.log(("[PNP V1] tarik #%s alasan=%s anim=%s"):format(uuid:sub(2, 5), why,
 							animOn[uuid] and ("%.2fs"):format(now - animOn[uuid]) or "-"))
