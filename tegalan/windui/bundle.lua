@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 45 modul, di-generate 2026-10-29T15:47:46.068Z
+-- 45 modul, di-generate 2026-10-29T16:13:03.768Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -26792,16 +26792,23 @@ return function(ctx)
 		return CFG.pnpEnabled and ctx.alive() and ctx.state.pnpV1Id == myId
 	end
 
+	local HUB_TAG = {} -- identitas instance ini (buat kunci lintas-instance)
+	local lastPlacedAt = {} -- uuid -> os.clock() terakhir di-place
+	local doPnp
+
 	-- return true kalau pet sukses balik ke kebun. Pet WAJIB dicoba balik walau PnP dimatiin.
-	local function doPnp(uuid)
+	local function doPnpInner(uuid)
 		local pos = placePos()
 		fireAt[uuid], waitZone[uuid], pendingKey[uuid], waitAnim[uuid] = nil, nil, nil, nil
 		notifAt[uuid] = nil
 		if not pos then return true end
-		-- kunci lintas-instance (anti tarikan dobel)
+		-- Kunci lintas-instance: cuma nolak kalau yang lagi/baru narik itu INSTANCE LAIN.
+		-- (Dulu nolak juga tarikan sendiri < 2.5 s -> pas cd dipotong tim & pet ready lagi
+		--  cepet, tarikan di-skip diam-diam. Makin lama main = makin sering kejadian.)
 		local lk = LOCK[uuid]
-		if lk and os.clock() - lk < 2.5 then return true end
-		LOCK[uuid] = os.clock()
+		if type(lk) ~= "table" then lk = nil end -- format lama (angka) dari versi sebelumnya
+		if lk and lk.tag ~= HUB_TAG and os.clock() - lk.t < 2.5 then return true end
+		LOCK[uuid] = { t = os.clock(), tag = HUB_TAG }
 		busy[uuid] = true
 
 		local tU = os.clock()
@@ -26821,47 +26828,74 @@ return function(ctx)
 		animOn[uuid], animName[uuid] = nil, nil -- animasi lama punya pet yang udah ditarik
 		ignoreUntil[uuid] = os.clock() + PLACE_GRACE
 		busy[uuid] = nil
-		LOCK[uuid] = os.clock()
+		LOCK[uuid] = { t = os.clock(), tag = HUB_TAG }
+		lastPlacedAt[uuid] = os.clock()
 		return placed
+	end
+
+	-- Pembungkus: error di tengah pickup nggak boleh ninggalin busy nyangkut (pet nggak
+	-- pernah ditarik lagi).
+	function doPnp(uuid)
+		local ok, res = pcall(doPnpInner, uuid)
+		busy[uuid] = nil
+		if not ok then
+			if ctx.log then ctx.log("[PNP V1] error pickup: " .. tostring(res)) end
+			return true
+		end
+		return res
 	end
 
 	local petThreads = {}
 	local function runPetThread(uuid, myId)
 		petThreads[uuid] = true
-		local lastPoll, polling, lastEqCheck = 0, false, 0
+		local lastPoll, polling, lastEqCheck, missing = 0, false, 0, 0
 		while alive(myId) do
-			local now = os.clock()
-			if now - lastEqCheck > 0.5 then
-				lastEqCheck = now
-				if not isTarget(uuid) or not equippedSet()[uuid] then break end
-			end
-
-			if waitZone[uuid] and now >= waitZone[uuid] then
-				waitZone[uuid] = nil
-				schedule(uuid, "CD0")
-			end
-			if waitAnim[uuid] and now >= waitAnim[uuid] then
-				-- animasi skill nggak muncul -> jangan tarik (narik = skill ilang)
-				waitAnim[uuid], pendingKey[uuid] = nil, nil
-			end
-
-			if fireAt[uuid] and now >= fireAt[uuid] then
-				local why = fireReason[uuid] or "?"
-				if ctx.log then
-					ctx.log(("[PNP V1] tarik #%s alasan=%s anim=%s"):format(uuid:sub(2, 5), why,
-						animOn[uuid] and ("%.2fs"):format(now - animOn[uuid]) or "-"))
+			-- pcall per putaran: dulu 1 error = thread mati TAPI petThreads[uuid] tetap true
+			-- -> pet itu nggak pernah di-handle lagi sampai re-execute (makin lama makin parah).
+			local okTick, stop = pcall(function()
+				local now = os.clock()
+				if now - lastEqCheck > 0.5 then
+					lastEqCheck = now
+					if not isTarget(uuid) then return true end
+					-- DataService suka telat abis place: keluar cuma kalau 3x berturut-turut
+					-- nggak ke-equip, nggak lagi ada tarikan nunggu, & udah > 3 s abis place.
+					if equippedSet()[uuid] then
+						missing = 0
+					elseif not fireAt[uuid] and not busy[uuid]
+						and now - (lastPlacedAt[uuid] or 0) > 3 then
+						missing = missing + 1
+						if missing >= 3 then return true end
+					end
 				end
-				if doPnp(uuid) then
-					setStatus(("PNP V1: #%s ditarik (%s)"):format(uuid:sub(2, 5), why))
-				else
-					setStatus("PNP V1: gagal place ulang pet #" .. uuid:sub(2, 5) .. " (cek backpack)")
-					break
+
+				if waitZone[uuid] and now >= waitZone[uuid] then
+					waitZone[uuid] = nil
+					schedule(uuid, "CD0")
 				end
-				lastEqCheck = os.clock() -- DataService telat update abis place
-			elseif not polling and now - lastPoll >= SCAN_INTERVAL then
-				lastPoll, polling = now, true
-				task.spawn(function() pollCd(uuid); polling = false end)
-			end
+				if waitAnim[uuid] and now >= waitAnim[uuid] then
+					-- animasi skill nggak muncul -> jangan tarik (narik = skill ilang)
+					waitAnim[uuid], pendingKey[uuid] = nil, nil
+				end
+
+				if fireAt[uuid] and now >= fireAt[uuid] then
+					local why = fireReason[uuid] or "?"
+					if ctx.log then
+						ctx.log(("[PNP V1] tarik #%s alasan=%s anim=%s"):format(uuid:sub(2, 5), why,
+							animOn[uuid] and ("%.2fs"):format(now - animOn[uuid]) or "-"))
+					end
+					if doPnp(uuid) then
+						setStatus(("PNP V1: #%s ditarik (%s)"):format(uuid:sub(2, 5), why))
+					else
+						setStatus("PNP V1: gagal place ulang pet #" .. uuid:sub(2, 5) .. " (cek backpack)")
+					end
+					lastEqCheck, missing = os.clock(), 0
+				elseif not polling and now - lastPoll >= SCAN_INTERVAL then
+					lastPoll, polling = now, true
+					task.spawn(function() pcall(pollCd, uuid); polling = false end)
+				end
+			end)
+			if not okTick and ctx.log then ctx.log("[PNP V1] error loop: " .. tostring(stop)) end
+			if okTick and stop then break end
 			task.wait(0.03)
 		end
 		fireAt[uuid], waitZone[uuid], prevCd[uuid], pendingKey[uuid] = nil, nil, nil, nil
