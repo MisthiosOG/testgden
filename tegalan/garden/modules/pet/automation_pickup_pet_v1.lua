@@ -74,12 +74,16 @@ return function(ctx)
 	end
 
 	-------------------------------------------------------------- sumber sinyal
+	local pendingKey = {} -- uuid -> passive key yang lagi ditunggu (CD0 non-zone)
+	local CANCEL_MAX = 10 -- cd balik naik tapi <= ini = bacaan 0 tadi palsu (bukan reset skill)
+
 	local function onCd(uuid, cd)
 		if type(cd) ~= "table" then return end
 		local now = os.clock()
 		if #cd == 0 then
+			-- JANGAN hapus prevCd: server kadang kirim {kosong}/inf sesaat walau pet nggak
+			-- dicabut -> sampel berikutnya dianggap "pertama" & 0 -> ketarik tanpa skill.
 			lastEmpty[uuid] = now
-			prevCd[uuid] = nil
 			return
 		end
 		local cur, data, seen, hasInf = {}, {}, {}, false
@@ -92,29 +96,41 @@ return function(ctx)
 			cur[name .. "#" .. seen[name]] = t
 		end
 		cdMap[uuid] = { data = data }
-		if hasInf then prevCd[uuid] = nil; return end -- transisi unequip/equip
+		if hasInf then return end -- transisi unequip/equip
 		lastValid[uuid] = now
 
 		local prev = prevCd[uuid]
 		prevCd[uuid] = cur
 		if not CFG.pnpEnabled then return end
 
-		local reason, isZone
+		-- Pickup CD0 yang lagi nunggu: verifikasi pakai sampel berikutnya.
+		local pk = pendingKey[uuid]
+		if pk and fireAt[uuid] and not busy[uuid] then
+			local t = cur[pk]
+			if t and t > CANCEL_MAX then
+				fireAt[uuid] = now -- cd ke-reset = skill BARU keluar -> tarik sekarang
+				fireReason[uuid] = "RESET"
+				pendingKey[uuid] = nil
+			elseif t and t > 0 then
+				fireAt[uuid], pendingKey[uuid] = nil, nil -- 0 tadi glitch, batal
+			end
+		end
+
+		local reason, isZone, rKey
 		for key, t in pairs(cur) do
 			if not key:find("Mutation") then
 				local p = prev and prev[key]
 				local r
-				-- p == nil = sampel pertama. Abis place jangan langsung dianggap CD0 (anti loop
-				-- kalau ada passive yang memang nyangkut di 0).
-				if t <= 0 and ((p == nil and now >= (ignoreUntil[uuid] or 0)) or (p and p > 0)) then
+				-- WAJIB transisi beneran (>0 -> 0). Sampel pertama yang udah 0 (pas baru
+				-- nyalain / baru join) nggak dihitung: nggak tau kapan nyampe 0, dan sering
+				-- skill-nya belum/nggak keluar -> dulu ketarik tanpa skill.
+				if t <= 0 and p and p > 0 then
 					r = "CD0"
 				end
-				-- (Trigger ADV dihapus: dari log, cd yang di-advance ke ~4-5 TETAP countdown ke 0
-				--  dulu baru skill keluar. Narik pas ADV = narik sebelum skill -> skill hilang.)
 				if r then
 					local z = zonePassive[key:gsub("#%d+$", "")] == true
 					-- passive non-zone menang (langsung dijadwalkan); zone nunggu event
-					if not reason or (isZone and not z) then reason, isZone = r, z end
+					if not reason or (isZone and not z) then reason, isZone, rKey = r, z, key end
 				end
 			end
 		end
@@ -124,6 +140,7 @@ return function(ctx)
 			if not fireAt[uuid] and not waitZone[uuid] then waitZone[uuid] = now + ZONE_FALLBACK end
 		else
 			-- CD0 natural: skill butuh ~0.8 s buat "nempel" sebelum aman ditarik (ancang-ancang)
+			if not fireAt[uuid] then pendingKey[uuid] = rKey end
 			schedule(uuid, reason, false, CD0_MIN)
 		end
 	end
@@ -252,7 +269,7 @@ return function(ctx)
 	-- return true kalau pet sukses balik ke kebun. Pet WAJIB dicoba balik walau PnP dimatiin.
 	local function doPnp(uuid)
 		local pos = placePos()
-		fireAt[uuid], waitZone[uuid] = nil, nil
+		fireAt[uuid], waitZone[uuid], pendingKey[uuid] = nil, nil, nil
 		if not pos then return true end
 		busy[uuid] = true
 
@@ -306,7 +323,7 @@ return function(ctx)
 			end
 			task.wait(0.03)
 		end
-		fireAt[uuid], waitZone[uuid], prevCd[uuid] = nil, nil, nil
+		fireAt[uuid], waitZone[uuid], prevCd[uuid], pendingKey[uuid] = nil, nil, nil, nil
 		petThreads[uuid] = nil
 	end
 
