@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 45 modul, di-generate 2026-10-29T15:39:55.045Z
+-- 45 modul, di-generate 2026-10-29T15:47:46.068Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -26422,7 +26422,7 @@ return function(ctx)
 	-- Sinyal UTAMA non-zone: notifikasi skill pertama dari pet itu ("Rainbow Dilophosaurus spat
 	-- venom...", "Rainbow Hotdog Daschund just dropped..."). Animasi Frill BELUM berarti skill
 	-- jalan -> narik Frill+0.3 kadang cuma keluar 4 venom. Pandora narik ~0.4-0.9 s abis venom pertama.
-	local NOTIF_DELAY    = 0.8
+	local NOTIF_DELAY    = 0.35 -- 0.8 kelamaan (Dilo keburu jalan sambil nyembur); Pandora tercepat ~0.39
 	local NOTIF_NAME_POS = 25   -- nama pet harus di awal pesan (bukan "...to Rainbow Hotdog")
 	local ANIM_WAIT      = 8    -- abis cd 0, tunggu animasi maksimal segini (lewat = batal, siklus berikutnya)
 	local ANIM_CD_MAX    = 0    -- animasi dihitung skill cuma kalau cd passive non-zone udah 0
