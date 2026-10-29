@@ -35,7 +35,9 @@ return function(ctx)
 	-- Dilo kadang baru ancang-ancang beberapa detik abis cd 0 -> narik pas cd0+0.8 = skill ilang.
 	local ANIM_DELAY     = 0.3  -- tarik segini abis animasi skill mulai (Hotdog +0.24 s = puddle tetap jatuh)
 	local ANIM_WAIT      = 8    -- abis cd 0, tunggu animasi maksimal segini (lewat = batal, siklus berikutnya)
-	local ANIM_CD_MAX    = 2    -- animasi dihitung skill cuma kalau cd passive non-zone <= ini
+	local ANIM_CD_MAX    = 0    -- animasi dihitung skill cuma kalau cd passive non-zone udah 0
+	                            -- (dulu <= 2: animasi reaksi pas cd 2 bikin Dilo ketarik "mangap doang")
+	local ANIM_EARLY     = 1.0  -- animasi datang sebelum push cd 0 (Hotdog ~3 ms) -> masih dihitung kalau <= ini
 	local ZONE_FALLBACK  = 2.0  -- pet zone: kalau event ZONE nggak datang segini setelah CD0, tetap tarik
 	local ADV_DROP, ADV_LOW = nil, nil -- (trigger ADV dihapus)
 	local PLACE_GRACE    = 1.5  -- abis place: sampel cd pertama yang 0 nggak dihitung CD0 (anti loop).
@@ -93,6 +95,7 @@ return function(ctx)
 	local pendingKey = {} -- uuid -> passive key yang lagi ditunggu (CD0 non-zone)
 	local CANCEL_MAX = 10 -- cd balik naik tapi <= ini = bacaan 0 tadi palsu (bukan reset skill)
 	local animOn     = {} -- uuid -> os.clock() animasi skill mulai (nil = nggak animasi)
+	local animName   = {} -- uuid -> nama animasi terakhir
 	local waitAnim   = {} -- uuid -> deadline nunggu animasi abis cd 0
 	local animSeen   = false -- pernah nerima state animasi (kalau nggak -> fallback CD0_MIN)
 	local onAnim
@@ -169,7 +172,7 @@ return function(ctx)
 			-- cd 0 BELUM berarti skill mulai. Tunggu animasi skill (onAnim). Kalau animasinya
 			-- udah nyala duluan (kadang datang sebelum push cd 0), langsung jadwalin.
 			if not fireAt[uuid] then
-				if animOn[uuid] and now - animOn[uuid] < 3 then
+				if animOn[uuid] and now - animOn[uuid] <= ANIM_EARLY then
 					fireAt[uuid] = math.max(now, animOn[uuid] + ANIM_DELAY)
 					fireReason[uuid] = "ANIM"
 				else
@@ -189,10 +192,13 @@ return function(ctx)
 	-- value nil/"" = animasi selesai.
 	function onAnim(uuid, anim)
 		local now = os.clock()
-		if anim == nil or anim == "" then animOn[uuid] = nil; return end
+		if anim == nil or anim == "" then animOn[uuid], animName[uuid] = nil, nil; return end
 		animSeen = true
-		if animOn[uuid] then return end -- masih animasi yang sama
-		animOn[uuid] = now
+		-- Event "selesai" ('') kadang nggak nyampe -> dulu animOn nyangkut & SEMUA animasi
+		-- berikutnya diabaikan (Dilo ngeskill sampai kelar nggak ketarik). Sekarang: anggap
+		-- animasi baru kalau namanya beda atau yang lama udah > 1.5 s.
+		if animOn[uuid] and animName[uuid] == anim and now - animOn[uuid] < 1.5 then return end
+		animOn[uuid], animName[uuid] = now, anim
 		if not CFG.pnpEnabled or busy[uuid] or fireAt[uuid] then return end
 		-- cuma dihitung skill kalau ada passive NON-zone yang cd-nya ~0 (bukan anim lain)
 		local cur = prevCd[uuid]
@@ -371,7 +377,7 @@ return function(ctx)
 		end
 
 		prevCd[uuid] = nil
-		animOn[uuid] = nil -- animasi lama punya pet yang udah ditarik
+		animOn[uuid], animName[uuid] = nil, nil -- animasi lama punya pet yang udah ditarik
 		ignoreUntil[uuid] = os.clock() + PLACE_GRACE
 		busy[uuid] = nil
 		LOCK[uuid] = os.clock()
