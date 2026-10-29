@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 44 modul, di-generate 2026-10-28T20:27:14.356Z
+-- 44 modul, di-generate 2026-10-29T11:04:35.984Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -19110,7 +19110,9 @@ return function(ctx)
 	local SprinklerService = GE:WaitForChild("SprinklerService")
 	local GM_TYPE   = "Grandmaster Sprinkler"
 	local GM_REFILL = 45 -- pasang baru ketika sisa 45 detik, jangan sampai terputus
-	local setStatus = ctx.setStatus
+	-- JANGAN `local setStatus = ctx.setStatus`: ctx.setStatus baru dibuat di ui/window.lua
+	-- (dimuat SETELAH modul ini) -> nil -> loop error & mati abis place GM pertama.
+	local function setStatus(s) if ctx.setStatus then pcall(ctx.setStatus, s) end end
 
 	local function important()
 		local ok, GetFarm = pcall(function() return require(RS.Modules.GetFarm) end)
@@ -19126,18 +19128,25 @@ return function(ctx)
 		local imp = important()
 		local of = imp and imp:FindFirstChild("Objects_Physical")
 		if not of then return "none", 0 end
-		local found, minLife = false, math.huge
+		-- Pakai sisa waktu TERBESAR: kalau GM lama mau habis tapi GM baru udah kepasang,
+		-- itu "alive" (dulu pakai terkecil -> nge-place ulang tiap 4 detik sampai GM lama habis).
+		local found, noLife, maxLife = false, false, -1
 		for _, o in ipairs(of:GetChildren()) do
 			if (o:GetAttribute("OBJECT_TYPE") or o.Name) == GM_TYPE
 				and o:GetAttribute("OWNER") == LP.Name then
 				found = true
 				local life = tonumber(o:GetAttribute("Lifetime"))
-				if life and life < minLife then minLife = life end
+				if life then
+					if life > maxLife then maxLife = life end
+				else
+					noLife = true
+				end
 			end
 		end
 		if not found then return "none", 0 end
-		if minLife < math.huge and minLife <= GM_REFILL then return "expiring", minLife end
-		return "alive", (minLife < math.huge and minLife or 0)
+		if noLife then return "alive", math.max(0, maxLife) end
+		if maxLife <= GM_REFILL then return "expiring", maxLife end
+		return "alive", maxLife
 	end
 
 	local function gmInventory()
@@ -19178,6 +19187,8 @@ return function(ctx)
 	local function gmLoop(myId)
 		ctx.elevate()
 		while CFG.gmSprinklerEnabled and ctx.alive() and ctx.state.gmSprId == myId do
+			-- satu error di satu putaran nggak boleh matiin loop
+			local okTick, errTick = pcall(function()
 			local st, life = gmState()
 			if st == "alive" then
 				setStatus(("GM Sprinkler: %ss left"):format(math.floor(life)))
@@ -19195,6 +19206,8 @@ return function(ctx)
 					end
 				end
 			end
+			end)
+			if not okTick and ctx.log then ctx.log("[GM Sprinkler] error: " .. tostring(errTick)) end
 			task.wait(1)
 		end
 	end
