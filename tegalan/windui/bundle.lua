@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 46 modul, di-generate 2026-10-29T17:13:24.729Z
+-- 46 modul, di-generate 2026-10-29T17:18:01.185Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -17881,15 +17881,15 @@ return function(ctx)
 				local left = math.max(0, math.ceil((targetW - w) / STEP - 1e-6))
 				local ago = m.lastAt and (fmtDur(now - m.lastAt) .. " lalu") or "-"
 				local run = fmtDur(now - (m.firstAt or m.enterAt or now))
-				-- estimasi selesai dari rata-rata jeda Blessing
-				local eta = "-"
-				if m.hits >= 2 and m.firstAt and m.lastAt and m.lastAt > m.firstAt then
+				-- estimasi selesai dari rata-rata jeda Blessing (cuma ditampilin kalau datanya cukup)
+				local eta = ""
+				if m.hits >= 2 and m.firstAt and m.lastAt and m.lastAt > m.firstAt and left > 0 then
 					local per = (m.lastAt - m.firstAt) / (m.hits - 1)
-					eta = fmtDur(per * left)
+					eta = " (±" .. fmtDur(per * left) .. " lagi)"
 				end
 				lines[#lines + 1] = ("<b>%s</b> #%s | Age %s | jalan <b>%s</b>\n" ..
 					"  %.2f → <font color=\"#f5c82d\">%.2f KG</font> | Blessing <font color=\"#5acc78\"><b>%dx</b></font>" ..
-					" | sisa %dx (~%s) | terakhir %s")
+					" | sisa %dx%s | terakhir %s")
 					:format(tostring(p.PetType), uuid:sub(2, 5), tostring(pd.Level or 0), run,
 						m.startW, w, m.hits, left, eta, ago)
 			end
@@ -29790,7 +29790,7 @@ end
 	local function buildMutationTab(tab)
 		local mdefs = {
 			machine = { name = "Machine" },
-			cleanse = { name = "Aura Cleanse" },
+			cleanse = { name = "Aura Mutation" },
 		}
 		local morder = { "machine", "cleanse" }
 		local msecs = {}
@@ -29891,13 +29891,13 @@ end
 			makeMultiW(sec, "Pet Types for Mutation", "Target pet types to mutate (all pets in game)",
 				reg.PET_OPTIONS, CFG.cleansePetTypes, function() persist() end,
 				{ fillDelay = 0.8 })
-			makeMultiW(sec, "Mutations to Keep", "These mutations are kept (won't be cleansed)",
+			makeMultiW(sec, "Mutations to Keep", "Stop when the pet gets one of these. Other mutations get removed (needs Cleansing Pet Shard).",
 				reg.MUT_OPTIONS, CFG.cleanseKeepMutations, function() persist() end,
 				{ fillDelay = 1.0 })
 			makeInputW(sec, "Max Pets in Garden", "Max target pets in the garden at once",
 				function() return CFG.cleanseMaxPets end,
 				function(t) CFG.cleanseMaxPets = math.max(1, math.floor(tonumber(t) or 2)) end)
-			makeToggleW(sec, "Enable Auto Mutation", "Mutates targets via aura; cleanses wrong mutations, keeps the kept ones.",
+			makeToggleW(sec, "Enable Auto Mutation", "Targets sit next to the aura team until they roll a mutation. Kept mutation = pet is done. Any other mutation = removed with a Cleansing Pet Shard and retried.",
 				function() return CFG.cleanseEnabled end,
 				function(v)
 					CFG.cleanseEnabled = v; persist()

@@ -1873,7 +1873,7 @@ end
 	local function buildMutationTab(tab)
 		local mdefs = {
 			machine = { name = "Machine" },
-			cleanse = { name = "Aura Cleanse" },
+			cleanse = { name = "Aura Mutation" },
 		}
 		local morder = { "machine", "cleanse" }
 		local msecs = {}
@@ -1974,13 +1974,13 @@ end
 			makeMultiW(sec, "Pet Types for Mutation", "Target pet types to mutate (all pets in game)",
 				reg.PET_OPTIONS, CFG.cleansePetTypes, function() persist() end,
 				{ fillDelay = 0.8 })
-			makeMultiW(sec, "Mutations to Keep", "These mutations are kept (won't be cleansed)",
+			makeMultiW(sec, "Mutations to Keep", "Stop when the pet gets one of these. Other mutations get removed (needs Cleansing Pet Shard).",
 				reg.MUT_OPTIONS, CFG.cleanseKeepMutations, function() persist() end,
 				{ fillDelay = 1.0 })
 			makeInputW(sec, "Max Pets in Garden", "Max target pets in the garden at once",
 				function() return CFG.cleanseMaxPets end,
 				function(t) CFG.cleanseMaxPets = math.max(1, math.floor(tonumber(t) or 2)) end)
-			makeToggleW(sec, "Enable Auto Mutation", "Mutates targets via aura; cleanses wrong mutations, keeps the kept ones.",
+			makeToggleW(sec, "Enable Auto Mutation", "Targets sit next to the aura team until they roll a mutation. Kept mutation = pet is done. Any other mutation = removed with a Cleansing Pet Shard and retried.",
 				function() return CFG.cleanseEnabled end,
 				function(v)
 					CFG.cleanseEnabled = v; persist()

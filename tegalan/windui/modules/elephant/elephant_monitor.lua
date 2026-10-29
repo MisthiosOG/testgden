@@ -123,15 +123,15 @@ return function(ctx)
 				local left = math.max(0, math.ceil((targetW - w) / STEP - 1e-6))
 				local ago = m.lastAt and (fmtDur(now - m.lastAt) .. " lalu") or "-"
 				local run = fmtDur(now - (m.firstAt or m.enterAt or now))
-				-- estimasi selesai dari rata-rata jeda Blessing
-				local eta = "-"
-				if m.hits >= 2 and m.firstAt and m.lastAt and m.lastAt > m.firstAt then
+				-- estimasi selesai dari rata-rata jeda Blessing (cuma ditampilin kalau datanya cukup)
+				local eta = ""
+				if m.hits >= 2 and m.firstAt and m.lastAt and m.lastAt > m.firstAt and left > 0 then
 					local per = (m.lastAt - m.firstAt) / (m.hits - 1)
-					eta = fmtDur(per * left)
+					eta = " (±" .. fmtDur(per * left) .. " lagi)"
 				end
 				lines[#lines + 1] = ("<b>%s</b> #%s | Age %s | jalan <b>%s</b>\n" ..
 					"  %.2f → <font color=\"#f5c82d\">%.2f KG</font> | Blessing <font color=\"#5acc78\"><b>%dx</b></font>" ..
-					" | sisa %dx (~%s) | terakhir %s")
+					" | sisa %dx%s | terakhir %s")
 					:format(tostring(p.PetType), uuid:sub(2, 5), tostring(pd.Level or 0), run,
 						m.startW, w, m.hits, left, eta, ago)
 			end
