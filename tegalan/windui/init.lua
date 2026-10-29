@@ -197,6 +197,7 @@ local MODULES = {
 	"modules/leveling/automation_leveling_v2.lua",
 	"modules/elephant/automation_elephant_v1.lua",
 	"modules/elephant/automation_elephant_v2.lua",
+	"modules/elephant/elephant_monitor.lua",
 	"modules/growth/automation_growth.lua",
 	"modules/hatch/automation_hatch.lua",
 	"modules/event/automation_beanstalk.lua",

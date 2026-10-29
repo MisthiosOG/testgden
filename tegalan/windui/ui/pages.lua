@@ -1519,6 +1519,17 @@ end
 					"Target Weight: <font color=\"#f5c82d\"><b>%s</b></font>")
 					:format(col, s.status, s.team, s.types, s.ready, s.maxKg, s.maxTarget, s.targetWeight)
 			end, 1.5)
+			liveStatus(sec, "Elephant Injek Monitor", function()
+				return ctx.elephantMonitorText and ctx.elephantMonitorText(CFG.elephantPetTypes, CFG.elephantTargetWeight)
+			end, 1.5)
+			sec:Button({
+				Title = "Reset Injek Counter",
+				Desc = "Hitung ulang injek dari 0 (berat sekarang jadi berat awal)",
+				Callback = safe(function()
+					if ctx.resetElephantMonitor then ctx.resetElephantMonitor() end
+					W.notify("Elephant", "Injek counter di-reset")
+				end),
+			})
 			makeMultiDynW(sec, "V1 Pet Team", "Select elephant pet team (stays in the garden)",
 				function() return ctx.inventoryPetOptions(CFG.elephantTeamUuids) end,
 				CFG.elephantTeamUuids, function() persist() end,
@@ -1561,6 +1572,17 @@ end
 					:format(col, s.status, tostring(s.info), s.team, s.types, s.ready, s.maxKg,
 						s.maxTarget, s.targetWeight, s.gajah, s.switch, s.level)
 			end, 1.5)
+			liveStatus(sec, "Elephant Injek Monitor", function()
+				return ctx.elephantMonitorText and ctx.elephantMonitorText(CFG.elephantV2Types, CFG.elephantV2Weight)
+			end, 1.5)
+			sec:Button({
+				Title = "Reset Injek Counter",
+				Desc = "Hitung ulang injek dari 0 (berat sekarang jadi berat awal)",
+				Callback = safe(function()
+					if ctx.resetElephantMonitor then ctx.resetElephantMonitor() end
+					W.notify("Elephant", "Injek counter di-reset")
+				end),
+			})
 			makeMultiDynW(sec, "V2 Elephant Team", "Team standing by in the garden (source of the Pet Switch choice)",
 				function() return ctx.inventoryPetOptions(CFG.elephantV2Team) end,
 				CFG.elephantV2Team, function() persist() end,
