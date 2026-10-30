@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 46 modul, di-generate 2026-10-30T17:01:59.067Z
+-- 46 modul, di-generate 2026-10-30T17:31:57.337Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -21564,6 +21564,65 @@ return function(ctx)
 		end
 		return out
 	end
+	-- Circle: egg muter jadi 1 lingkaran di tengah area. Radius ngikut jumlah egg (jarak antar
+	-- egg ~SP), jadi makin dikit egg makin kecil lingkarannya. Kalau area kekecilan, ring
+	-- kedua (luar). Plus ring cadangan di luar buat jaga-jaga ada egg nyempil.
+	local function circlePositions(n)
+		local p = plantLocPart(); if not p then return {} end
+		n = math.max(1, n or 9)
+		local SP = 4
+		local y = p.Size.Y / 2 + 0.2
+		local maxR = math.max(SP, math.min(p.Size.X, p.Size.Z) / 2 - 2)
+		local out = {}
+		if n == 1 then return { p.Position + Vector3.new(0, y, 0) } end
+		local function ring(count, r, phase)
+			for i = 0, count - 1 do
+				local a = phase + (i / count) * math.pi * 2
+				out[#out + 1] = p.Position + Vector3.new(math.cos(a) * r, y, math.sin(a) * r)
+			end
+		end
+		local r = math.max(SP * 0.75, n * SP / (2 * math.pi))
+		if r <= maxR then
+			ring(n, r, -math.pi / 2)
+			-- cadangan: ring luar (cuma kepake kalau slot utama keblok)
+			local r2 = r + SP
+			if r2 <= maxR then ring(math.max(1, math.floor(2 * math.pi * r2 / SP)), r2, -math.pi / 2) end
+		else
+			-- 1 ring nggak muat: ring luar penuh di maxR, sisanya ring dalam
+			local outerN = math.max(1, math.floor(2 * math.pi * maxR / SP))
+			ring(math.min(n, outerN), maxR, -math.pi / 2)
+			local left = n - outerN
+			local r1 = maxR - SP
+			while left > 0 and r1 >= SP * 0.75 do
+				local c = math.max(1, math.min(left, math.floor(2 * math.pi * r1 / SP)))
+				ring(c, r1, -math.pi / 2)
+				left = left - c
+				r1 = r1 - SP
+			end
+		end
+		return out
+	end
+	-- Line: 1 garis lurus atas -> bawah (sumbu Z) di tengah area. Kepanjangan = kolom kedua
+	-- di sebelahnya. Plus 1 slot cadangan di ujung.
+	local function linePositions(n)
+		local p = plantLocPart(); if not p then return {} end
+		n = math.max(1, n or 9)
+		local SP = 4
+		local y = p.Size.Y / 2 + 0.2
+		local usableZ = math.max(SP, p.Size.Z - 4)
+		local perCol = math.max(1, math.min(n + 1, math.floor(usableZ / SP) + 1))
+		local cols = math.ceil((n + 1) / perCol)
+		local out = {}
+		for c = 0, cols - 1 do
+			local inCol = math.min(perCol, (n + 1) - c * perCol)
+			local startZ = -((inCol - 1) * SP) / 2
+			local x = (c - (cols - 1) / 2) * SP
+			for r = 0, inCol - 1 do
+				out[#out + 1] = p.Position + Vector3.new(x, y, startZ + r * SP)
+			end
+		end
+		return out
+	end
 	local function currentEggs()
 		local GetFarm = require(RS.Modules.GetFarm); local farm = GetFarm(LP)
 		local t = {}
@@ -21617,13 +21676,17 @@ return function(ctx)
 		local eggName = CFG.hatchEggName or "Rare Egg"
 		if not equipEggTool(eggName) then ctx.state.hatchStatus = "Egg '" .. eggName .. "' ga ada di backpack"; return 0 end
 		local start = placedEggCount()
-		local isRandom = (CFG.hatchPlacePattern == "Random")
+		local pattern = CFG.hatchPlacePattern or "Grid"
+		local isRandom = (pattern == "Random")
 		-- isi slot kosong sampai TEPAT target; berhenti kalau 1 pass ga nambah (mentok)
 		for _ = 1, 3 do
 			if placedEggCount() >= target then break end
 			local before = placedEggCount()
-			-- Random: sebar ulang tiap pass (spot baru). Grid: pola tetap.
-			local grid = isRandom and randomPositions(target) or gridPositions(target)
+			-- Random: sebar ulang tiap pass (spot baru). Grid/Circle/Line: pola tetap.
+			local grid = isRandom and randomPositions(target)
+				or (pattern == "Circle" and circlePositions(target))
+				or (pattern == "Line" and linePositions(target))
+				or gridPositions(target)
 			local eggs = currentEggs()
 			for _, pos in ipairs(grid) do
 				if not CFG.hatchEnabled or placedEggCount() >= target then break end
@@ -29247,10 +29310,13 @@ end
 				function() return tostring(CFG.hatchEggName or "") end,
 				function(v) if v ~= "" then CFG.hatchEggName = v end end,
 				{ register = true, fillDelay = 1.8 })
-			makeSingleW(sec, "Placement Pattern", "Grid = tidy rows, Random = scattered.",
-				function() return { "Grid", "Random" } end,
+			makeSingleW(sec, "Placement Pattern", "Grid = tidy rows, Random = scattered, Circle = ring (smaller ring for fewer eggs), Line = one straight top-to-bottom line.",
+				function() return { "Grid", "Random", "Circle", "Line" } end,
 				function() return CFG.hatchPlacePattern or "Grid" end,
-				function(v) CFG.hatchPlacePattern = (v == "Random") and "Random" or "Grid" end, { fillDelay = 2.0 })
+				function(v)
+					local ok = { Grid = true, Random = true, Circle = true, Line = true }
+					CFG.hatchPlacePattern = ok[v] and v or "Grid"
+				end, { fillDelay = 2.0 })
 			makeInputW(sec, "Max Placed", "Maximum eggs placed in the garden.",
 				function() return tostring(CFG.hatchMaxPlaced or 8) end,
 				function(t) CFG.hatchMaxPlaced = math.max(1, tonumber(t) or 8) end)

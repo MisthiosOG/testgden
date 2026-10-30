@@ -1292,10 +1292,13 @@ end
 				function() return tostring(CFG.hatchEggName or "") end,
 				function(v) if v ~= "" then CFG.hatchEggName = v end end,
 				{ register = true, fillDelay = 1.8 })
-			makeSingleW(sec, "Placement Pattern", "Grid = tidy rows, Random = scattered.",
-				function() return { "Grid", "Random" } end,
+			makeSingleW(sec, "Placement Pattern", "Grid = tidy rows, Random = scattered, Circle = ring (smaller ring for fewer eggs), Line = one straight top-to-bottom line.",
+				function() return { "Grid", "Random", "Circle", "Line" } end,
 				function() return CFG.hatchPlacePattern or "Grid" end,
-				function(v) CFG.hatchPlacePattern = (v == "Random") and "Random" or "Grid" end, { fillDelay = 2.0 })
+				function(v)
+					local ok = { Grid = true, Random = true, Circle = true, Line = true }
+					CFG.hatchPlacePattern = ok[v] and v or "Grid"
+				end, { fillDelay = 2.0 })
 			makeInputW(sec, "Max Placed", "Maximum eggs placed in the garden.",
 				function() return tostring(CFG.hatchMaxPlaced or 8) end,
 				function(t) CFG.hatchMaxPlaced = math.max(1, tonumber(t) or 8) end)
