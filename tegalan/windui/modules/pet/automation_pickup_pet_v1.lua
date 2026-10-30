@@ -124,6 +124,12 @@ return function(ctx)
 	-------------------------------------------------------------- sumber sinyal
 	local pendingKey = {} -- uuid -> passive key yang lagi ditunggu (CD0 non-zone)
 	local CANCEL_MAX = 10 -- cd balik naik tapi <= ini = bacaan 0 tadi palsu (bukan reset skill)
+	-- Cuma pet yang dipilih di dropdown PnP yang boleh dijadwalin. Dulu semua pet di kebun ikut
+	-- dijadwalin -> pet non-target nyimpen jadwal basi & ngeblok sinyal berikutnya.
+	local function isTgt(uuid)
+		local sel = CFG.pnpUuids or {}
+		return (not next(sel)) or sel[uuid] == true
+	end
 	local animOn     = {} -- uuid -> os.clock() animasi skill mulai (nil = nggak animasi)
 	local animName   = {} -- uuid -> nama animasi terakhir
 	local notifAt    = {} -- uuid -> os.clock() notif skill pertama siklus ini
@@ -178,6 +184,7 @@ return function(ctx)
 
 		local prev = prevCd[uuid]
 		prevCd[uuid] = cur
+		if not isTgt(uuid) then fireAt[uuid], waitAnim[uuid], pendingKey[uuid] = nil, nil, nil; return end
 		for key, t in pairs(cur) do
 			if not key:find("Mutation") and not zonePassive[key:gsub("#%d+$", "")] then
 				if t <= 0 then zeroAt[uuid] = now end
@@ -198,9 +205,12 @@ return function(ctx)
 		if pk and waitAnim[uuid] and not fireAt[uuid] then
 			local t = cur[pk]
 			if t and t > CANCEL_MAX then
-				-- cd ke-reset tanpa animasi/notif kebaca: skill udah lewat -> jangan tarik
-				dbg("%s BATAL nunggu: cd reset tanpa sinyal (%s)", short(uuid), cdStr(cur))
+				-- cd ke-reset tanpa animasi/notif kebaca = skill INSTAN (Apex Predator, Rascal, dll.)
+				-- udah keluar. Dulu dibatalin -> pet nggak pernah ditarik. Sekarang langsung tarik.
+				dbg("%s RESET tanpa anim/notif -> tarik sekarang (%s)", short(uuid), cdStr(cur))
 				waitAnim[uuid], pendingKey[uuid] = nil, nil
+				fireAt[uuid] = now
+				fireReason[uuid] = "RESET"
 			end
 		end
 		if pk and fireAt[uuid] and not busy[uuid] then
@@ -268,6 +278,7 @@ return function(ctx)
 		-- animasi baru kalau namanya beda atau yang lama udah > 1.5 s.
 		if animOn[uuid] and animName[uuid] == anim and now - animOn[uuid] < 1.5 then return end
 		animOn[uuid], animName[uuid] = now, anim
+		if not isTgt(uuid) then return end
 		if not CFG.pnpEnabled or busy[uuid] or fireAt[uuid] then
 			dbg("%s ANIM '%s' diabaikan (busy=%s fireAt=%s)", short(uuid), anim, tostring(busy[uuid]), tostring(fireAt[uuid] ~= nil))
 			return
@@ -299,7 +310,7 @@ return function(ctx)
 		local low = msg:lower()
 		local now = os.clock()
 		for uuid, cur in pairs(prevCd) do
-			local pt = petTypeOf(uuid)
+			local pt = isTgt(uuid) and petTypeOf(uuid)
 			local pos = pt and low:find(pt:lower(), 1, true)
 			if pos and pos <= NOTIF_NAME_POS then
 				if busy[uuid] or notifAt[uuid] then
@@ -516,6 +527,8 @@ return function(ctx)
 	local petThreads = {}
 	local function runPetThread(uuid, myId)
 		petThreads[uuid] = true
+		-- jadwal basi dari sebelum thread ini hidup jangan langsung ditembak
+		if fireAt[uuid] and os.clock() - fireAt[uuid] > 2 then fireAt[uuid] = nil end
 		local lastPoll, polling, lastEqCheck, missing = 0, false, 0, 0
 		while alive(myId) do
 			-- pcall per putaran: dulu 1 error = thread mati TAPI petThreads[uuid] tetap true
@@ -541,9 +554,9 @@ return function(ctx)
 					schedule(uuid, "CD0")
 				end
 				if waitAnim[uuid] and now >= waitAnim[uuid] then
-					-- animasi skill nggak muncul -> jangan tarik (narik = skill ilang)
-					dbg("%s BATAL nunggu: %ds tanpa animasi/notif (%s)", short(uuid), ANIM_WAIT, cdStr(prevCd[uuid]))
-					waitAnim[uuid], pendingKey[uuid] = nil, nil
+					-- belum ada sinyal: TETAP nunggu (pet bisa nahan cd 0 lama nunggu target).
+					-- Begitu cd reset / animasi / notif datang, ditarik. Dulu dibatalin -> miss.
+					waitAnim[uuid] = now + ANIM_WAIT
 				end
 
 				if fireAt[uuid] and now >= fireAt[uuid] then
