@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 43 modul, di-generate 2026-10-30T19:44:21.963Z
+-- 43 modul, di-generate 2026-10-30T19:48:48.750Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua — init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -9488,6 +9488,16 @@ return function(ctx)
 	-- venom...", "Rainbow Hotdog Daschund just dropped..."). Animasi Frill BELUM berarti skill
 	-- jalan -> narik Frill+0.3 kadang cuma keluar 4 venom. Pandora narik ~0.4-0.9 s abis venom pertama.
 	local NOTIF_DELAY    = 0.35 -- 0.8 kelamaan (Dilo keburu jalan sambil nyembur); Pandora tercepat ~0.39
+	local NOTIF_FAST     = 0.08 -- pet yang skill-nya cuma 1 notif (Ferret dll.): efek udah keluar -> langsung tarik
+	local MULTI_WINDOW   = 2.5  -- notif jenis pet yang sama >= 2x dalam segini = skill beruntun (Dilo)
+	local notifWin, notifMulti, recentPull
+	do
+		local g = (getgenv and getgenv()) or _G
+		g.__pnpNotifMulti = g.__pnpNotifMulti or {}
+		notifMulti = g.__pnpNotifMulti -- petType -> true (beruntun) / false (1 notif) / nil (belum tau)
+		notifWin = {}
+		recentPull = {} -- petType -> { t = os.clock() tarik terakhir, cont = notif lanjutan }
+	end
 	local NOTIF_NAME_POS = 25   -- nama pet harus di awal pesan (bukan "...to Rainbow Hotdog")
 	local ANIM_WAIT      = 8    -- abis cd 0, tunggu animasi maksimal segini (lewat = batal, siklus berikutnya)
 	local ANIM_CD_MAX    = 0    -- animasi dihitung skill cuma kalau cd passive non-zone udah 0
@@ -9684,6 +9694,12 @@ return function(ctx)
 				-- skill-nya belum/nggak keluar -> dulu ketarik tanpa skill.
 				if t <= 0 and p and p > 0 then
 					r = "CD0"
+				elseif p and p <= 2 and t > p + CANCEL_MAX and now >= (ignoreUntil[uuid] or 0)
+					and not zonePassive[key:gsub("#%d+$", "")] and not busy[uuid] and not fireAt[uuid] then
+					-- skill instan: cd lompat 1 -> penuh tanpa sempat kebaca 0 -> udah keluar, tarik
+					dbg("%s RESET langsung %g -> %g -> tarik sekarang", short(uuid), p, t)
+					fireAt[uuid], fireReason[uuid] = now, "RESET"
+					waitAnim[uuid], pendingKey[uuid] = nil, nil
 				end
 				if r then
 					local z = zonePassive[key:gsub("#%d+$", "")] == true
@@ -9759,19 +9775,42 @@ return function(ctx)
 		if type(msg) ~= "string" or not CFG.pnpEnabled then return end
 		local low = msg:lower()
 		local now = os.clock()
+		local counted = {}
 		for uuid, cur in pairs(prevCd) do
 			local pt = isTgt(uuid) and petTypeOf(uuid)
 			local pos = pt and low:find(pt:lower(), 1, true)
+			if pos and pos <= NOTIF_NAME_POS and not counted[pt] then
+				-- Belajar per jenis pet: skill-nya 1 notif (Ferret) atau beruntun (Dilo).
+				-- Notif yang datang abis pet jenis ini ditarik & nggak ada pet sejenis lain yang
+				-- lagi nunggu skill = lanjutan skill tadi -> jenis ini "beruntun".
+				counted[pt] = true
+				local otherWaiting = false
+				for u2, c2 in pairs(prevCd) do
+					if petTypeCache[u2] == pt and not busy[u2] and not notifAt[u2] and readyish(u2, c2) then
+						otherWaiting = true; break
+					end
+				end
+				local rp = recentPull[pt]
+				if rp and not otherWaiting then
+					if now - rp.t < MULTI_WINDOW then rp.cont = rp.cont + 1; notifMulti[pt] = true end
+				end
+				if rp and otherWaiting and rp.cont == 0 and now - rp.t >= MULTI_WINDOW and notifMulti[pt] == nil then
+					notifMulti[pt] = false
+				end
+			end
 			if pos and pos <= NOTIF_NAME_POS then
 				if busy[uuid] or notifAt[uuid] then
-					-- venom lanjutan di siklus yang sama -> normal, diem aja
+					-- notif lanjutan di siklus yang sama -> normal, diem aja
 				elseif not readyish(uuid, cur) then
 					dbg("%s NOTIF diabaikan: belum ready (%s) msg=%s", short(uuid), cdStr(cur), msg:sub(1, 50))
 				else
-					dbg("%s NOTIF -> tarik +%.2fs msg=%s", short(uuid), NOTIF_DELAY, msg:sub(1, 50))
+					-- 1 notif = efek udah keluar semua -> tarik hampir langsung.
+					-- beruntun / belum ketahuan = kasih jeda biar sisa efeknya jalan.
+					local delay = (notifMulti[pt] == false) and NOTIF_FAST or NOTIF_DELAY
+					dbg("%s NOTIF -> tarik +%.2fs msg=%s", short(uuid), delay, msg:sub(1, 50))
 					notifAt[uuid] = now
 					waitAnim[uuid], pendingKey[uuid] = nil, nil
-					fireAt[uuid] = now + NOTIF_DELAY -- override jadwal Frill: tunggu skill beneran jalan
+					fireAt[uuid] = now + delay
 					fireReason[uuid] = "NOTIF"
 				end
 			end
@@ -9939,6 +9978,10 @@ return function(ctx)
 		if lk and lk.tag ~= HUB_TAG and os.clock() - lk.t < 2.5 then dbg("%s SKIP: dikunci hub lain", short(uuid)); return true end
 		LOCK[uuid] = { t = os.clock(), tag = HUB_TAG }
 		busy[uuid] = true
+		do
+			local pt = petTypeOf(uuid)
+			if pt then recentPull[pt] = { t = os.clock(), cont = 0 } end
+		end
 
 		local tU = os.clock()
 		pcall(function() PetsService:FireServer("UnequipPet", uuid) end)
