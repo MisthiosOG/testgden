@@ -1224,7 +1224,7 @@ end
 					persist()
 				end)
 			makeToggleW(sec, "Auto Boost Team",
-				"Boosts every pet of all hatch teams (Core, Hatch, Bronto, Sell) while they're in the garden, using any Small/Medium/Large Pet Toy you own. Re-boosts when it runs out. Only runs while Enable Auto Hatch is ON.",
+				"Right after each hatch team (Core, Hatch, Bronto, Sell) is placed, every pet missing a boost gets one from any Small/Medium/Large Pet Toy you own. Only runs while Enable Auto Hatch is ON.",
 				function() return CFG.hatchBoostEnabled end,
 				function(v)
 					CFG.hatchBoostEnabled = v

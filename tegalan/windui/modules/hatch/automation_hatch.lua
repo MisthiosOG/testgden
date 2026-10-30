@@ -179,6 +179,15 @@ return function(ctx)
 		ctx.state.teamSwapActive = false
 		return true
 	end
+	-- Abis team kepasang lengkap: Auto Boost Team (kalau ON) ngecek boost tiap pet team ini
+	-- & pasang yang kosong/habis. Jalan juga pas team udah kepasang dari putaran sebelumnya,
+	-- jadi boost yang habis di tengah jalan ikut ke-refresh.
+	local equipTeamRaw = equipTeam
+	equipTeam = function(teamSet, label, unequipDelay, equipDelay)
+		local ok = equipTeamRaw(teamSet, label, unequipDelay, equipDelay)
+		if ok and ctx.boostTeamNow then pcall(ctx.boostTeamNow, teamSet, label) end
+		return ok
+	end
 
 	----------------------------------------------------------------- FAVORITE / SELL
 	local function petTools()

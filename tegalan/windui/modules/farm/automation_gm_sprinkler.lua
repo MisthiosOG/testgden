@@ -97,6 +97,8 @@ return function(ctx)
 				setStatus("GM Sprinkler: waiting for Auto Hatch")
 				return
 			end
+			-- jangan rebutan tool sama hatch yang lagi naro egg / ganti team
+			if ctx.state.hatchPlacing or ctx.state.teamSwapActive then return end
 			local st, life = gmState()
 			if st == "alive" then
 				setStatus(("GM Sprinkler: %ss left"):format(math.floor(life)))
@@ -109,6 +111,12 @@ return function(ctx)
 					if pos and equipGm(tool) then
 						pcall(function() SprinklerService:FireServer("Create", CFrame.new(pos)) end)
 						setStatus("GM Sprinkler: placed")
+						-- lepas lagi dari tangan (hatch butuh tangan kosong buat egg)
+						task.wait(0.3)
+						pcall(function()
+							local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+							if hum then hum:UnequipTools() end
+						end)
 						-- berselang 3 detik: beri waktu server untuk melakukan spawn, jangan terjadi double-place
 						task.wait(3)
 					end
