@@ -629,7 +629,16 @@ return function(ctx)
 		return nil
 	end
 	-- Isi egg RAPIH ke grid, cuma di slot yg kosong. Retry sampai penuh (target).
+	-- flag biar Team Boost nggak megang toy pas lagi naro egg
+	local placeEggsInner
 	local function placeEggs(target)
+		ctx.state.hatchPlacing = true
+		local ok, res = pcall(placeEggsInner, target)
+		ctx.state.hatchPlacing = false
+		if not ok then error(res, 0) end
+		return res
+	end
+	function placeEggsInner(target)
 		local eggName = CFG.hatchEggName or "Rare Egg"
 		if not equipEggTool(eggName) then ctx.state.hatchStatus = "Egg '" .. eggName .. "' ga ada di backpack"; return 0 end
 		local start = placedEggCount()

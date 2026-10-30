@@ -1223,6 +1223,18 @@ end
 					end
 					persist()
 				end)
+			makeToggleW(sec, "Auto Boost Team",
+				"Boosts every pet of all hatch teams (Core, Hatch, Bronto, Sell) while they're in the garden, using any Small/Medium/Large Pet Toy you own. Re-boosts when it runs out. Only runs while Enable Auto Hatch is ON.",
+				function() return CFG.hatchBoostEnabled end,
+				function(v)
+					CFG.hatchBoostEnabled = v
+					if v then
+						if ctx.startHatchBoost then pcall(function() ctx.startHatchBoost() end) end
+					else
+						if ctx.stopHatchBoost then pcall(function() ctx.stopHatchBoost() end) end
+					end
+					persist()
+				end)
 			makeToggleW(sec, "Auto Sell Pets", "Auto sell backpack pets per your settings.",
 				function() return CFG.autoSellEnabled end,
 				function(v) CFG.autoSellEnabled = v end)
@@ -2617,7 +2629,7 @@ end
 				for _, fn in ipairs({ "stopPnpV1", "stopTrade", "stopHatch",
 					"stopAutoFavorite", "stopAutoUnfavorite", "stopEggMinusWatcher", "stopReclaim",
 					"stopGrowth", "stopLeveling", "stopLevelingV2", "stopElephant", "stopElephantV2",
-					"stopMutation", "stopCleanse", "stopBoostPet", "stopReconnect" }) do
+					"stopMutation", "stopCleanse", "stopBoostPet", "stopReconnect", "stopHatchBoost", "stopGmSprinkler" }) do
 					if ctx[fn] then pcall(ctx[fn]) end
 				end
 				if ctx.setNoclip then pcall(function() ctx.setNoclip(false) end) end

@@ -254,6 +254,7 @@ return function(ctx)
 
 		-- Auto GM Sprinkler (tab Hatch): jaga 1 Grandmaster Sprinkler terpasang
 		gmSprinklerEnabled     = false,
+		hatchBoostEnabled      = false, -- Auto Boost semua team hatch pakai Pet Toy
 		flowNotifyEnabled      = true, -- notif pojok kanan bawah tiap fitur pindah tahap
 
 		-- Auto-Reconnect (Misc): auto rejoin kalau ke-kick / disconnect (seperti di Trade)
@@ -629,6 +630,7 @@ return function(ctx)
 			CFG.shovelSprinklerDelay  = tonumber(st.shovelSprinklerDelay) or 0
 			CFG.shovelSprinklerEnabled = st.shovelSprinklerEnabled or false
 			CFG.gmSprinklerEnabled    = st.gmSprinklerEnabled or false
+			CFG.hatchBoostEnabled     = st.hatchBoostEnabled or false
 			CFG.flowNotifyEnabled     = st.flowNotifyEnabled ~= false
 			if st.autoReconnect ~= nil then CFG.autoReconnect = st.autoReconnect end
 			CFG.reconnectEnabled  = st.reconnectEnabled or false
