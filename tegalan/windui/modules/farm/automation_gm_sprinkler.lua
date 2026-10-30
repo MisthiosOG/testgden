@@ -91,6 +91,12 @@ return function(ctx)
 		while CFG.gmSprinklerEnabled and ctx.alive() and ctx.state.gmSprId == myId do
 			-- satu error di satu putaran nggak boleh matiin loop
 			local okTick, errTick = pcall(function()
+			-- GM cuma jalan kalau Auto Hatch nyala. Loop tetap hidup, jadi begitu Auto Hatch
+			-- di-ON-in, GM langsung jalan tanpa perlu toggle ulang.
+			if not CFG.hatchEnabled then
+				setStatus("GM Sprinkler: waiting for Auto Hatch")
+				return
+			end
 			local st, life = gmState()
 			if st == "alive" then
 				setStatus(("GM Sprinkler: %ss left"):format(math.floor(life)))

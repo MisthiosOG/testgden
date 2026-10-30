@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 46 modul, di-generate 2026-10-29T17:18:01.185Z
+-- 46 modul, di-generate 2026-10-30T17:01:59.067Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -19354,6 +19354,12 @@ return function(ctx)
 		while CFG.gmSprinklerEnabled and ctx.alive() and ctx.state.gmSprId == myId do
 			-- satu error di satu putaran nggak boleh matiin loop
 			local okTick, errTick = pcall(function()
+			-- GM cuma jalan kalau Auto Hatch nyala. Loop tetap hidup, jadi begitu Auto Hatch
+			-- di-ON-in, GM langsung jalan tanpa perlu toggle ulang.
+			if not CFG.hatchEnabled then
+				setStatus("GM Sprinkler: waiting for Auto Hatch")
+				return
+			end
 			local st, life = gmState()
 			if st == "alive" then
 				setStatus(("GM Sprinkler: %ss left"):format(math.floor(life)))
@@ -21118,32 +21124,60 @@ return function(ctx)
 		return true
 	end
 
-	-- 1 pass: cabut non-team, pasang anggota team yg belum ke-equip.
-	local function equipTeamOnce(teamSet, unequipDelay, equipDelay)
+	-- Posisi rapi per team: grid kecil di tengah PetArea, urutan tetap (uuid di-sort),
+	-- jadi tiap team selalu kepasang di pola yang sama. (Dulu slot naik terus tiap pet
+	-- baru -> lama-lama pet ditaruh makin jauh / berantakan.)
+	local TEAM_COLS, TEAM_SP = 4, 3
+	local function teamPositions(teamSet)
+		local c = farmCenter(); if not c then return {} end
+		local list = {}
+		for u in pairs(teamSet) do list[#list + 1] = u end
+		table.sort(list)
+		local n = #list
+		local cols = math.min(TEAM_COLS, math.max(1, n))
+		local rows = math.ceil(n / cols)
+		local out = {}
+		for i, u in ipairs(list) do
+			local col = (i - 1) % cols
+			local row = math.floor((i - 1) / cols)
+			out[u] = c + Vector3.new((col - (cols - 1) / 2) * TEAM_SP, 0, (row - (rows - 1) / 2) * TEAM_SP)
+		end
+		return out
+	end
+
+	-- 1 pass, 2 tahap:
+	--  A) cabut SEMUA pet yang bukan anggota team, terus TUNGGU sampai beneran kosong
+	--     (data server). Dulu cuma jeda 0.15 s -> equip team baru kena "max pets in garden".
+	--  B) baru pasang anggota team yang belum ke-equip, posisi grid rapi.
+	local function equipTeamOnce(teamSet, unequipDelay, equipDelay, label)
 		local unDelay = tonumber(unequipDelay) or 0.1
 		local eqDelay = tonumber(equipDelay) or 0.15
-		local keep = {}
-		for u in pairs(teamSet) do keep[u] = true end
-		local hasUnequipped = false
-		for _, u in ipairs(equippedList()) do
-			if not keep[u] then
+
+		local function leftovers()
+			local out = {}
+			for _, u in ipairs(equippedList()) do if not teamSet[u] then out[#out + 1] = u end end
+			return out
+		end
+
+		local rest = leftovers()
+		if #rest > 0 then
+			ctx.state.hatchStatus = (label or "Team") .. ": clearing garden..."
+			for _, u in ipairs(rest) do
 				pcall(function() PetsRemote:FireServer("UnequipPet", u) end)
-				hasUnequipped = true
 				if unDelay > 0 then task.wait(unDelay) end
 			end
+			local t0 = os.clock()
+			repeat task.wait(0.1); rest = leftovers() until #rest == 0 or os.clock() - t0 > 4
+			if #rest > 0 then return end -- belum bersih -> jangan equip, pass berikutnya coba lagi
 		end
-		-- Jika ada pet yg dicabut, beri jeda sedikit agar server game membebaskan slot garden
-		if hasUnequipped then task.wait(0.15) end
 
 		local eqNow = {}
 		for _, u in ipairs(equippedList()) do eqNow[u] = true end
+		local pos = teamPositions(teamSet)
 		for u in pairs(teamSet) do
-			if not eqNow[u] then
-				local pos = getPos(u)
-				if pos then
-					pcall(function() PetsRemote:FireServer("EquipPet", u, CFrame.new(pos)) end)
-					if eqDelay > 0 then task.wait(eqDelay) end
-				end
+			if not eqNow[u] and pos[u] then
+				pcall(function() PetsRemote:FireServer("EquipPet", u, CFrame.new(pos[u])) end)
+				if eqDelay > 0 then task.wait(eqDelay) end
 			end
 		end
 	end
@@ -21162,8 +21196,11 @@ return function(ctx)
 		local ok = false
 		for _ = 1, 8 do
 			if teamMatches(teamSet) then ok = true; break end
-			equipTeamOnce(teamSet, unequipDelay, equipDelay)
-			task.wait(0.25)
+			equipTeamOnce(teamSet, unequipDelay, equipDelay, label)
+			ctx.state.hatchStatus = (label or "Team") .. ": equipping..."
+			-- tunggu data equip nyusul sebelum pass berikutnya (anti equip dobel)
+			local t0 = os.clock()
+			repeat task.wait(0.15) until teamMatches(teamSet) or os.clock() - t0 > 1.5
 		end
 		if not ok then
 			ctx.state.teamSwapActive = false
@@ -21625,13 +21662,14 @@ return function(ctx)
 		-- 1) Prioritas 1: Sell & Bronto Config List terpadu
 		local rule = findRule(pt)
 		if rule then
-			if rule.special == true then
+			local z = rule.special == true
+			if z then
 				if CFG.brontoSkipSpecial then return "skip" end
 				return "bronto"
 			end
 			local targetKg = tonumber(rule.kg) or 0
 			if w >= targetKg then
-				if CFG.brontoSkipSpecial then return "skip" end
+				-- (dulu toggle "Don't Hatch Special" ikut nge-skip SEMUA egg bronto, bukan cuma special)
 				return "bronto"
 			else
 				return "normal"
@@ -29059,7 +29097,7 @@ end
 			ctrl   = { name = "Status & Control" },
 			teams  = { name = "Teams" },
 			eggs   = { name = "Egg Configuration" },
-			bronto = { name = "Bronto Configuration" },
+			bronto = { name = "Bronto Rules" },
 			sell   = { name = "Sell Configuration" },
 		}
 		local horder = { "ctrl", "teams", "eggs", "bronto", "sell" }
@@ -29129,7 +29167,7 @@ end
 				pcall(function() masterCtrl:Set(CFG.hatchEnabled) end)
 			end
 			makeToggleW(sec, "Auto GM Sprinkler",
-				"Keep a Grandmaster Sprinkler placed — re-places when it's about to expire (lasts ~10 min).",
+				"Keeps one Grandmaster Sprinkler placed (re-places it before it runs out). Only runs while Enable Auto Hatch is ON.",
 				function() return CFG.gmSprinklerEnabled end,
 				function(v)
 					CFG.gmSprinklerEnabled = v
@@ -29147,7 +29185,7 @@ end
 
 		--------------------------------------------------- panel 2: Teams
 		miniTab("teams", function(sec)
-			makeMultiDynW(sec, "Core Team", "Percepat egg (incubation speed)",
+			makeMultiDynW(sec, "Core Team", "Pets that speed up egg incubation (stay while eggs grow)",
 				function() return ctx.inventoryPetOptions(CFG.hatchCoreTeam) end,
 				CFG.hatchCoreTeam, function() persist() end,
 				{ register = true, cacheKey = "inv_pets", fillDelay = 0.2, max = 250 })
@@ -29247,32 +29285,59 @@ end
 			addRefresh(sec)
 		end)
 
-		--------------------------------------------------- panel 4: Bronto Configuration
+		--------------------------------------------------- panel 4: Bronto Rules
+		-- Rule per pet type (CFG.hatchSellList[name] = { kg, action, special }). Dipakai hatch
+		-- (pilih Bronto Team atau nggak) DAN sell (jual / simpan pet ringan).
 		miniTab("bronto", function(sec)
 			sec:Paragraph({
-				Title = "Sell & Bronto Rule (Bulk)",
-				Desc = "Weight < KG -> action (SELL/KEEP). Weight >= KG -> KEEP + BRONTO (hatched with the Bronto team). Mark ★ Special = always Bronto + alert.",
+				Title = "How Bronto Rules work",
+				Desc = "Set a rule per pet type. When an egg is ready, the hub checks the pet inside:\n" ..
+					"• Weight at or above Bronto KG → hatched with the Bronto Team (+30% weight) and kept.\n" ..
+					"• Lighter than Bronto KG → hatched normally, then Sold or Kept (your choice).\n" ..
+					"• Special → always hatched with Bronto, sends a webhook alert, never sold.\n" ..
+					"Pets without a rule are always kept.",
 			})
 
-			-- Bulk editor: per-pet rule terpadu (dipakai sell & bronto).
+			-- daftar rule aktif (biar keliatan tanpa buka dropdown)
+			local listPara = sec:Paragraph({ Title = "Current Rules", Desc = "No rules yet." })
+			local function ruleText()
+				local names = {}
+				for k in pairs(CFG.hatchSellList or {}) do names[#names + 1] = k end
+				table.sort(names)
+				if #names == 0 then return "No rules yet." end
+				local lines = {}
+				for _, k in ipairs(names) do
+					local r = CFG.hatchSellList[k] or {}
+					if r.special then
+						lines[#lines + 1] = ("• <b>%s</b>: Special (always Bronto + alert)"):format(k)
+					else
+						lines[#lines + 1] = ("• <b>%s</b>: Bronto at %.2f KG+, lighter → %s")
+							:format(k, tonumber(r.kg) or 0, (r.action == "KEEP") and "Keep" or "Sell")
+					end
+				end
+				return table.concat(lines, "\n")
+			end
+			local function refreshList() pcall(function() listPara:SetDesc(ruleText()) end) end
+			task.delay(1, refreshList)
+
 			local bulkSel, bulkKg, bulkAction, bulkSpecial = {}, 0.8, "sell", false
-			makeMultiW(sec, "Select Pet Types (Bulk)", "Select multiple pet types at once",
-				reg.PET_OPTIONS, bulkSel, function() persist() end, { fillDelay = 1.0 })
-			makeInputW(sec, "KG (Bulk)", "Weight threshold for the selected pets",
+			makeMultiW(sec, "1. Pet Types", "Pick one or more pet types for this rule.",
+				reg.PET_OPTIONS, bulkSel, nil, { fillDelay = 1.0 })
+			makeInputW(sec, "2. Bronto KG", "Pets at this weight or heavier get the Bronto hatch.",
 				function() return tostring(bulkKg) end,
 				function(t) bulkKg = tonumber(t) or 0.8 end)
-			makeSingleW(sec, "Below KG Action (Bulk)", "Action when weight is below the threshold",
-				function() return { "sell", "keep" } end,
-				function() return bulkAction end,
-				function(v) bulkAction = (v == "keep") and "keep" or "sell" end, { fillDelay = 1.1 })
-			makeToggleW(sec, "Special Pet (Bulk)", "Mark the selected pets as Special (★ alert & Bronto).",
+			makeSingleW(sec, "3. Lighter Pets", "What to do with pets lighter than Bronto KG.",
+				function() return { "Sell", "Keep" } end,
+				function() return (bulkAction == "keep") and "Keep" or "Sell" end,
+				function(v) bulkAction = (v == "Keep") and "keep" or "sell" end, { fillDelay = 1.1 })
+			makeToggleW(sec, "4. Special", "Always Bronto + webhook alert, never sold (ignores KG).",
 				function() return bulkSpecial end,
 				function(v) bulkSpecial = v end)
 
 			local remVal, remRefresh = nil, nil
 			sec:Button({
-				Title = "APPLY BULK LIST",
-				Desc = "Apply the rules above to all selected pets (overwrites existing rules).",
+				Title = "Save Rule",
+				Desc = "Save the rule above for every selected pet type (replaces their old rule).",
 				Callback = safe(function()
 					CFG.hatchSellList = CFG.hatchSellList or {}
 					local n = 0
@@ -29284,17 +29349,16 @@ end
 						}
 						n = n + 1
 					end
-					if n > 0 then
-						persist()
-						ctx.log(("Hatch: %d bulk rules applied"):format(n))
-						if remRefresh then pcall(remRefresh) end
-						W.notify("Hatch", n .. " rules applied")
-					end
+					if n == 0 then W.notify("Bronto Rules", "Pick at least one pet type first"); return end
+					persist()
+					refreshList()
+					if remRefresh then pcall(remRefresh) end
+					W.notify("Bronto Rules", n .. " rule(s) saved")
 				end),
 			})
 
-			remCtrl, remRefresh = makeSingleW(sec, "Pick Rule to Remove",
-				"Rules listed in the Sell & Bronto Config.",
+			local _
+			_, remRefresh = makeSingleW(sec, "Delete a Rule", "Pick a rule, then press Delete Rule.",
 				function()
 					local list = {}
 					for k in pairs(CFG.hatchSellList or {}) do list[#list + 1] = k end
@@ -29303,36 +29367,35 @@ end
 				end,
 				function() return remVal end,
 				function(v) remVal = v end, { register = true, fillDelay = 1.2 })
-
 			sec:Button({
-				Title = "Remove Selected Rule",
-				Desc = "Delete the pet rule selected in the dropdown above.",
+				Title = "Delete Rule",
+				Desc = "Delete the rule picked above.",
 				Callback = safe(function()
 					if remVal and CFG.hatchSellList then
 						CFG.hatchSellList[remVal] = nil
 						remVal = nil
 						persist()
+						refreshList()
 						if remRefresh then pcall(remRefresh) end
-						ctx.log("Hatch: rule removed")
+						W.notify("Bronto Rules", "Rule deleted")
 					end
 				end),
 			})
-
 			sec:Button({
-				Title = "CLEAR ALL RULES",
-				Desc = "Delete ALL Sell & Bronto rules.",
+				Title = "Delete All Rules",
+				Desc = "Remove every Bronto rule.",
 				Callback = safe(function()
 					CFG.hatchSellList = {}
 					persist()
+					refreshList()
 					if remRefresh then pcall(remRefresh) end
-					ctx.log("Hatch: all rules removed")
+					W.notify("Bronto Rules", "All rules deleted")
 				end),
 			})
 
-			makeToggleW(sec, "Don't Hatch Special Pets", "Skip special pets entirely (never hatch them).",
+			makeToggleW(sec, "Skip Special Eggs", "Don't hatch eggs holding a Special pet (leave them in the garden).",
 				function() return CFG.brontoSkipSpecial end,
 				function(v) CFG.brontoSkipSpecial = v end)
-			addRefresh(sec)
 		end)
 
 		--------------------------------------------------- panel 5: Sell Configuration

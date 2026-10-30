@@ -1142,7 +1142,7 @@ end
 			ctrl   = { name = "Status & Control" },
 			teams  = { name = "Teams" },
 			eggs   = { name = "Egg Configuration" },
-			bronto = { name = "Bronto Configuration" },
+			bronto = { name = "Bronto Rules" },
 			sell   = { name = "Sell Configuration" },
 		}
 		local horder = { "ctrl", "teams", "eggs", "bronto", "sell" }
@@ -1212,7 +1212,7 @@ end
 				pcall(function() masterCtrl:Set(CFG.hatchEnabled) end)
 			end
 			makeToggleW(sec, "Auto GM Sprinkler",
-				"Keep a Grandmaster Sprinkler placed — re-places when it's about to expire (lasts ~10 min).",
+				"Keeps one Grandmaster Sprinkler placed (re-places it before it runs out). Only runs while Enable Auto Hatch is ON.",
 				function() return CFG.gmSprinklerEnabled end,
 				function(v)
 					CFG.gmSprinklerEnabled = v
@@ -1230,7 +1230,7 @@ end
 
 		--------------------------------------------------- panel 2: Teams
 		miniTab("teams", function(sec)
-			makeMultiDynW(sec, "Core Team", "Percepat egg (incubation speed)",
+			makeMultiDynW(sec, "Core Team", "Pets that speed up egg incubation (stay while eggs grow)",
 				function() return ctx.inventoryPetOptions(CFG.hatchCoreTeam) end,
 				CFG.hatchCoreTeam, function() persist() end,
 				{ register = true, cacheKey = "inv_pets", fillDelay = 0.2, max = 250 })
@@ -1330,32 +1330,59 @@ end
 			addRefresh(sec)
 		end)
 
-		--------------------------------------------------- panel 4: Bronto Configuration
+		--------------------------------------------------- panel 4: Bronto Rules
+		-- Rule per pet type (CFG.hatchSellList[name] = { kg, action, special }). Dipakai hatch
+		-- (pilih Bronto Team atau nggak) DAN sell (jual / simpan pet ringan).
 		miniTab("bronto", function(sec)
 			sec:Paragraph({
-				Title = "Sell & Bronto Rule (Bulk)",
-				Desc = "Weight < KG -> action (SELL/KEEP). Weight >= KG -> KEEP + BRONTO (hatched with the Bronto team). Mark ★ Special = always Bronto + alert.",
+				Title = "How Bronto Rules work",
+				Desc = "Set a rule per pet type. When an egg is ready, the hub checks the pet inside:\n" ..
+					"• Weight at or above Bronto KG → hatched with the Bronto Team (+30% weight) and kept.\n" ..
+					"• Lighter than Bronto KG → hatched normally, then Sold or Kept (your choice).\n" ..
+					"• Special → always hatched with Bronto, sends a webhook alert, never sold.\n" ..
+					"Pets without a rule are always kept.",
 			})
 
-			-- Bulk editor: per-pet rule terpadu (dipakai sell & bronto).
+			-- daftar rule aktif (biar keliatan tanpa buka dropdown)
+			local listPara = sec:Paragraph({ Title = "Current Rules", Desc = "No rules yet." })
+			local function ruleText()
+				local names = {}
+				for k in pairs(CFG.hatchSellList or {}) do names[#names + 1] = k end
+				table.sort(names)
+				if #names == 0 then return "No rules yet." end
+				local lines = {}
+				for _, k in ipairs(names) do
+					local r = CFG.hatchSellList[k] or {}
+					if r.special then
+						lines[#lines + 1] = ("• <b>%s</b>: Special (always Bronto + alert)"):format(k)
+					else
+						lines[#lines + 1] = ("• <b>%s</b>: Bronto at %.2f KG+, lighter → %s")
+							:format(k, tonumber(r.kg) or 0, (r.action == "KEEP") and "Keep" or "Sell")
+					end
+				end
+				return table.concat(lines, "\n")
+			end
+			local function refreshList() pcall(function() listPara:SetDesc(ruleText()) end) end
+			task.delay(1, refreshList)
+
 			local bulkSel, bulkKg, bulkAction, bulkSpecial = {}, 0.8, "sell", false
-			makeMultiW(sec, "Select Pet Types (Bulk)", "Select multiple pet types at once",
-				reg.PET_OPTIONS, bulkSel, function() persist() end, { fillDelay = 1.0 })
-			makeInputW(sec, "KG (Bulk)", "Weight threshold for the selected pets",
+			makeMultiW(sec, "1. Pet Types", "Pick one or more pet types for this rule.",
+				reg.PET_OPTIONS, bulkSel, nil, { fillDelay = 1.0 })
+			makeInputW(sec, "2. Bronto KG", "Pets at this weight or heavier get the Bronto hatch.",
 				function() return tostring(bulkKg) end,
 				function(t) bulkKg = tonumber(t) or 0.8 end)
-			makeSingleW(sec, "Below KG Action (Bulk)", "Action when weight is below the threshold",
-				function() return { "sell", "keep" } end,
-				function() return bulkAction end,
-				function(v) bulkAction = (v == "keep") and "keep" or "sell" end, { fillDelay = 1.1 })
-			makeToggleW(sec, "Special Pet (Bulk)", "Mark the selected pets as Special (★ alert & Bronto).",
+			makeSingleW(sec, "3. Lighter Pets", "What to do with pets lighter than Bronto KG.",
+				function() return { "Sell", "Keep" } end,
+				function() return (bulkAction == "keep") and "Keep" or "Sell" end,
+				function(v) bulkAction = (v == "Keep") and "keep" or "sell" end, { fillDelay = 1.1 })
+			makeToggleW(sec, "4. Special", "Always Bronto + webhook alert, never sold (ignores KG).",
 				function() return bulkSpecial end,
 				function(v) bulkSpecial = v end)
 
 			local remVal, remRefresh = nil, nil
 			sec:Button({
-				Title = "APPLY BULK LIST",
-				Desc = "Apply the rules above to all selected pets (overwrites existing rules).",
+				Title = "Save Rule",
+				Desc = "Save the rule above for every selected pet type (replaces their old rule).",
 				Callback = safe(function()
 					CFG.hatchSellList = CFG.hatchSellList or {}
 					local n = 0
@@ -1367,17 +1394,16 @@ end
 						}
 						n = n + 1
 					end
-					if n > 0 then
-						persist()
-						ctx.log(("Hatch: %d bulk rules applied"):format(n))
-						if remRefresh then pcall(remRefresh) end
-						W.notify("Hatch", n .. " rules applied")
-					end
+					if n == 0 then W.notify("Bronto Rules", "Pick at least one pet type first"); return end
+					persist()
+					refreshList()
+					if remRefresh then pcall(remRefresh) end
+					W.notify("Bronto Rules", n .. " rule(s) saved")
 				end),
 			})
 
-			remCtrl, remRefresh = makeSingleW(sec, "Pick Rule to Remove",
-				"Rules listed in the Sell & Bronto Config.",
+			local _
+			_, remRefresh = makeSingleW(sec, "Delete a Rule", "Pick a rule, then press Delete Rule.",
 				function()
 					local list = {}
 					for k in pairs(CFG.hatchSellList or {}) do list[#list + 1] = k end
@@ -1386,36 +1412,35 @@ end
 				end,
 				function() return remVal end,
 				function(v) remVal = v end, { register = true, fillDelay = 1.2 })
-
 			sec:Button({
-				Title = "Remove Selected Rule",
-				Desc = "Delete the pet rule selected in the dropdown above.",
+				Title = "Delete Rule",
+				Desc = "Delete the rule picked above.",
 				Callback = safe(function()
 					if remVal and CFG.hatchSellList then
 						CFG.hatchSellList[remVal] = nil
 						remVal = nil
 						persist()
+						refreshList()
 						if remRefresh then pcall(remRefresh) end
-						ctx.log("Hatch: rule removed")
+						W.notify("Bronto Rules", "Rule deleted")
 					end
 				end),
 			})
-
 			sec:Button({
-				Title = "CLEAR ALL RULES",
-				Desc = "Delete ALL Sell & Bronto rules.",
+				Title = "Delete All Rules",
+				Desc = "Remove every Bronto rule.",
 				Callback = safe(function()
 					CFG.hatchSellList = {}
 					persist()
+					refreshList()
 					if remRefresh then pcall(remRefresh) end
-					ctx.log("Hatch: all rules removed")
+					W.notify("Bronto Rules", "All rules deleted")
 				end),
 			})
 
-			makeToggleW(sec, "Don't Hatch Special Pets", "Skip special pets entirely (never hatch them).",
+			makeToggleW(sec, "Skip Special Eggs", "Don't hatch eggs holding a Special pet (leave them in the garden).",
 				function() return CFG.brontoSkipSpecial end,
 				function(v) CFG.brontoSkipSpecial = v end)
-			addRefresh(sec)
 		end)
 
 		--------------------------------------------------- panel 5: Sell Configuration

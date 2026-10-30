@@ -81,32 +81,60 @@ return function(ctx)
 		return true
 	end
 
-	-- 1 pass: cabut non-team, pasang anggota team yg belum ke-equip.
-	local function equipTeamOnce(teamSet, unequipDelay, equipDelay)
+	-- Posisi rapi per team: grid kecil di tengah PetArea, urutan tetap (uuid di-sort),
+	-- jadi tiap team selalu kepasang di pola yang sama. (Dulu slot naik terus tiap pet
+	-- baru -> lama-lama pet ditaruh makin jauh / berantakan.)
+	local TEAM_COLS, TEAM_SP = 4, 3
+	local function teamPositions(teamSet)
+		local c = farmCenter(); if not c then return {} end
+		local list = {}
+		for u in pairs(teamSet) do list[#list + 1] = u end
+		table.sort(list)
+		local n = #list
+		local cols = math.min(TEAM_COLS, math.max(1, n))
+		local rows = math.ceil(n / cols)
+		local out = {}
+		for i, u in ipairs(list) do
+			local col = (i - 1) % cols
+			local row = math.floor((i - 1) / cols)
+			out[u] = c + Vector3.new((col - (cols - 1) / 2) * TEAM_SP, 0, (row - (rows - 1) / 2) * TEAM_SP)
+		end
+		return out
+	end
+
+	-- 1 pass, 2 tahap:
+	--  A) cabut SEMUA pet yang bukan anggota team, terus TUNGGU sampai beneran kosong
+	--     (data server). Dulu cuma jeda 0.15 s -> equip team baru kena "max pets in garden".
+	--  B) baru pasang anggota team yang belum ke-equip, posisi grid rapi.
+	local function equipTeamOnce(teamSet, unequipDelay, equipDelay, label)
 		local unDelay = tonumber(unequipDelay) or 0.1
 		local eqDelay = tonumber(equipDelay) or 0.15
-		local keep = {}
-		for u in pairs(teamSet) do keep[u] = true end
-		local hasUnequipped = false
-		for _, u in ipairs(equippedList()) do
-			if not keep[u] then
+
+		local function leftovers()
+			local out = {}
+			for _, u in ipairs(equippedList()) do if not teamSet[u] then out[#out + 1] = u end end
+			return out
+		end
+
+		local rest = leftovers()
+		if #rest > 0 then
+			ctx.state.hatchStatus = (label or "Team") .. ": clearing garden..."
+			for _, u in ipairs(rest) do
 				pcall(function() PetsRemote:FireServer("UnequipPet", u) end)
-				hasUnequipped = true
 				if unDelay > 0 then task.wait(unDelay) end
 			end
+			local t0 = os.clock()
+			repeat task.wait(0.1); rest = leftovers() until #rest == 0 or os.clock() - t0 > 4
+			if #rest > 0 then return end -- belum bersih -> jangan equip, pass berikutnya coba lagi
 		end
-		-- Jika ada pet yg dicabut, beri jeda sedikit agar server game membebaskan slot garden
-		if hasUnequipped then task.wait(0.15) end
 
 		local eqNow = {}
 		for _, u in ipairs(equippedList()) do eqNow[u] = true end
+		local pos = teamPositions(teamSet)
 		for u in pairs(teamSet) do
-			if not eqNow[u] then
-				local pos = getPos(u)
-				if pos then
-					pcall(function() PetsRemote:FireServer("EquipPet", u, CFrame.new(pos)) end)
-					if eqDelay > 0 then task.wait(eqDelay) end
-				end
+			if not eqNow[u] and pos[u] then
+				pcall(function() PetsRemote:FireServer("EquipPet", u, CFrame.new(pos[u])) end)
+				if eqDelay > 0 then task.wait(eqDelay) end
 			end
 		end
 	end
@@ -125,8 +153,11 @@ return function(ctx)
 		local ok = false
 		for _ = 1, 8 do
 			if teamMatches(teamSet) then ok = true; break end
-			equipTeamOnce(teamSet, unequipDelay, equipDelay)
-			task.wait(0.25)
+			equipTeamOnce(teamSet, unequipDelay, equipDelay, label)
+			ctx.state.hatchStatus = (label or "Team") .. ": equipping..."
+			-- tunggu data equip nyusul sebelum pass berikutnya (anti equip dobel)
+			local t0 = os.clock()
+			repeat task.wait(0.15) until teamMatches(teamSet) or os.clock() - t0 > 1.5
 		end
 		if not ok then
 			ctx.state.teamSwapActive = false
@@ -588,13 +619,14 @@ return function(ctx)
 		-- 1) Prioritas 1: Sell & Bronto Config List terpadu
 		local rule = findRule(pt)
 		if rule then
-			if rule.special == true then
+			local z = rule.special == true
+			if z then
 				if CFG.brontoSkipSpecial then return "skip" end
 				return "bronto"
 			end
 			local targetKg = tonumber(rule.kg) or 0
 			if w >= targetKg then
-				if CFG.brontoSkipSpecial then return "skip" end
+				-- (dulu toggle "Don't Hatch Special" ikut nge-skip SEMUA egg bronto, bukan cuma special)
 				return "bronto"
 			else
 				return "normal"
