@@ -33,7 +33,7 @@ return function(ctx)
 	-- Pet non-zone: tarik pas ANIMASI SKILL mulai (CustomAnimationState di ActivePetStates,
 	-- mis. Dilo "Frill", Hotdog "Pee"), bukan pas cd 0. Dari log: cd 0 != skill mulai ΓÇö
 	-- Dilo kadang baru ancang-ancang beberapa detik abis cd 0 -> narik pas cd0+0.8 = skill ilang.
-	local ANIM_DELAY     = 0.7  -- tarik segini abis animasi skill mulai (Pandora: 0.63-0.92 s di semua pet)
+	local ANIM_DELAY     = 0.5  -- tarik segini abis animasi skill mulai. +~0.25 s nunggu server = ~0.75 s (Pandora 0.63-0.92)
 	-- Sinyal UTAMA non-zone: notifikasi skill pertama dari pet itu ("Rainbow Dilophosaurus spat
 	-- venom...", "Rainbow Hotdog Daschund just dropped..."). Animasi Frill BELUM berarti skill
 	-- jalan -> narik Frill+0.3 kadang cuma keluar 4 venom. Pandora narik ~0.4-0.9 s abis venom pertama.
