@@ -2740,6 +2740,7 @@ end
 		Mutation = buildMutationTab,
 		Shop = buildShopTab,
 		Misc = buildMiscTab,
+		Event = buildEventTab,
 		Settings = buildSettingsTab,
 	}
 

@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 47 modul, di-generate 2026-10-31T21:02:48.740Z
+-- 47 modul, di-generate 2026-10-31T21:03:21.746Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -31032,6 +31032,7 @@ end
 		Mutation = buildMutationTab,
 		Shop = buildShopTab,
 		Misc = buildMiscTab,
+		Event = buildEventTab,
 		Settings = buildSettingsTab,
 	}
 
