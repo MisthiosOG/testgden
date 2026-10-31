@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 43 modul, di-generate 2026-10-31T12:31:50.977Z
+-- 43 modul, di-generate 2026-10-31T12:47:07.699Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua — init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -9500,13 +9500,13 @@ return function(ctx)
 	end
 	do
 		local g = (getgenv and getgenv()) or _G
-		g.__pnpNotifMulti = g.__pnpNotifMulti or {}
-		notifMulti = g.__pnpNotifMulti -- petType -> true (beruntun) / false (1 notif) / nil (belum tau)
+		g.__pnpNotifMulti2 = g.__pnpNotifMulti2 or {}
+		notifMulti = g.__pnpNotifMulti2 -- petType -> true (beruntun) / false (1 notif) / nil (belum tau)
 		notifWin = {}
 		recentPull = {} -- petType -> { t = os.clock() tarik terakhir, cont = notif lanjutan }
 		-- nama animasi yang "lead" (skill udah mulai, efek nyusul belakangan). Ferret 'Play' dari log.
-		g.__pnpLeadAnim = g.__pnpLeadAnim or { Play = true }
-		leadAnim = g.__pnpLeadAnim
+		-- daftar TETAP (auto-learn dihapus: dia salah belajar Frill/Pee jadi lead)
+		leadAnim = { Play = true }
 		animStart = {}
 	end
 	local NOTIF_NAME_POS = 25   -- nama pet harus di awal pesan (bukan "...to Rainbow Hotdog")
@@ -9762,8 +9762,7 @@ return function(ctx)
 		-- nunggu muter. cd Ferret nggak bisa dipercaya (terus dimajuin tim), jadi cek ready di-skip.
 		if leadAnim[anim] and CFG.pnpEnabled and not busy[uuid]
 			and now - (lastPlacedAt[uuid] or 0) > 3 then
-			local pt = quickType(uuid)
-			if not (pt and notifMulti[pt] == true) then
+			do
 				dbg("%s ANIM '%s' (lead) -> tarik +%.2fs", short(uuid), anim, LEAD_DELAY)
 				waitAnim[uuid], pendingKey[uuid] = nil, nil
 				fireAt[uuid] = math.min(fireAt[uuid] or math.huge, now + LEAD_DELAY)
@@ -9810,7 +9809,9 @@ return function(ctx)
 				-- Notif yang datang abis pet jenis ini ditarik & nggak ada pet sejenis lain yang
 				-- lagi nunggu skill = lanjutan skill tadi -> jenis ini "beruntun".
 				counted[pt] = true
-				local otherWaiting = false
+				local sameType = 0
+				for u2 in pairs(prevCd) do if isTgt(u2) and petTypeCache[u2] == pt then sameType = sameType + 1 end end
+				local otherWaiting = sameType > 1
 				for u2, c2 in pairs(prevCd) do
 					if petTypeCache[u2] == pt and not busy[u2] and not notifAt[u2] and readyish(u2, c2) then
 						otherWaiting = true; break
@@ -9825,12 +9826,6 @@ return function(ctx)
 				end
 			end
 			if pos and pos <= NOTIF_NAME_POS then
-				-- belajar animasi lead: animasi pet ini mulai 1.5-6 s sebelum notif skill-nya
-				local as = animStart[uuid]
-				if as and now - as.t >= 1.5 and now - as.t <= 6 and notifMulti[pt] ~= true and not leadAnim[as.name] then
-					leadAnim[as.name] = true
-					dbg("%s belajar: anim '%s' = lead (%.2fs sebelum notif)", short(uuid), as.name, now - as.t)
-				end
 				if busy[uuid] or notifAt[uuid] then
 					-- notif lanjutan di siklus yang sama -> normal, diem aja
 				elseif not readyish(uuid, cur) then
