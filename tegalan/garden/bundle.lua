@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 43 modul, di-generate 2026-10-30T19:48:48.750Z
+-- 43 modul, di-generate 2026-10-31T12:31:50.977Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua — init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -9490,13 +9490,24 @@ return function(ctx)
 	local NOTIF_DELAY    = 0.35 -- 0.8 kelamaan (Dilo keburu jalan sambil nyembur); Pandora tercepat ~0.39
 	local NOTIF_FAST     = 0.08 -- pet yang skill-nya cuma 1 notif (Ferret dll.): efek udah keluar -> langsung tarik
 	local MULTI_WINDOW   = 2.5  -- notif jenis pet yang sama >= 2x dalam segini = skill beruntun (Dilo)
-	local notifWin, notifMulti, recentPull
+	local notifWin, notifMulti, recentPull, leadAnim, animStart
+	local LEAD_DELAY = 0.05
+	local lastPlacedAt = {} -- uuid -> os.clock() terakhir di-place
+	local function quickType(uuid)
+		local ok, d = pcall(function() return DataService:GetData() end)
+		local inv = ok and d and d.PetsData and d.PetsData.PetInventory and d.PetsData.PetInventory.Data
+		return inv and inv[uuid] and inv[uuid].PetType and tostring(inv[uuid].PetType)
+	end
 	do
 		local g = (getgenv and getgenv()) or _G
 		g.__pnpNotifMulti = g.__pnpNotifMulti or {}
 		notifMulti = g.__pnpNotifMulti -- petType -> true (beruntun) / false (1 notif) / nil (belum tau)
 		notifWin = {}
 		recentPull = {} -- petType -> { t = os.clock() tarik terakhir, cont = notif lanjutan }
+		-- nama animasi yang "lead" (skill udah mulai, efek nyusul belakangan). Ferret 'Play' dari log.
+		g.__pnpLeadAnim = g.__pnpLeadAnim or { Play = true }
+		leadAnim = g.__pnpLeadAnim
+		animStart = {}
 	end
 	local NOTIF_NAME_POS = 25   -- nama pet harus di awal pesan (bukan "...to Rainbow Hotdog")
 	local ANIM_WAIT      = 8    -- abis cd 0, tunggu animasi maksimal segini (lewat = batal, siklus berikutnya)
@@ -9744,7 +9755,22 @@ return function(ctx)
 		-- animasi baru kalau namanya beda atau yang lama udah > 1.5 s.
 		if animOn[uuid] and animName[uuid] == anim and now - animOn[uuid] < 1.5 then return end
 		animOn[uuid], animName[uuid] = now, anim
+		animStart[uuid] = { t = now, name = anim }
 		if not isTgt(uuid) then return end
+		-- LEAD anim: animasi yang selalu muncul 1.5-6 s SEBELUM notif skill pet itu (Ferret 'Play'
+		-- muter ~3.4 s baru keluar notif). Animasinya = skill udah mulai -> tarik langsung, nggak
+		-- nunggu muter. cd Ferret nggak bisa dipercaya (terus dimajuin tim), jadi cek ready di-skip.
+		if leadAnim[anim] and CFG.pnpEnabled and not busy[uuid]
+			and now - (lastPlacedAt[uuid] or 0) > 3 then
+			local pt = quickType(uuid)
+			if not (pt and notifMulti[pt] == true) then
+				dbg("%s ANIM '%s' (lead) -> tarik +%.2fs", short(uuid), anim, LEAD_DELAY)
+				waitAnim[uuid], pendingKey[uuid] = nil, nil
+				fireAt[uuid] = math.min(fireAt[uuid] or math.huge, now + LEAD_DELAY)
+				fireReason[uuid] = "LEAD"
+				return
+			end
+		end
 		if not CFG.pnpEnabled or busy[uuid] or fireAt[uuid] then
 			dbg("%s ANIM '%s' diabaikan (busy=%s fireAt=%s)", short(uuid), anim, tostring(busy[uuid]), tostring(fireAt[uuid] ~= nil))
 			return
@@ -9799,6 +9825,12 @@ return function(ctx)
 				end
 			end
 			if pos and pos <= NOTIF_NAME_POS then
+				-- belajar animasi lead: animasi pet ini mulai 1.5-6 s sebelum notif skill-nya
+				local as = animStart[uuid]
+				if as and now - as.t >= 1.5 and now - as.t <= 6 and notifMulti[pt] ~= true and not leadAnim[as.name] then
+					leadAnim[as.name] = true
+					dbg("%s belajar: anim '%s' = lead (%.2fs sebelum notif)", short(uuid), as.name, now - as.t)
+				end
 				if busy[uuid] or notifAt[uuid] then
 					-- notif lanjutan di siklus yang sama -> normal, diem aja
 				elseif not readyish(uuid, cur) then
@@ -9961,7 +9993,6 @@ return function(ctx)
 	end
 
 	local HUB_TAG = {} -- identitas instance ini (buat kunci lintas-instance)
-	local lastPlacedAt = {} -- uuid -> os.clock() terakhir di-place
 	local doPnp
 
 	-- return true kalau pet sukses balik ke kebun. Pet WAJIB dicoba balik walau PnP dimatiin.
