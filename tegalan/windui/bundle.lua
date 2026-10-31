@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 46 modul, di-generate 2026-10-31T14:12:12.138Z
+-- 47 modul, di-generate 2026-10-31T20:42:45.488Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua â€” init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -128,6 +128,10 @@ return function(ctx)
 	if CFG.gmSprinklerEnabled and ctx.startGmSprinkler then
 		ctx.startGmSprinkler()
 		ctx.log("Auto-resume: Auto GM Sprinkler ON.")
+	end
+	if CFG.wispEnabled and ctx.startWisp then
+		ctx.startWisp()
+		ctx.log("Auto-resume: Collect Horseman Wisp ON.")
 	end
 	if CFG.hatchBoostEnabled and ctx.startHatchBoost then
 		ctx.startHatchBoost()
@@ -16183,6 +16187,10 @@ return function(ctx)
 		-- Auto GM Sprinkler (tab Hatch): jaga 1 Grandmaster Sprinkler terpasang
 		gmSprinklerEnabled     = false,
 		hatchBoostEnabled      = false, -- Auto Boost semua team hatch pakai Pet Toy
+		-- Event Halloween: Auto Collect Horseman Wisp
+		wispEnabled            = false,
+		wispSpeed              = 45,
+		wispReturn             = true,
 		flowNotifyEnabled      = true, -- notif pojok kanan bawah tiap fitur pindah tahap
 
 		-- Auto-Reconnect (Misc): auto rejoin kalau ke-kick / disconnect (seperti di Trade)
@@ -16559,6 +16567,9 @@ return function(ctx)
 			CFG.shovelSprinklerEnabled = st.shovelSprinklerEnabled or false
 			CFG.gmSprinklerEnabled    = st.gmSprinklerEnabled or false
 			CFG.hatchBoostEnabled     = st.hatchBoostEnabled or false
+			CFG.wispEnabled           = st.wispEnabled or false
+			CFG.wispSpeed             = tonumber(st.wispSpeed) or 45
+			CFG.wispReturn            = st.wispReturn ~= false
 			CFG.flowNotifyEnabled     = st.flowNotifyEnabled ~= false
 			if st.autoReconnect ~= nil then CFG.autoReconnect = st.autoReconnect end
 			CFG.reconnectEnabled  = st.reconnectEnabled or false
@@ -18835,6 +18846,168 @@ return function(ctx)
 	end
 	function ctx.startBuyBeanstalkShop() task.spawn(buyShopLoop) end
 	function ctx.stopBuyBeanstalkShop() ctx.state.beanShopId = (ctx.state.beanShopId or 0) + 1 end
+end
+]=],
+	["modules/event/halloween_wisp.lua"] = [=[
+--[[ halloween_wisp.lua — Event Halloween 2026: Auto Collect Horseman Wisp.
+     Pas Headless Horseman lagi "Riding", dia jatuhin Wisp (workspace.HorsemanHuntVisuals,
+     model "Wisp", hidup 45 s). Game ngumpulin wisp sendiri kalau karakter dalam radius 6
+     (HorsemanHuntController.startCollect -> HorsemanHunt.Collect:FireServer(rideId, index)).
+     Server ngecek jarak (<= 22) & kecepatan (<= 80 studs/s), jadi kita GERAK ke tiap wisp
+     (bukan teleport) pakai kecepatan aman, biar collect bawaan game yang jalan.
+     Cadangan: kalau udah nempel tapi wisp nggak keambil, cari (rideId, index) wisp itu di
+     tabel controller (getgc) lalu FireServer langsung.
+     Config: wispEnabled, wispSpeed, wispReturn. Fungsi: ctx.startWisp / ctx.stopWisp /
+     ctx.getWispSummary. ]]
+return function(ctx)
+	local CFG = ctx.CFG
+	local LP  = ctx.LP
+	local RS  = game:GetService("ReplicatedStorage")
+	local RunService = game:GetService("RunService")
+	local function setStatus(s) if ctx.setStatus then pcall(ctx.setStatus, s) end end
+
+	local MAX_SPEED   = 60   -- server tolak > 80 (+slack 12); 60 aman
+	local REACH       = 2.5  -- dianggap udah di atas wisp
+	local STUCK_WAIT  = 1.2  -- di atas wisp segini & belum keambil -> fallback FireServer
+
+	local function hunt()
+		local ge = RS:FindFirstChild("GameEvents")
+		local ev = ge and ge:FindFirstChild("Events")
+		local hw = ev and ev:FindFirstChild("Halloween2026Event")
+		return hw and hw:FindFirstChild("HorsemanHunt")
+	end
+	local function phase()
+		local h = hunt()
+		local ok, p = pcall(function() return h and h:GetAttribute("Phase") end)
+		return ok and p or nil
+	end
+
+	local function wisps()
+		local out = {}
+		local f = workspace:FindFirstChild("HorsemanHuntVisuals")
+		if not f then return out end
+		for _, m in ipairs(f:GetChildren()) do
+			if m:IsA("Model") and m.Name == "Wisp" then
+				local ok, pos = pcall(function() return m:GetPivot().Position end)
+				if ok and pos then out[#out + 1] = { model = m, pos = pos } end
+			end
+		end
+		return out
+	end
+
+	local stats = { collected = 0, startAt = nil, last = nil }
+
+	-- cadangan: cari entry wisp {RideId, Index, Model} di memori controller
+	local function findWispIds(model)
+		if type(getgc) ~= "function" then return nil end
+		local ok, res = pcall(function()
+			for _, v in ipairs(getgc(true)) do
+				if type(v) == "table" and rawget(v, "Model") == model
+					and type(rawget(v, "RideId")) == "number" and type(rawget(v, "Index")) == "number" then
+					return { v.RideId, v.Index }
+				end
+			end
+		end)
+		return ok and res or nil
+	end
+
+	local function hrp()
+		local c = LP.Character
+		return c and c:FindFirstChild("HumanoidRootPart")
+	end
+
+	-- gerak lurus ke target dengan kecepatan aman. return true kalau nyampe.
+	local function moveTo(target, myId)
+		local speed = math.clamp(tonumber(CFG.wispSpeed) or 45, 10, MAX_SPEED)
+		local t0 = os.clock()
+		while CFG.wispEnabled and ctx.alive() and ctx.state.wispId == myId do
+			local root = hrp()
+			if not root then return false end
+			local cur = root.Position
+			local flat = Vector3.new(target.X, cur.Y, target.Z)
+			local d = flat - cur
+			if d.Magnitude <= REACH then return true end
+			local dt = RunService.Heartbeat:Wait()
+			local step = math.min(d.Magnitude, speed * dt)
+			local np = cur + d.Unit * step
+			pcall(function()
+				root.CFrame = CFrame.new(np, np + d.Unit)
+				root.AssemblyLinearVelocity = Vector3.zero
+			end)
+			if os.clock() - t0 > 20 then return false end
+		end
+		return false
+	end
+
+	local function loop(myId)
+		ctx.elevate()
+		local home = nil
+		local idleSince = nil
+		while CFG.wispEnabled and ctx.alive() and ctx.state.wispId == myId do
+			local ok, err = pcall(function()
+				local list = wisps()
+				local root = hrp()
+				if not root then task.wait(1); return end
+				if #list == 0 then
+					setStatus(("Wisp: menunggu wisp (phase: %s)"):format(tostring(phase() or "-")))
+					idleSince = idleSince or os.clock()
+					-- balik ke posisi awal kalau udah sepi 5 s
+					if home and CFG.wispReturn ~= false and os.clock() - idleSince > 5 then
+						moveTo(home, myId)
+						home = nil
+					end
+					task.wait(0.5)
+					return
+				end
+				idleSince = nil
+				if not home then home = root.Position end
+				stats.startAt = stats.startAt or os.time()
+				-- wisp terdekat dulu
+				table.sort(list, function(a, b)
+					return (a.pos - root.Position).Magnitude < (b.pos - root.Position).Magnitude
+				end)
+				local w = list[1]
+				setStatus(("Wisp: ambil (%d di map, %d terkumpul)"):format(#list, stats.collected))
+				if not moveTo(w.pos, myId) then return end
+				-- tunggu collect bawaan game
+				local t0 = os.clock()
+				while w.model.Parent and os.clock() - t0 < STUCK_WAIT do task.wait(0.05) end
+				if w.model.Parent then
+					local ids = findWispIds(w.model)
+					local h = hunt()
+					local remote = h and h:FindFirstChild("Collect")
+					if ids and remote then
+						pcall(function() remote:FireServer(ids[1], ids[2]) end)
+						local t1 = os.clock()
+						while w.model.Parent and os.clock() - t1 < 1 do task.wait(0.05) end
+					end
+				end
+				if not w.model.Parent then
+					stats.collected = stats.collected + 1
+					stats.last = os.time()
+				end
+			end)
+			if not ok and ctx.log then ctx.log("[Wisp] error: " .. tostring(err)) end
+			task.wait(0.05)
+		end
+	end
+
+	function ctx.startWisp()
+		ctx.state.wispId = (ctx.state.wispId or 0) + 1
+		task.spawn(loop, ctx.state.wispId)
+	end
+	function ctx.stopWisp()
+		ctx.state.wispId = (ctx.state.wispId or 0) + 1
+	end
+	function ctx.getWispSummary()
+		return {
+			status = CFG.wispEnabled and "ACTIVE" or "STOPPED",
+			phase = tostring(phase() or "-"),
+			onMap = #wisps(),
+			collected = stats.collected,
+			last = stats.last and os.date("%H:%M:%S", stats.last) or "-",
+		}
+	end
 end
 ]=],
 	["modules/farm/automation_collect.lua"] = [=[
@@ -30748,7 +30921,7 @@ end
 				for _, fn in ipairs({ "stopPnpV1", "stopTrade", "stopHatch",
 					"stopAutoFavorite", "stopAutoUnfavorite", "stopEggMinusWatcher", "stopReclaim",
 					"stopGrowth", "stopLeveling", "stopLevelingV2", "stopElephant", "stopElephantV2",
-					"stopMutation", "stopCleanse", "stopBoostPet", "stopReconnect", "stopHatchBoost", "stopGmSprinkler" }) do
+					"stopMutation", "stopCleanse", "stopBoostPet", "stopReconnect", "stopHatchBoost", "stopGmSprinkler", "stopWisp" }) do
 					if ctx[fn] then pcall(ctx[fn]) end
 				end
 				if ctx.setNoclip then pcall(function() ctx.setNoclip(false) end) end
@@ -30807,6 +30980,45 @@ end
 		miniBar(secs, ORDER, DEFS, "general")
 	end
 
+	----------------------------------------------------------------- TAB: EVENT (Halloween)
+	local function buildEventTab(tab)
+		local edefs = { halloween = { name = "Halloween" } }
+		local eorder = { "halloween" }
+		local esecs = {}
+		local sec = section(tab, edefs.halloween.name)
+		esecs.halloween = sec
+
+		liveStatus(sec, "Horseman's Hunt", function()
+			local ok, s = pcall(function() return ctx.getWispSummary() end)
+			if not ok or not s then return nil end
+			local col = s.status == "ACTIVE" and "#5acc78" or "#dc5050"
+			return ("Auto Collect: <font color=\"%s\"><b>%s</b></font>\n" ..
+				"Horseman phase: <font color=\"#f5c82d\">%s</font>\n" ..
+				"Wisps on map: <b>%d</b>\n" ..
+				"Collected this session: <font color=\"#5acc78\"><b>%d</b></font> (last %s)")
+				:format(col, s.status, s.phase, s.onMap, s.collected, s.last)
+		end, 1)
+		makeInputW(sec, "Move Speed", "Walking speed to each wisp (10-60). Server rejects anything too fast, 45 is safe.",
+			function() return tostring(CFG.wispSpeed or 45) end,
+			function(t) CFG.wispSpeed = math.clamp(tonumber(t) or 45, 10, 60) end)
+		makeToggleW(sec, "Return After Collecting", "Walk back to where you started once no wisps are left.",
+			function() return CFG.wispReturn ~= false end,
+			function(v) CFG.wispReturn = v end)
+		makeToggleW(sec, "Auto Collect Horseman Wisp",
+			"While the Headless Horseman rides, walk to every Horseman Wisp he drops so it gets collected.",
+			function() return CFG.wispEnabled end,
+			function(v)
+				CFG.wispEnabled = v; persist()
+				if v then
+					if ctx.startWisp then pcall(function() ctx.startWisp() end) end
+				else
+					if ctx.stopWisp then pcall(function() ctx.stopWisp() end) end
+				end
+			end)
+
+		miniBar(esecs, eorder, edefs, "halloween")
+	end
+
 	----------------------------------------------------------------- REGISTRY TAB
 	-- Urutan sesuai Pink Royale. build = nil -> placeholder (belum dimigrasi).
 	local MIGRATED = {
@@ -30833,6 +31045,7 @@ end
 		{ id = "Mutation",  title = "Mutation",  icon = "solar:test-tube-bold" },
 		{ id = "Inventory", title = "Inventory", icon = "solar:backpack-bold" },
 		{ id = "Shop",      title = "Shop",      icon = "solar:cart-bold" },
+		{ id = "Event",     title = "Event",     icon = "solar:star-bold" },
 		{ id = "Misc",      title = "Misc",      icon = "solar:settings-bold" },
 		{ id = "Settings",  title = "Settings",  icon = "solar:settings-minimalistic-bold" },
 	}

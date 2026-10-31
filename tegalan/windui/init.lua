@@ -213,6 +213,7 @@ local MODULES = {
 	"modules/hatch/automation_hatch.lua",
 	"modules/event/automation_beanstalk.lua",
 	"modules/event/automation_beanstalk_hop.lua",
+	"modules/event/halloween_wisp.lua",
 	"modules/farm/automation_reclaimer.lua",
 	"modules/farm/automation_plants.lua",
 	"modules/farm/automation_sprinkler.lua",

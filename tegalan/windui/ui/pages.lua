@@ -2629,7 +2629,7 @@ end
 				for _, fn in ipairs({ "stopPnpV1", "stopTrade", "stopHatch",
 					"stopAutoFavorite", "stopAutoUnfavorite", "stopEggMinusWatcher", "stopReclaim",
 					"stopGrowth", "stopLeveling", "stopLevelingV2", "stopElephant", "stopElephantV2",
-					"stopMutation", "stopCleanse", "stopBoostPet", "stopReconnect", "stopHatchBoost", "stopGmSprinkler" }) do
+					"stopMutation", "stopCleanse", "stopBoostPet", "stopReconnect", "stopHatchBoost", "stopGmSprinkler", "stopWisp" }) do
 					if ctx[fn] then pcall(ctx[fn]) end
 				end
 				if ctx.setNoclip then pcall(function() ctx.setNoclip(false) end) end
@@ -2688,6 +2688,45 @@ end
 		miniBar(secs, ORDER, DEFS, "general")
 	end
 
+	----------------------------------------------------------------- TAB: EVENT (Halloween)
+	local function buildEventTab(tab)
+		local edefs = { halloween = { name = "Halloween" } }
+		local eorder = { "halloween" }
+		local esecs = {}
+		local sec = section(tab, edefs.halloween.name)
+		esecs.halloween = sec
+
+		liveStatus(sec, "Horseman's Hunt", function()
+			local ok, s = pcall(function() return ctx.getWispSummary() end)
+			if not ok or not s then return nil end
+			local col = s.status == "ACTIVE" and "#5acc78" or "#dc5050"
+			return ("Auto Collect: <font color=\"%s\"><b>%s</b></font>\n" ..
+				"Horseman phase: <font color=\"#f5c82d\">%s</font>\n" ..
+				"Wisps on map: <b>%d</b>\n" ..
+				"Collected this session: <font color=\"#5acc78\"><b>%d</b></font> (last %s)")
+				:format(col, s.status, s.phase, s.onMap, s.collected, s.last)
+		end, 1)
+		makeInputW(sec, "Move Speed", "Walking speed to each wisp (10-60). Server rejects anything too fast, 45 is safe.",
+			function() return tostring(CFG.wispSpeed or 45) end,
+			function(t) CFG.wispSpeed = math.clamp(tonumber(t) or 45, 10, 60) end)
+		makeToggleW(sec, "Return After Collecting", "Walk back to where you started once no wisps are left.",
+			function() return CFG.wispReturn ~= false end,
+			function(v) CFG.wispReturn = v end)
+		makeToggleW(sec, "Auto Collect Horseman Wisp",
+			"While the Headless Horseman rides, walk to every Horseman Wisp he drops so it gets collected.",
+			function() return CFG.wispEnabled end,
+			function(v)
+				CFG.wispEnabled = v; persist()
+				if v then
+					if ctx.startWisp then pcall(function() ctx.startWisp() end) end
+				else
+					if ctx.stopWisp then pcall(function() ctx.stopWisp() end) end
+				end
+			end)
+
+		miniBar(esecs, eorder, edefs, "halloween")
+	end
+
 	----------------------------------------------------------------- REGISTRY TAB
 	-- Urutan sesuai Pink Royale. build = nil -> placeholder (belum dimigrasi).
 	local MIGRATED = {
@@ -2714,6 +2753,7 @@ end
 		{ id = "Mutation",  title = "Mutation",  icon = "solar:test-tube-bold" },
 		{ id = "Inventory", title = "Inventory", icon = "solar:backpack-bold" },
 		{ id = "Shop",      title = "Shop",      icon = "solar:cart-bold" },
+		{ id = "Event",     title = "Event",     icon = "solar:star-bold" },
 		{ id = "Misc",      title = "Misc",      icon = "solar:settings-bold" },
 		{ id = "Settings",  title = "Settings",  icon = "solar:settings-minimalistic-bold" },
 	}

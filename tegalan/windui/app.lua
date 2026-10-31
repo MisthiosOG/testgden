@@ -124,6 +124,10 @@ return function(ctx)
 		ctx.startGmSprinkler()
 		ctx.log("Auto-resume: Auto GM Sprinkler ON.")
 	end
+	if CFG.wispEnabled and ctx.startWisp then
+		ctx.startWisp()
+		ctx.log("Auto-resume: Collect Horseman Wisp ON.")
+	end
 	if CFG.hatchBoostEnabled and ctx.startHatchBoost then
 		ctx.startHatchBoost()
 		ctx.log("Auto-resume: Auto Boost Team ON.")
