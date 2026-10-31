@@ -132,6 +132,100 @@ else
 	log("INFO executor tidak support hookmetamethod -> OUT tidak terekam")
 end
 
+-- MARK: tanda di atas pet (mis. "!" pas ready). Pantau model pet di workspace:
+-- GUI/efek yang muncul/hilang, Visible/Enabled yang berubah, attribute model.
+local LP = game:GetService("Players").LocalPlayer
+local watched = {}
+local markCount = {}
+local function mlog(key, s)
+	local sec = math.floor(os.clock())
+	local c = markCount[key]
+	if not c or c.sec ~= sec then c = { sec = sec, n = 0 }; markCount[key] = c end
+	c.n = c.n + 1
+	if c.n <= 4 then log(s) end
+end
+local function describe(d)
+	local s = d.ClassName .. ":" .. d.Name
+	pcall(function() if d:IsA("TextLabel") or d:IsA("TextButton") then s = s .. " text='" .. tostring(d.Text) .. "'" end end)
+	pcall(function() if d:IsA("ImageLabel") or d:IsA("ImageButton") then s = s .. " img=" .. tostring(d.Image) end end)
+	return s
+end
+local function isVisual(d)
+	return d:IsA("BillboardGui") or d:IsA("GuiObject") or d:IsA("ParticleEmitter")
+		or d:IsA("Highlight") or d:IsA("Beam") or d:IsA("Decal")
+end
+local function hookVis(pet, d)
+	pcall(function()
+		if d:IsA("BillboardGui") or d:IsA("ParticleEmitter") or d:IsA("Highlight") or d:IsA("Beam") then
+			conns[#conns + 1] = d:GetPropertyChangedSignal("Enabled"):Connect(function()
+				mlog(pet .. d.Name, ("MARK %s  %s Enabled=%s"):format(pet, describe(d), tostring(d.Enabled)))
+			end)
+		elseif d:IsA("GuiObject") then
+			conns[#conns + 1] = d:GetPropertyChangedSignal("Visible"):Connect(function()
+				mlog(pet .. d.Name, ("MARK %s  %s Visible=%s"):format(pet, describe(d), tostring(d.Visible)))
+			end)
+			if d:IsA("TextLabel") then
+				conns[#conns + 1] = d:GetPropertyChangedSignal("Text"):Connect(function()
+					mlog(pet .. d.Name .. "t", ("MARK %s  %s"):format(pet, describe(d)))
+				end)
+			end
+		end
+	end)
+end
+local function watchModel(m)
+	if watched[m] then return end
+	watched[m] = true
+	local pet = ser(m.Name)
+	log(("MARK %s  model %s di %s"):format(pet, m.ClassName, m.Parent and m.Parent:GetFullName() or "?"))
+	for _, d in ipairs(m:GetDescendants()) do if isVisual(d) then hookVis(pet, d) end end
+	conns[#conns + 1] = m.DescendantAdded:Connect(function(d)
+		if isVisual(d) then
+			mlog(pet .. "+" .. d.Name, ("MARK %s  +%s"):format(pet, describe(d)))
+			hookVis(pet, d)
+		end
+	end)
+	conns[#conns + 1] = m.DescendantRemoving:Connect(function(d)
+		if d:IsA("BillboardGui") or d:IsA("Highlight") or d:IsA("ParticleEmitter") then
+			mlog(pet .. "-" .. d.Name, ("MARK %s  -%s"):format(pet, describe(d)))
+		end
+	end)
+	conns[#conns + 1] = m.AttributeChanged:Connect(function(a)
+		mlog(pet .. "@" .. a, ("MARK %s  attr %s=%s"):format(pet, a, ser(m:GetAttribute(a))))
+	end)
+end
+-- BillboardGui di PlayerGui yang nempel ke pet
+pcall(function()
+	local pg = LP:WaitForChild("PlayerGui", 5)
+	if pg then
+		conns[#conns + 1] = pg.DescendantAdded:Connect(function(d)
+			if d:IsA("BillboardGui") then
+				task.defer(function()
+					local a = d.Adornee
+					mlog("pg" .. d.Name, ("MARK pgui +Billboard %s adornee=%s"):format(d.Name, a and a:GetFullName() or "nil"))
+				end)
+			end
+		end)
+	end
+end)
+-- cari model pet (nama = uuid) tiap 3 detik (pet di-place ulang = model baru)
+task.spawn(function()
+	while running do
+		local eq = {}
+		if okDS then
+			local ok, d = pcall(function() return DataService:GetData() end)
+			eq = (ok and d and d.PetsData and d.PetsData.EquippedPets) or {}
+		end
+		local want = {}
+		for _, u in ipairs(eq) do want[u] = true end
+		if next(want) then
+			for _, d in ipairs(workspace:GetDescendants()) do
+				if want[d.Name] and (d:IsA("Model") or d:IsA("BasePart")) then watchModel(d) end
+			end
+		end
+		task.wait(3)
+	end
+end)
+
 -- polling cd + equipped
 local lastEq = ""
 task.spawn(function()
