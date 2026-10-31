@@ -324,7 +324,9 @@ return function(ctx)
 			local pt = isTgt(uuid) and petTypeOf(uuid)
 			local pos = pt and low:find(pt:lower(), 1, true)
 			if pos and pos <= NOTIF_NAME_POS then
-				if busy[uuid] or notifAt[uuid] then
+				if busy[uuid] or notifAt[uuid] or now < (ignoreUntil[uuid] or 0) then
+					-- notif lanjutan / sisa venom skill tadi yang datang abis pet di-place ulang -> diem.
+					-- (dulu sisa venom bikin Dilo ketarik LAGI 1 s abis place, cd udah 59)
 					-- venom lanjutan di siklus yang sama -> normal, diem aja
 				elseif not readyish(uuid, cur) then
 					dbg("%s NOTIF diabaikan: belum ready (%s) msg=%s", short(uuid), cdStr(cur), msg:sub(1, 50))
