@@ -207,6 +207,34 @@ pcall(function()
 		end)
 	end
 end)
+-- BillboardGui / gambar / teks "!" yang muncul DI MANA AJA (workspace + PlayerGui)
+local function anyVisual(where, d)
+	pcall(function()
+		if d:IsA("BillboardGui") then
+			task.defer(function()
+				local a = d.Adornee or d.Parent
+				mlog("bb" .. d.Name, ("MARK %s +Billboard %s at=%s"):format(where, d.Name, a and a:GetFullName() or "nil"))
+			end)
+		elseif (d:IsA("TextLabel") or d:IsA("TextButton")) then
+			local function chk()
+				if tostring(d.Text):find("!", 1, true) and #tostring(d.Text) <= 3 then
+					mlog("tx" .. d:GetFullName(), ("MARK %s !text %s vis=%s"):format(where, d:GetFullName(), tostring(d.Visible)))
+				end
+			end
+			chk()
+			conns[#conns + 1] = d:GetPropertyChangedSignal("Text"):Connect(chk)
+		end
+	end)
+end
+conns[#conns + 1] = workspace.DescendantAdded:Connect(function(d)
+	if d:IsA("BillboardGui") or d:IsA("TextLabel") then anyVisual("ws", d) end
+end)
+pcall(function()
+	local pg = LP:WaitForChild("PlayerGui", 5)
+	for _, d in ipairs(pg:GetDescendants()) do anyVisual("pg", d) end
+	conns[#conns + 1] = pg.DescendantAdded:Connect(function(d) anyVisual("pg", d) end)
+end)
+
 -- cari model pet (nama = uuid) tiap 3 detik (pet di-place ulang = model baru)
 task.spawn(function()
 	while running do
