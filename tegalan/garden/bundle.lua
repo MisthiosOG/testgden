@@ -1,6 +1,6 @@
 -- AUTO-GENERATED oleh tools/bundle.js — JANGAN edit manual.
 -- Edit modul-nya langsung, terus run `node tools/bundle.js`.
--- 43 modul, di-generate 2026-10-31T13:08:54.038Z
+-- 43 modul, di-generate 2026-10-31T13:25:13.597Z
 return {
 	["app.lua"] = [=[
 --[[ app.lua — init akhir garden: default tab Inventory + auto-resume automation. ]]
@@ -9492,7 +9492,10 @@ return function(ctx)
 	local ANIM_WAIT      = 8    -- abis cd 0, tunggu animasi maksimal segini (lewat = batal, siklus berikutnya)
 	local ANIM_CD_MAX    = 0    -- animasi dihitung skill cuma kalau cd passive non-zone udah 0
 	                            -- (dulu <= 2: animasi reaksi pas cd 2 bikin Dilo ketarik "mangap doang")
-	local ANIM_EARLY     = 1.0  -- animasi datang sebelum push cd 0 (Hotdog ~3 ms) -> masih dihitung kalau <= ini
+	-- Animasi skill yang mulai SEBELUM cd nyentuh 0 tetap dihitung kalau <= ini. Umum buat semua pet:
+	-- Hotdog 'Pee' ~3 ms sebelum cd 0, Ferret 'Play' 1-3 s sebelum cd 0 (Pandora narik Ferret
+	-- ~0.4-1.1 s abis 'Play', efek fries tetap keluar 2-3 s kemudian).
+	local ANIM_EARLY     = 4.0
 	local ZONE_FALLBACK  = 2.0  -- pet zone: kalau event ZONE nggak datang segini setelah CD0, tetap tarik
 	local ADV_DROP, ADV_LOW = nil, nil -- (trigger ADV dihapus)
 	local PLACE_GRACE    = 1.5  -- abis place: sampel cd pertama yang 0 nggak dihitung CD0 (anti loop).
