@@ -33,7 +33,7 @@ return function(ctx)
 	-- Pet non-zone: tarik pas ANIMASI SKILL mulai (CustomAnimationState di ActivePetStates,
 	-- mis. Dilo "Frill", Hotdog "Pee"), bukan pas cd 0. Dari log: cd 0 != skill mulai ΓÇö
 	-- Dilo kadang baru ancang-ancang beberapa detik abis cd 0 -> narik pas cd0+0.8 = skill ilang.
-	local ANIM_DELAY     = 1.2  -- (cadangan) tarik segini abis animasi skill kalau notif skill nggak datang
+	local ANIM_DELAY     = 0.7  -- tarik segini abis animasi skill mulai (Pandora: 0.63-0.92 s di semua pet)
 	-- Sinyal UTAMA non-zone: notifikasi skill pertama dari pet itu ("Rainbow Dilophosaurus spat
 	-- venom...", "Rainbow Hotdog Daschund just dropped..."). Animasi Frill BELUM berarti skill
 	-- jalan -> narik Frill+0.3 kadang cuma keluar 4 venom. Pandora narik ~0.4-0.9 s abis venom pertama.
@@ -286,9 +286,17 @@ return function(ctx)
 			dbg("%s ANIM '%s' diabaikan (busy=%s fireAt=%s)", short(uuid), anim, tostring(busy[uuid]), tostring(fireAt[uuid] ~= nil))
 			return
 		end
-		-- cuma dihitung skill kalau ada passive NON-zone yang cd-nya 0 (atau baru aja 0)
-		if not readyish(uuid) then
-			dbg("%s ANIM '%s' diabaikan: belum ready (%s)", short(uuid), anim, cdStr(prevCd[uuid]))
+		-- Aturan dari log Pandora (SEMUA pet sama): tarik ~0.7 s abis animasi skill MULAI.
+		-- Nggak cek cd: cd sering ngaco karena dimajuin tim (Ferret 'Play' mulai pas cd kebaca 340).
+		-- Pet zone (Peacock/Lion) tetap lewat event zone (udah bagus), animasinya diabaikan.
+		local cur = prevCd[uuid]
+		if cur then
+			for key in pairs(cur) do
+				if zonePassive[key:gsub("#%d+$", "")] then return end
+			end
+		end
+		if now < (ignoreUntil[uuid] or 0) then
+			dbg("%s ANIM '%s' diabaikan: baru di-place", short(uuid), anim)
 			return
 		end
 		dbg("%s ANIM '%s' -> tarik +%.2fs", short(uuid), anim, ANIM_DELAY)
@@ -324,7 +332,7 @@ return function(ctx)
 					dbg("%s NOTIF -> tarik +%.2fs msg=%s", short(uuid), NOTIF_DELAY, msg:sub(1, 50))
 					notifAt[uuid] = now
 					waitAnim[uuid], pendingKey[uuid] = nil, nil
-					fireAt[uuid] = now + NOTIF_DELAY -- override jadwal Frill: tunggu skill beneran jalan
+					fireAt[uuid] = math.max(fireAt[uuid] or 0, now + NOTIF_DELAY) -- nggak lebih cepet dari jadwal animasi
 					fireReason[uuid] = "NOTIF"
 				end
 			end
